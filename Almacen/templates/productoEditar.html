@@ -1,0 +1,27 @@
+{% extends 'plantillas.html' %}
+
+{% block content %}
+
+
+
+    <h2 class="text-center">Productos</h2>
+
+    <form action="{% url 'editar' %}" class="w-50 shadow mx-auto p-4 m-3" method="post">
+        {% csrf_token %}
+
+        <input type="hidden" name="id" value="{{ producto.id}}">
+
+        Nombre: <input type="text" name="nombre" class="form-control my-2" required value="{{ producto.nombre }}">
+
+        Precio: <input type="number" name="precio" class="form-control my-2" required value="{{ producto.precio }}">
+
+        Stock: <input type="number" name="stock" class="form-control my-2" required value="{{ producto.stock }}">
+
+        Descripcion:
+            <textarea name="descripcion" id="" class="form-control my-2" >
+                {{producto.descripcion}}
+            </textarea>
+        <input type="submit" value="Actualizar" class="btn btn-primary">
+    </form>
+
+{% endblock %}

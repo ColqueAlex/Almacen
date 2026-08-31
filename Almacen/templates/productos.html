@@ -1,0 +1,103 @@
+{% extends 'plantillas.html' %}
+
+{% block content %}
+<div class="container my-4">
+
+    <!-- Mensajes de Django -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Encabezado con Botón para Abrir Modal -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Productos</h2>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalGuardar">
+            <i class="fa-solid fa-plus me-1"></i> Añadir Producto
+        </button>
+    </div>
+
+    <!-- Modal con tu Formulario -->
+    <div class="modal fade" id="modalGuardar" tabindex="-1" aria-labelledby="modalGuardarLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalGuardarLabel">Añadir Nuevo Producto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="productos/guardar" method="post">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre:</label>
+                            <input type="text" name="nombre" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Precio:</label>
+                            <input type="number" step="0.01" name="precio" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Stock:</label>
+                            <input type="number" name="stock" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descripción:</label>
+                            <textarea name="descripcion" id="descripcion" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla con tus Formularios de Eliminar y Detalle -->
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-hover table-light align-middle text-center mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Nombre</th>
+                    <th>Precio</th>
+                    <th>Stock</th>
+                    <th>Descripción</th>
+                    <th colspan="2">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for producto in productos %}
+                <tr>
+                    <td>{{ producto.nombre }}</td>
+                    <td>${{ producto.precio }}</td>
+                    <td>{{ producto.stock }}</td>
+                    <td>{{ producto.descripcion }}</td>
+                    <td>
+                        <form action="{% url 'eliminar' producto.id %}" method="post" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Este Producto se Eliminara')">
+                                <i class="fa-sharp fa-solid fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                    <td>
+                        <form action="{% url 'detalle' producto.id %}" method="post" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-warning btn-sm text-white">
+                                <i class="fa-sharp fa-solid fa-pen-to-square"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}
