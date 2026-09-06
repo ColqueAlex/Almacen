@@ -1,0 +1,90 @@
+{% extends 'plantillas.html' %}
+
+{% block content %}
+<div class="container my-4">
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Gestión de Usuarios</h2>
+        <a href="{% url 'crear_usuario' %}" class="btn btn-primary">
+            <i class="fa-solid fa-user-plus me-1"></i> Nuevo Usuario
+        </a>
+    </div>
+
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-hover table-light align-middle text-center mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>DNI</th>
+                    <th>Nombre Completo</th>
+                    <th>Correo</th>
+                    <th>Usuario</th>
+                    <th>Perfil</th>
+                    <th>Estado</th>
+                    <th>Última Modificación</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in usuarios %}
+                <tr>
+                    <td>{{ u.dni }}</td>
+                    <td>{{ u.apellido }}, {{ u.nombre }}</td>
+                    <td>{{ u.correo }}</td>
+                    <td><span class="badge bg-secondary">{{ u.username }}</span></td>
+                    <td>{{ u.id_perfil.nombre|default:"Sin perfil" }}</td>
+                    <td>
+                        {% if u.activo %}
+                            <span class="badge bg-success">Activo</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.fecha_ultima_modificacion %}
+                            {{ u.fecha_ultima_modificacion|date:"d/m/Y H:i" }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <!-- Editar Correo -->
+                        <a href="{% url 'editar_usuario' u.dni %}" class="btn btn-warning btn-sm text-white" title="Editar Correo">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </a>
+
+                        <!-- Restablecer Clave -->
+                        <form action="{% url 'restablecer_clave' u.dni %}" method="post" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-info btn-sm text-white" onclick="return confirm('¿Restablecer contraseña a este usuario?')" title="Restablecer Clave">
+                                <i class="fa-solid fa-key"></i>
+                            </button>
+                        </form>
+
+                        <!-- Alta o Baja -->
+                        {% if u.activo %}
+                            <a href="{% url 'baja_usuario' u.dni %}" class="btn btn-danger" title="Dar de Baja">
+                                <i class="fa-solid fa-user-slash"></i>
+                            </a>
+                        {% else %}
+                            <a href="{% url 'alta_usuario' u.dni %}" class="btn btn-success" title="Dar de Alta">
+                                <i class="fa-solid fa-user-check"></i>
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}

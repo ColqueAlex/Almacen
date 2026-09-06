@@ -1,0 +1,44 @@
+{% extends 'plantillas.html' %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card shadow border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fa-solid fa-triangle-exclamation me-2"></i>Cambio de Contraseña Requerido</h5>
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-muted">Por razones de seguridad, debes actualizar tu contraseña antes de continuar.</p>
+
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show mb-3" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {% if error %}
+                        <div class="alert alert-danger p-2 text-center mb-3">{{ error }}</div>
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">Nueva Contraseña:</label>
+                            <input type="password" name="nueva_clave" class="form-control" required autofocus>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirmar Nueva Contraseña:</label>
+                            <input type="password" name="confirmar_clave" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning text-dark fw-bold w-100">Actualizar Contraseña</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

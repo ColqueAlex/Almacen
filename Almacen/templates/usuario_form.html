@@ -1,0 +1,58 @@
+{% extends 'plantillas.html' %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">{% if es_edicion %}Editar Correo de Usuario{% else %}Nuevo Usuario{% endif %}</h4>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label">DNI:</label>
+                            <input type="number" name="dni" value="{{ usuario.dni }}" class="form-control" {% if es_edicion %}readonly{% else %}required{% endif %}>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Apellido:</label>
+                            <input type="text" name="apellido" value="{{ usuario.apellido }}" class="form-control" {% if es_edicion %}readonly{% else %}required{% endif %}>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Nombre:</label>
+                            <input type="text" name="nombre" value="{{ usuario.nombre }}" class="form-control" {% if es_edicion %}readonly{% else %}required{% endif %}>
+                        </div>
+
+                        <!-- El correo es el único campo editable en modificación -->
+                        <div class="mb-3">
+                            <label class="form-label">Correo Electrónico:</label>
+                            <input type="email" name="correo" value="{{ usuario.correo }}" class="form-control" required>
+                        </div>
+
+                        {% if not es_edicion %}
+                        <div class="mb-3">
+                            <label class="form-label">Perfil / Rol:</label>
+                            <select name="perfil" class="form-select" required>
+                                <option value="" selected disabled>Seleccione un perfil...</option>
+                                {% for perfil in perfiles %}
+                                    <option value="{{ perfil.id }}">{{ perfil.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'listar_usuarios' %}" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
