@@ -24,40 +24,40 @@ class Proveedor(models.Model):
         return self.nombre
 
 class Perfil(models.Model):
-     nombre = models.CharField(max_length=50, unique=True)
-     descripcion = models.TextField(blank=True, null=True)
+    nombre = models.CharField(max_length=50, unique=True)
+    descripcion = models.TextField(blank=True, null=True)
 
-     def __str__(self):
-          return self.nombre
+    def __str__(self):
+        return self.nombre
 
 class Permiso(models.Model):
-     nombre = models.CharField(max_length=50, unique=True)
-     descripcion = models.TextField(blank=True, null=True)
-     perfiles = models.ManyToManyField(Perfil, related_name= 'permisos')
+    nombre = models.CharField(max_length=50, unique=True)
+    descripcion = models.TextField(blank=True, null=True)
+    perfiles = models.ManyToManyField(Perfil, related_name= 'permisos')
 
-     def __str__(self):
-          return self.nombre
+    def __str__(self):
+        return self.nombre
 
 class UsuarioManager(BaseUserManager):
     def create_user(self, dni, apellido, nombre, correo, password=None, id_perfil=None, username=None):
-          if not dni :
-               raise ValueError('El DNI es Obligatorio')
-          
-          if not username :       
+        if not dni :
+            raise ValueError('El DNI es Obligatorio')
+
+        if not username :
             username = f"{apellido.lower().strip()}{nombre.lower().strip()[0]}"
 
-          user = self.model(
-               dni = dni,
-               apellido = apellido,
-               nombre = nombre,
-               correo = self.normalize_email(correo),
-               username = username,
-               id_perfil = id_perfil,
-               debe_cambiar_clave = True
-          )
-          user.set_password(password)
-          user.save(using=self._db)
-          return user
+        user = self.model(
+            dni = dni,
+            apellido = apellido,
+            nombre = nombre,
+            correo = self.normalize_email(correo),
+            username = username,
+            id_perfil = id_perfil,
+            debe_cambiar_clave = True
+        )
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
 
     def create_superuser(self, dni, apellido, nombre, correo, password=None, username=None):
         user = self.create_user(dni, apellido, nombre, correo, password)
