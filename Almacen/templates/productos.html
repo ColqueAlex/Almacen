@@ -14,11 +14,24 @@
     {% endif %}
 
     <!-- Encabezado con Botón para Abrir Modal -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
         <h2>Productos</h2>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalGuardar">
-            <i class="fa-solid fa-plus me-1"></i> Añadir Producto
-        </button>
+        <div class="d-flex align-items-center gap-2">
+            <form method="get" class="d-flex align-items-center gap-2 m-0">
+                <label for="busqueda" class="visually-hidden">Buscar producto por nombre</label>
+                <input type="search" id="busqueda" name="busqueda" class="form-control" placeholder="Buscar Producto" value="{{ busqueda }}">
+                <label for="stock_filtro" class="visually-hidden">Filtrar por stock</label>
+                <select id="stock_filtro" name="stock_filtro" class="form-select" onchange="this.form.submit()">
+                    <option value="todos" {% if stock_filtro == 'todos' %}selected{% endif %}>Todos los productos</option>
+                    <option value="cero" {% if stock_filtro == 'cero' %}selected{% endif %}>productos con stock 0</option>
+                    <option value="hasta_diez" {% if stock_filtro == 'hasta_diez' %}selected{% endif %}>productos con stock menor o igual a 10</option>
+                    <option value="mayor_diez" {% if stock_filtro == 'mayor_diez' %}selected{% endif %}>productos con stock mayor a 10</option>
+                </select>
+            </form>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalGuardar">
+                <i class="fa-solid fa-plus me-1"></i> Añadir Producto
+            </button>
+        </div>
     </div>
 
     <!-- Modal con tu Formulario -->
@@ -29,20 +42,32 @@
                     <h5 class="modal-title" id="modalGuardarLabel">Añadir Nuevo Producto</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form action="productos/guardar" method="post">
+                <form action="{% url 'guardar' %}" method="post">
                     {% csrf_token %}
                     <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Nombre:</label>
                             <input type="text" name="nombre" class="form-control" required>
                         </div>
+                        <div class="md-3">
+                            <label class="form-label">categoria:</label>
+                            <input type="text" name="categoria" class="form-control" required>
+                        </div>
+                        <div class="md-3">
+                            <label class="form-label">Marca</label>
+                            <input type="text" name="marca" class="form-control" required>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">Precio:</label>
-                            <input type="number" step="0.01" name="precio" class="form-control" required>
+                            <input type="number" min="0" step="0.01" name="precio" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Fecha de vencimiento:</label>
+                            <input type="date" name="fecha_vencimiento" class="form-control" min="{% now 'Y' %}-01-01" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Stock:</label>
-                            <input type="number" name="stock" class="form-control" required>
+                            <input type="number" min="0" name="stock" class="form-control" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Descripción:</label>
@@ -64,9 +89,12 @@
             <thead class="table-dark">
                 <tr>
                     <th>Nombre</th>
+                    <th>Categoria</th>
+                    <th>Marca</th>
                     <th>Precio</th>
-                    <th>Stock</th>
+                    <th>Fecha de vencimientos</th>
                     <th>Descripción</th>
+                    <th>Stock</th>
                     <th colspan="2">Acciones</th>
                 </tr>
             </thead>
@@ -74,9 +102,16 @@
                 {% for producto in productos %}
                 <tr>
                     <td>{{ producto.nombre }}</td>
+                    <td>{{ producto.categoria }}</td>
+                    <td>{{ producto.marca }}</td>
                     <td>${{ producto.precio }}</td>
-                    <td>{{ producto.stock }}</td>
-                    <td>{{ producto.descripcion }}</td>
+                    <td>{{ producto.fecha_vencimiento|date:"d/m/Y"|default:"-" }}</td>
+                    <td>{{ producto.descripcion|default:"-" }}</td>
+                    <td>
+                        <span class="{% if producto.stock == 0 %}text-danger{% elif producto.stock <= 10 %}text-warning{% endif %}">
+                            {{ producto.stock }}
+                        </span>
+                    </td>
                     <td>
                         <form action="{% url 'eliminar' producto.id %}" method="post" class="d-inline">
                             {% csrf_token %}
