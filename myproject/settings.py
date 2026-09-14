@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-6#d8nd+bxsor&pde9upo9oe@k-(0711#d5+!dcxurl09fh(dw^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'testserver']
 
 
 # Application definition
@@ -82,8 +82,8 @@ DATABASES = {
         'NAME': os.environ.get('DB_NAME', 'mydatabase'),
         'USER': os.environ.get('DB_USER', 'myuser'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'mypassword'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': '3306',
+        'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
+        'PORT': os.environ.get('DB_PORT', '3307'),
     }
 }
 
@@ -133,7 +133,7 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-LOGIN_REDIRECT_URL = 'consultar'      
+LOGIN_REDIRECT_URL = 'inicio'      
 LOGOUT_REDIRECT_URL = 'login'     
 LOGIN_URL = 'login'               
 AUTH_USER_MODEL = 'Almacen.Usuario'

@@ -6,6 +6,11 @@ from django.core.validators import MinValueValidator
 # Tabla de Producto
 class Productos(models.Model):
 
+    ESTADO_CHOICES = [
+        ('activo', 'Activo'),
+        ('inactivo', 'Inactivo'),
+    ]
+
     nombre = models.CharField(max_length=100, unique=True)
     categoria = models.CharField(max_length=100)
     marca = models.CharField(max_length=100, default="")
@@ -13,6 +18,7 @@ class Productos(models.Model):
     fecha_vencimiento = models.DateField(null=True, blank=True)
     stock = models.IntegerField(validators=[MinValueValidator(0)])
     descripcion = models.CharField(max_length=200, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='activo')
 
 class Proveedor(models.Model):
 

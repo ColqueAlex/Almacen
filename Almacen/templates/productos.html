@@ -73,6 +73,13 @@
                             <label class="form-label">Descripción:</label>
                             <textarea name="descripcion" id="descripcion" class="form-control" rows="3"></textarea>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Estado:</label>
+                            <select name="estado" class="form-select" required>
+                                <option value="activo" selected>Activo</option>
+                                <option value="inactivo">Inactivo</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -95,7 +102,8 @@
                     <th>Fecha de vencimientos</th>
                     <th>Descripción</th>
                     <th>Stock</th>
-                    <th colspan="2">Acciones</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -113,20 +121,34 @@
                         </span>
                     </td>
                     <td>
-                        <form action="{% url 'eliminar' producto.id %}" method="post" class="d-inline">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Este Producto se Eliminara')">
-                                <i class="fa-sharp fa-solid fa-trash"></i>
-                            </button>
-                        </form>
+                        <span class="badge {% if producto.estado == 'activo' %}bg-success{% else %}bg-secondary{% endif %}">
+                            {{ producto.get_estado_display }}
+                        </span>
                     </td>
                     <td>
-                        <form action="{% url 'detalle' producto.id %}" method="post" class="d-inline">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-warning btn-sm text-white">
-                                <i class="fa-sharp fa-solid fa-pen-to-square"></i>
+                        <div class="d-flex justify-content-center gap-2">
+                            <form action="{% url 'cambiar_estado' producto.id %}" method="post" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm {% if producto.estado == 'activo' %}btn-outline-secondary{% else %}btn-success{% endif %}" title="{% if producto.estado == 'activo' %}Desactivar{% else %}Activar{% endif %}">
+                                    {% if producto.estado == 'activo' %}
+                                        <i class="fa-solid fa-toggle-off"></i>
+                                    {% else %}
+                                        <i class="fa-solid fa-toggle-on"></i>
+                                    {% endif %}
+                                </button>
+                            </form>
+                            <form action="{% url 'detalle' producto.id %}" method="post" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-warning btn-sm text-white">
+                                    <i class="fa-sharp fa-solid fa-pen-to-square"></i>
+                                </button>
+                            </form>
+                            {% if producto.estado == 'inactivo' %}
+                            <button type="button" class="btn btn-sm btn-light border rounded-circle p-2" data-circle-toggle data-selected="false" aria-label="Seleccionar producto" aria-pressed="false" style="width: 38px; height: 38px; line-height: 1;">
+                                <i class="fa-regular fa-circle"></i>
                             </button>
-                        </form>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -134,5 +156,62 @@
         </table>
     </div>
 
+    {% if has_inactive_products %}
+    <div class="d-flex justify-content-end mt-3">
+        <form id="formEliminarSeleccionados" method="post" action="{% url 'eliminar_seleccionados' %}">
+            {% csrf_token %}
+            <input type="hidden" name="selected_ids" id="selectedIdsInput">
+            <button type="submit" class="btn btn-danger btn-sm opacity-50" id="btnEliminarMarcados" disabled>
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
 </div>
+
+<script>
+    const selectedIds = new Set();
+    const hasInactiveProducts = Array.from(document.querySelectorAll('[data-circle-toggle]')).length > 0;
+    const borrarBtn = document.getElementById('btnEliminarMarcados');
+
+    if (!hasInactiveProducts && borrarBtn) {
+        borrarBtn.closest('div').style.display = 'none';
+    }
+
+    document.addEventListener('click', function (event) {
+        const btn = event.target.closest('[data-circle-toggle]');
+        if (!btn) return;
+
+        const icon = btn.querySelector('i');
+        if (!icon) return;
+
+        const row = btn.closest('tr');
+        const productId = row?.querySelector('form[action*="detalle"]')?.action?.split('/').pop();
+
+        if (!productId) return;
+
+        const wasSelected = btn.dataset.selected === 'true';
+        const nextSelected = !wasSelected;
+
+        btn.dataset.selected = String(nextSelected);
+        btn.setAttribute('aria-pressed', String(nextSelected));
+
+        icon.classList.remove('fa-regular', 'fa-solid');
+        icon.classList.add(nextSelected ? 'fa-solid' : 'fa-regular', 'fa-circle');
+
+        if (nextSelected) {
+            selectedIds.add(productId);
+        } else {
+            selectedIds.delete(productId);
+        }
+
+        const input = document.getElementById('selectedIdsInput');
+        input.value = Array.from(selectedIds).join(',');
+
+        const borrarBtn = document.getElementById('btnEliminarMarcados');
+        borrarBtn.disabled = selectedIds.size === 0;
+        borrarBtn.classList.toggle('opacity-50', selectedIds.size === 0);
+    });
+</script>
 {% endblock %}

@@ -33,10 +33,13 @@ def consultar(request):
     elif stock_filtro == 'mayor_diez':
         productos = productos.filter(stock__gt=10)
 
+    has_inactive_products = productos.filter(estado='inactivo').exists()
+
     return render(request, "productos.html", {
         'productos': productos,
         'stock_filtro': stock_filtro,
-        'busqueda': busqueda
+        'busqueda': busqueda,
+        'has_inactive_products': has_inactive_products,
     })
 
 
@@ -49,6 +52,7 @@ def guardar(request):
     fecha_vencimiento = request.POST.get("fecha_vencimiento")
     stock = request.POST["stock"]
     descripcion = request.POST.get("descripcion", "")
+    estado = request.POST.get("estado", "activo")
 
     if not fecha_vencimiento:
         messages.error(request, 'La fecha de vencimiento es obligatoria')
@@ -66,6 +70,7 @@ def guardar(request):
         fecha_vencimiento=fecha_vencimiento,
         stock=stock,
         descripcion=descripcion,
+        estado=estado,
     )
     try:
         p.full_clean()
@@ -78,10 +83,11 @@ def guardar(request):
 
 
 @login_required
-def eliminar(request, id):
-    producto = Productos.objects.filter(pk=id)
-    producto.delete()
-    messages.success(request, 'Producto eliminado')
+def cambiar_estado(request, id):
+    producto = get_object_or_404(Productos, pk=id)
+    producto.estado = 'inactivo' if producto.estado == 'activo' else 'activo'
+    producto.save()
+    messages.success(request, f'Estado del producto actualizado a {producto.get_estado_display()}')
     return redirect('consultar')
 
 
@@ -94,6 +100,29 @@ def detalle(request, id):
 
 
 @login_required
+def eliminar_seleccionados(request):
+    if request.method != 'POST':
+        return redirect('consultar')
+
+    ids_raw = request.POST.get('selected_ids', '')
+    ids = [item.strip() for item in ids_raw.split(',') if item.strip()]
+
+    if not ids:
+        messages.warning(request, 'No hay productos marcados para eliminar.')
+        return redirect('consultar')
+
+    productos = Productos.objects.filter(id__in=ids, estado='inactivo')
+    count = productos.count()
+    productos.delete()
+
+    if count:
+        messages.success(request, f'Se eliminaron {count} productos inactivos.')
+    else:
+        messages.warning(request, 'Solo se pueden eliminar productos inactivos.')
+    return redirect('consultar')
+
+
+@login_required
 def editar(request):
     nombre = request.POST["nombre"]
     categoria = request.POST["categoria"]
@@ -102,6 +131,7 @@ def editar(request):
     fecha_vencimiento = request.POST.get("fecha_vencimiento") or None
     stock = request.POST["stock"]
     descripcion = request.POST.get("descripcion", "")
+    estado = request.POST.get("estado", "activo")
     id = request.POST["id"]
     producto = Productos.objects.get(pk=id)
     producto.nombre = nombre
@@ -111,6 +141,7 @@ def editar(request):
     producto.fecha_vencimiento = fecha_vencimiento
     producto.stock = stock
     producto.descripcion = descripcion
+    producto.estado = estado
     try:
         producto.full_clean()
         producto.save()
@@ -136,11 +167,18 @@ def editar_usuario(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
     if request.method == 'POST':
         usuario.correo = request.POST.get('correo')
+        perfil_id = request.POST.get('perfil')
+        usuario.id_perfil = Perfil.objects.filter(id=perfil_id).first() if perfil_id else None
         usuario.save()
-        messages.success(request, 'Correo actualizado correctamente.')
+        messages.success(request, 'Usuario actualizado correctamente.')
         return redirect('listar_usuarios')
 
-    return render(request, 'usuario_form.html', {'usuario': usuario, 'es_edicion': True})
+    perfiles = Perfil.objects.all()
+    return render(request, 'usuario_form.html', {
+        'usuario': usuario,
+        'perfiles': perfiles,
+        'es_edicion': True,
+    })
 
 
 @login_required

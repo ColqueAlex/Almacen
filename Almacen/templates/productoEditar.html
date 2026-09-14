@@ -23,6 +23,12 @@
 
         Stock: <input type="number" name="stock" min="0"  class="form-control my-2" required value="{{ producto.stock }}">
 
+        Estado:
+        <select name="estado" class="form-select my-2" required>
+            <option value="activo" {% if producto.estado == 'activo' %}selected{% endif %}>Activo</option>
+            <option value="inactivo" {% if producto.estado == 'inactivo' %}selected{% endif %}>Inactivo</option>
+        </select>
+
         Descripcion:
             <textarea name="descripcion" id="" class="form-control my-2" >
                 {{producto.descripcion}}

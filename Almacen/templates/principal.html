@@ -1,5 +1,61 @@
 {% extends 'plantillas.html' %}
+{% load static %}
 
 {% block content %}
-    <h1 class="text-center ">Almacen: ElRefugio</h1>
+    <div class="container py-4">
+        <div class="menu-container">
+            {% if user.id_perfil and user.id_perfil.nombre == 'Vendedor' %}
+                <a href="#" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-cart-arrow-down"></i>
+                    </div>
+                    <div class="text-box">Procesar Venta</div>
+                </a>
+            {% else %}
+                <a href="#" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-box-open"></i>
+                    </div>
+                    <div class="text-box">Registrar Compra</div>
+                </a>
+
+                <a href="{% url 'consultar' %}" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                    </div>
+                    <div class="text-box">Productos del almacen</div>
+                </a>
+
+                <a href="#" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-cart-arrow-down"></i>
+                    </div>
+                    <div class="text-box">Procesar Venta</div>
+                </a>
+
+                <a href="#" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-tags"></i>
+                    </div>
+                    <div class="text-box">Registrar descuento</div>
+                </a>
+
+                <a href="#" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-bullhorn"></i>
+                    </div>
+                    <div class="text-box">Registrar Promociones</div>
+                </a>
+
+                <a href="#" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                    <div class="text-box">Cuentas de clientes</div>
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="{% static 'css/principal.css' %}">
 {% endblock %}

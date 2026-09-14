@@ -13,7 +13,7 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -prootpassword"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u myuser -pmypassword"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -41,6 +41,7 @@ services:
       - "8000:8000"
     environment:
       - DB_HOST=db
+      - DB_PORT=3306
       - DB_NAME=mydatabase
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
