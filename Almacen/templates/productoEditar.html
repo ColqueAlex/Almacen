@@ -13,9 +13,11 @@
 
         Nombre: <input type="text" name="nombre" class="form-control my-2" required value="{{ producto.nombre }}">
 
-        categoria: <input type="text" name="categoria" class="form-control my-2" required value="{{ producto.categoria }}">
+        Lote: <input type="text" name="lote" class="form-control my-2" value="{% if producto.lote %}{{ producto.lote }}{% else %}Sin lote{% endif %}">
 
-        Marca: <input type="text" name="marca" class="form-control my-2" required value="{{ producto.marca }}">
+        categoria: <input type="text" name="categoria" class="form-control my-2" required value="{{ producto.categoria }}" pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
+
+        Marca: <input type="text" name="marca" class="form-control my-2" value="{% if producto.marca %}{{ producto.marca }}{% else %}Sin marca{% endif %}">
 
         Precio: <input type="number" name="precio" min="0" step="0.01" class="form-control my-2" required value="{{ producto.precio }}">
 
@@ -29,10 +31,6 @@
             <option value="inactivo" {% if producto.estado == 'inactivo' %}selected{% endif %}>Inactivo</option>
         </select>
 
-        Descripcion:
-            <textarea name="descripcion" id="" class="form-control my-2" >
-                {{producto.descripcion}}
-            </textarea>
         <input type="submit" value="Actualizar" class="btn btn-primary">
     </form>
 

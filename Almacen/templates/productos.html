@@ -6,7 +6,7 @@
     <!-- Mensajes de Django -->
     {% if messages %}
         {% for message in messages %}
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags %}{{ message.tags }}{% else %}info{% endif %} alert-dismissible fade show" role="alert">
                 {{ message }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
@@ -49,13 +49,17 @@
                             <label class="form-label">Nombre:</label>
                             <input type="text" name="nombre" class="form-control" required>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Lote:</label>
+                            <input type="text" name="lote" class="form-control" placeholder="Sin lote">
+                        </div>
                         <div class="md-3">
                             <label class="form-label">categoria:</label>
-                            <input type="text" name="categoria" class="form-control" required>
+                            <input type="text" name="categoria" class="form-control" required pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
                         </div>
                         <div class="md-3">
                             <label class="form-label">Marca</label>
-                            <input type="text" name="marca" class="form-control" required>
+                            <input type="text" name="marca" class="form-control" placeholder="Sin marca">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Precio:</label>
@@ -68,10 +72,6 @@
                         <div class="mb-3">
                             <label class="form-label">Stock:</label>
                             <input type="number" min="0" name="stock" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Descripción:</label>
-                            <textarea name="descripcion" id="descripcion" class="form-control" rows="3"></textarea>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Estado:</label>
@@ -96,11 +96,11 @@
             <thead class="table-dark">
                 <tr>
                     <th>Nombre</th>
+                    <th>Lote</th>
                     <th>Categoria</th>
                     <th>Marca</th>
                     <th>Precio</th>
                     <th>Fecha de vencimientos</th>
-                    <th>Descripción</th>
                     <th>Stock</th>
                     <th>Estado</th>
                     <th>Acciones</th>
@@ -110,11 +110,11 @@
                 {% for producto in productos %}
                 <tr>
                     <td>{{ producto.nombre }}</td>
+                    <td>{{ producto.lote|default:"Sin lote" }}</td>
                     <td>{{ producto.categoria }}</td>
                     <td>{{ producto.marca }}</td>
                     <td>${{ producto.precio }}</td>
                     <td>{{ producto.fecha_vencimiento|date:"d/m/Y"|default:"-" }}</td>
-                    <td>{{ producto.descripcion|default:"-" }}</td>
                     <td>
                         <span class="{% if producto.stock == 0 %}text-danger{% elif producto.stock <= 10 %}text-warning{% endif %}">
                             {{ producto.stock }}

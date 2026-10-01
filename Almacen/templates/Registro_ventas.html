@@ -1,0 +1,297 @@
+
+{% extends 'plantillas.html' %}
+{% load static %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/Registro_ventas.css' %}">
+
+<div class="ventas-registro-page">
+    {% if messages %}
+        <div class="container my-3">
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+    <div class="sales-layout">
+        <main class="products-section">
+            <div class="search-bar">
+                <div class="search-input-wrapper">
+                    <span class="search-icon"></span>
+                    <input type="text" id="search-product" placeholder="Buscar producto..." aria-label="Buscar producto">
+                </div>
+                <div class="filter-dropdown">
+                    <button type="button" class="btn-filter" id="filter-toggle">Filtrar</button>
+                    <div class="filter-menu" id="filter-menu">
+                        <button type="button" class="filter-option active" data-category="">Todas</button>
+                        {% for categoria in categorias %}
+                            <button type="button" class="filter-option" data-category="{{ categoria }}">{{ categoria }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="product-list" id="product-list">
+                {% for producto in productos %}
+                    <article class="product-card" data-product-category="{{ producto.categoria|default:'' }}">
+                        <div class="product-info">
+                            <div class="product-img product-placeholder" aria-label="{{ producto.nombre }}">{{ producto.nombre|slice:":1"|upper }}</div>
+                            <div class="product-text">
+                                <h3>{{ producto.nombre }}</h3>
+                                <p>Precio: ${{ producto.precio }}</p>
+                            </div>
+                        </div>
+                        <div class="product-controls">
+                            <div class="stock-block">
+                                <span class="stock-label">Stock: {{ producto.stock }}</span>
+                                <div class="qty-control"
+                                    data-product-id="{{ producto.id|default:forloop.counter0 }}"
+                                    data-product-name="{{ producto.nombre }}"
+                                    data-product-price="{{ producto.precio }}"
+                                    data-stock="{{ producto.stock }}">
+                                    <button type="button" class="qty-btn qty-minus" aria-label="Disminuir cantidad">−</button>
+                                    <span class="qty-value">0</span>
+                                    <button type="button" class="qty-btn qty-plus" aria-label="Aumentar cantidad">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                {% empty %}
+                    <div class="empty-products">No hay productos registrados.</div>
+                {% endfor %}
+            </div>
+        </main>
+
+        <aside class="cart-section">
+            <h2 class="cart-title">Carrito de ventas</h2>
+
+            <div class="cart-header">
+                <span>Producto</span>
+                <span>Cantidad</span>
+            </div>
+
+            <div class="cart-items" id="cart-items">
+                <div class="empty-cart">Carrito vacío</div>
+            </div>
+
+            <div class="cart-footer">
+                <label class="credit-option">
+                    <span>Fiar la venta al cliente</span>
+                    <input type="checkbox" id="fiado-checkbox">
+                </label>
+
+                <div class="total-container">
+                    <span>Total:</span>
+                    <strong id="cart-total">$0.00</strong>
+                </div>
+
+                <form method="post" action="{% url 'registrar_venta' %}" id="sale-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="cart_data" id="cart_data" value="[]">
+                    <input type="hidden" name="fiado" id="fiado_value" value="false">
+                    <button type="submit" class="btn-finalize" id="finalize-btn">Finalizar</button>
+                </form>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const cartItemsContainer = document.getElementById('cart-items');
+        const cartTotalElement = document.getElementById('cart-total');
+        const productList = document.getElementById('product-list');
+        const searchInput = document.getElementById('search-product');
+        const filterToggle = document.getElementById('filter-toggle');
+        const filterMenu = document.getElementById('filter-menu');
+        const filterOptions = document.querySelectorAll('.filter-option');
+        const fiadoCheckbox = document.getElementById('fiado-checkbox');
+        const fiadoValue = document.getElementById('fiado_value');
+        const cartDataField = document.getElementById('cart_data');
+        const saleForm = document.getElementById('sale-form');
+        const cart = {};
+        let selectedCategory = '';
+
+        function formatMoney(value) {
+            return '$' + Number(value).toFixed(2);
+        }
+
+        function renderCart() {
+            const entries = Object.values(cart);
+
+            if (!entries.length) {
+                cartItemsContainer.innerHTML = '<div class="empty-cart">Carrito vacío</div>';
+                cartTotalElement.textContent = formatMoney(0);
+                return;
+            }
+
+            cartItemsContainer.innerHTML = entries.map(function (item) {
+                return `
+                    <div class="cart-item">
+                        <div class="item-name-box">
+                            <strong>${item.name}</strong>
+                            <small>${formatMoney(item.price)}</small>
+                        </div>
+                        <div class="qty-box" aria-label="Cantidad del producto">
+                            <button type="button" class="cart-qty-btn" data-action="decrease" data-product-id="${item.id}" aria-label="Disminuir cantidad">−</button>
+                            <span>${item.quantity}</span>
+                            <button type="button" class="cart-qty-btn" data-action="increase" data-product-id="${item.id}" aria-label="Aumentar cantidad">+</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const total = entries.reduce(function (sum, item) {
+                return sum + (Number(item.price) * Number(item.quantity));
+            }, 0);
+
+            cartTotalElement.textContent = formatMoney(total);
+
+            document.querySelectorAll('.cart-qty-btn').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    const productId = button.dataset.productId;
+                    const action = button.dataset.action;
+                    const productControl = document.querySelector('.qty-control[data-product-id="' + productId + '"]');
+
+                    if (!productControl) return;
+
+                    const currentValue = Number(productControl.querySelector('.qty-value').textContent) || 0;
+                    const stock = Number(productControl.dataset.stock) || 0;
+
+                    if (action === 'increase') {
+                        if (currentValue >= stock) return;
+                        productControl.querySelector('.qty-value').textContent = currentValue + 1;
+                    } else {
+                        if (currentValue <= 0) return;
+                        productControl.querySelector('.qty-value').textContent = currentValue - 1;
+                    }
+
+                    const newValue = Number(productControl.querySelector('.qty-value').textContent) || 0;
+                    const name = productControl.dataset.productName;
+                    const price = Number(productControl.dataset.productPrice) || 0;
+
+                    if (newValue > 0) {
+                        cart[productId] = {
+                            id: productId,
+                            name: name,
+                            price: price,
+                            quantity: newValue
+                        };
+                    } else {
+                        delete cart[productId];
+                    }
+
+                    renderCart();
+                });
+            });
+        }
+
+        function applySearchFilter() {
+            const query = searchInput.value.trim().toLowerCase();
+            const products = productList.querySelectorAll('.product-card');
+
+            products.forEach(function (productCard) {
+                const productName = (productCard.dataset.productName || productCard.querySelector('h3')?.textContent || '').toLowerCase();
+                const categoryName = (productCard.dataset.productCategory || '').toLowerCase();
+                const matchesCategory = !selectedCategory || categoryName === selectedCategory.toLowerCase();
+                const visible = (!query || productName.includes(query) || categoryName.includes(query)) && matchesCategory;
+                productCard.style.display = visible ? '' : 'none';
+            });
+        }
+
+        document.querySelectorAll('.product-card').forEach(function (productCard) {
+            const name = (productCard.querySelector('h3')?.textContent || '').trim();
+            productCard.dataset.productName = name;
+        });
+
+        searchInput.addEventListener('input', applySearchFilter);
+
+        filterToggle.addEventListener('click', function () {
+            filterMenu.classList.toggle('open');
+        });
+
+        filterOptions.forEach(function (option) {
+            option.addEventListener('click', function () {
+                selectedCategory = option.dataset.category || '';
+                filterOptions.forEach(function (item) {
+                    item.classList.toggle('active', item === option);
+                });
+                filterToggle.textContent = selectedCategory ? selectedCategory : 'Filtrar';
+                filterMenu.classList.remove('open');
+                applySearchFilter();
+            });
+        });
+
+        function syncCartToForm() {
+            const items = Object.values(cart).map(function (item) {
+                return {
+                    id: Number(item.id),
+                    cantidad: Number(item.quantity)
+                };
+            });
+            cartDataField.value = JSON.stringify(items);
+            fiadoValue.value = fiadoCheckbox.checked ? 'true' : 'false';
+        }
+
+        fiadoCheckbox.addEventListener('change', function () {
+            fiadoValue.value = fiadoCheckbox.checked ? 'true' : 'false';
+        });
+
+        saleForm.addEventListener('submit', function (event) {
+            const items = Object.values(cart);
+            if (!items.length) {
+                event.preventDefault();
+                alert('Debe agregar al menos un producto al carrito antes de finalizar.');
+                return;
+            }
+
+            syncCartToForm();
+        });
+
+        document.querySelectorAll('.qty-control').forEach(function (control) {
+            const valueEl = control.querySelector('.qty-value');
+            const minusBtn = control.querySelector('.qty-minus');
+            const plusBtn = control.querySelector('.qty-plus');
+
+            const updateValue = function (nextValue) {
+                const stock = Number(control.dataset.stock) || 0;
+                const safeValue = Math.max(0, Math.min(stock, Number(nextValue) || 0));
+                valueEl.textContent = safeValue;
+
+                const productId = control.dataset.productId;
+                const name = control.dataset.productName;
+                const price = Number(control.dataset.productPrice) || 0;
+
+                if (safeValue > 0) {
+                    cart[productId] = {
+                        id: productId,
+                        name: name,
+                        price: price,
+                        quantity: safeValue
+                    };
+                } else {
+                    delete cart[productId];
+                }
+
+                renderCart();
+                syncCartToForm();
+            };
+
+            minusBtn.addEventListener('click', function () {
+                const current = Number(valueEl.textContent) || 0;
+                updateValue(current - 1);
+            });
+
+            plusBtn.addEventListener('click', function () {
+                const current = Number(valueEl.textContent) || 0;
+                updateValue(current + 1);
+            });
+        });
+
+        syncCartToForm();
+    });
+</script>
+{% endblock %}

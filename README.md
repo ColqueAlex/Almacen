@@ -14,3 +14,7 @@ docker compose up -d --build
 docker compose ps
 
 http://localhost:8000/
+
+Para crear un usuario admin
+python manage.py createsuperuser
+

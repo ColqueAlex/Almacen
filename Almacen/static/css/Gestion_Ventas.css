@@ -1,0 +1,75 @@
+.ventas-wrapper {
+    background: #f8f9fa;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.08);
+}
+
+.ventas-table thead th {
+    background: #1f2937;
+    color: #ffffff;
+    font-size: 0.92rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border: none;
+    vertical-align: middle;
+}
+
+.ventas-table tbody td {
+    background: #ffffff;
+    color: #2b2b2b;
+    border-color: #e5e7eb;
+    vertical-align: middle;
+}
+
+.ventas-table tbody tr:hover td {
+    background: #f3f6fb;
+}
+
+.ventas-table .badge {
+    padding: 0.5em 0.75em;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Fila de detalle y subtabla */
+.detail-row.hidden {
+    display: none;
+}
+
+.detail-row td {
+    background-color: #f8fafc !important;
+}
+
+/* Transición para rotar el icono del triángulo/flecha */
+.btn-toggle i {
+    transition: transform 0.3s ease;
+    display: inline-block;
+}
+
+/* Cuando la fila está desplegada, rotamos el triángulo hacia arriba */
+.main-row.expanded .btn-toggle i {
+    transform: rotate(180deg);
+}
+
+.detail-row .table {
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.detail-row .table thead th {
+    background-color: #f1f5f9;
+    color: #475569;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.detail-row .table tbody td {
+    background-color: #ffffff;
+    font-size: 0.88rem;
+    border-color: #f1f5f9;
+}

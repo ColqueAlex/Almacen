@@ -1,0 +1,229 @@
+{% extends 'plantillas.html' %}
+{% load static %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/Gestion_Ventas.css' %}">
+
+<div class="container my-4">
+    {% if messages %}
+        <div class="my-3">
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'success' }}{% endif %} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <h2>Ventas</h2>
+        <div class="d-flex align-items-center gap-2">
+            <form method="GET" action="" class="m-0">
+            <select name="filtro" onchange="this.form.submit()" class="form-select" style="cursor: pointer;">
+                <option value="todos" {% if filtro_activo == 'todos' %}selected{% endif %}> Todas</option>
+                <option value="semana" {% if filtro_activo == 'semana' %}selected{% endif %}> Última semana</option>
+                <option value="mes" {% if filtro_activo == 'mes' %}selected{% endif %}> Último mes</option>
+                <option value="anio" {% if filtro_activo == 'anio' %}selected{% endif %}> Este año</option>
+            </select>
+        </form>
+        <a href="{% url 'registrar_venta' %}" class="btn btn-primary">
+            <i class="fa-solid fa-cart-plus me-1"></i> Registrar Venta
+        </a>
+        </div>
+        
+    </div>
+
+    <div class="ventas-wrapper table-responsive rounded">
+        <table class="ventas-table table table-hover align-middle text-center mb-0">
+            <thead>
+                <tr>
+                    <th>N° Venta</th>
+                    <th>N° Caja</th>
+                    <th>Total</th>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                    <th>Cliente Fiado</th>
+                    <th>Estado de pago</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for venta in ventas %}
+                <tr class="main-row">
+                    <td>{{ venta.id_ventas }}</td>
+                    <td>Caja {{ venta.id_caja }}</td>
+                    <td>${{ venta.total|floatformat:2 }}</td>
+                    <td>{{ venta.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ venta.hora|time:"H:i" }}</td>
+                    <td>
+                        {% if venta.id_clientes %}
+                            Cliente {{ venta.id_clientes }}
+                        {% else %}
+                            No se fió
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if venta.estado_de_pago|lower == 'pagado' %}
+                            <span class="badge bg-success">Pagado</span>
+                        {% elif venta.estado_de_pago|lower == 'pendiente' %}
+                            <span class="badge bg-warning text-dark">Pendiente</span>
+                        {% elif venta.estado_de_pago|lower == 'abono parcial' or venta.estado_de_pago|lower == 'abono_parcial' %}
+                            <span class="badge bg-info text-dark">Abono parcial</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ venta.estado_de_pago|title }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex justify-content-center gap-2">
+                            <button type="button"
+                                class="btn btn-warning btn-sm text-white btn-modificar"
+                                title="Modificar estado de pago"
+                                data-venta-id="{{ venta.id_ventas }}"
+                                data-estado-actual="{{ venta.estado_de_pago|lower }}"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modalEstadoPago">
+                                <i class="fa-sharp fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-sm text-white btn-toggle" title="Ver detalle" aria-label="Ver detalle" data-venta-id="{{ venta.id_ventas }}">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+                            {% if venta.fecha <= fecha_limite %}
+                            <form method="post" action="{% url 'eliminar_venta' venta.id_ventas %}" style="display:inline"
+                                  class="form-eliminar-venta"
+                                  data-venta-id="{{ venta.id_ventas }}"
+                                  data-venta-fecha="{{ venta.fecha|date:'d/m/Y' }}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm" title="Eliminar venta antigua">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                <tr class="detail-row hidden">
+                    <td colspan="8" class="p-3 bg-light">
+                        <div class="table-responsive bg-white rounded border shadow-sm p-2">
+                            <table class="table table-sm table-hover align-middle text-center mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-start ps-3">Nombre del producto</th>
+                                        <th>Cantidad</th>
+                                        <th>Precio unitario</th>
+                                        <th>Descuento aplicado</th>
+                                        <th class="text-end pe-3">Precio Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for detalle in venta.detalles.all %}
+                                    <tr>
+                                        <td class="text-start ps-3 fw-semibold">{{ detalle.producto.nombre }}</td>
+                                        <td>{{ detalle.cantidad }}</td>
+                                        <td>${{ detalle.precio_unitario_compra|floatformat:2 }}</td>
+                                        <td><span class="badge bg-light text-secondary border">Sin descuento</span></td>
+                                        <td class="text-end pe-3 fw-bold">${{ detalle.subtotal|floatformat:2 }}</td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-2">
+                                            No hay detalles registrados para esta venta.
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted">No hay ventas registradas.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Cambiar estado de pago -->
+<div class="modal fade" id="modalEstadoPago" tabindex="-1" aria-labelledby="modalEstadoPagoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalEstadoPagoLabel">
+                    <i class="fa-solid fa-pen-to-square me-2"></i>Modificar estado de pago
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" id="formEstadoPago" action="">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Venta <strong id="modalVentaId"></strong></p>
+                    <label class="form-label fw-semibold">Nuevo estado:</label>
+                    <div class="d-grid gap-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="estado_de_pago" id="optPagado" value="pagado">
+                            <label class="form-check-label" for="optPagado">
+                                <span class="badge bg-success">Pagado</span>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="estado_de_pago" id="optFiado" value="fiado">
+                            <label class="form-check-label" for="optFiado">
+                                <span class="badge bg-secondary">Fiado</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning btn-sm text-white">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Toggle detalle de venta
+        document.querySelectorAll('.btn-toggle').forEach(function (button) {
+            button.addEventListener('click', function () {
+                const mainRow = this.closest('tr');
+                const detailRow = mainRow.nextElementSibling;
+                if (detailRow && detailRow.classList.contains('detail-row')) {
+                    detailRow.classList.toggle('hidden');
+                }
+                mainRow.classList.toggle('expanded');
+            });
+        });
+
+        // Confirmación al eliminar venta
+        document.querySelectorAll('.form-eliminar-venta').forEach(function (form) {
+            form.addEventListener('submit', function (e) {
+                const id = form.dataset.ventaId;
+                const fecha = form.dataset.ventaFecha;
+                const ok = confirm(
+                    '¿Eliminar la venta #' + id + ' del ' + fecha + '?\nEsta acción no se puede deshacer.'
+                );
+                if (!ok) e.preventDefault();
+            });
+        });
+
+        // Precargar modal con datos de la venta seleccionada
+        document.querySelectorAll('.btn-modificar').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const id = btn.dataset.ventaId;
+                const estadoActual = btn.dataset.estadoActual;
+
+                document.getElementById('modalVentaId').textContent = '#' + id;
+                document.getElementById('formEstadoPago').action = '/ventas/cambiar-estado/' + id + '/';
+
+                document.getElementById('optPagado').checked = (estadoActual === 'pagado');
+                document.getElementById('optFiado').checked = (estadoActual === 'fiado');
+            });
+        });
+    });
+</script>
+{% endblock %}
