@@ -12,7 +12,8 @@
                     <div class="text-box">Procesar Venta</div>
                 </a>
             {% else %}
-                <a href="#" class="menu-btn">
+                
+                <a href="{% url 'registrar_compra' %}" class="menu-btn">
                     <div class="icon-box">
                         <i class="fa-solid fa-box-open"></i>
                     </div>
@@ -23,7 +24,7 @@
                     <div class="icon-box">
                         <i class="fa-solid fa-boxes-stacked"></i>
                     </div>
-                    <div class="text-box">Productos del almacen</div>
+                    <div class="text-box">Productos del almacén</div>
                 </a>
 
                 <a href="{% url 'registrar_venta' %}" class="menu-btn">
@@ -47,7 +48,7 @@
                     <div class="text-box">Registrar Promociones</div>
                 </a>
 
-                <a href="#" class="menu-btn">
+                <a href="{% url 'cuentas_clientes' %}" class="menu-btn">
                     <div class="icon-box">
                         <i class="fa-solid fa-users"></i>
                     </div>

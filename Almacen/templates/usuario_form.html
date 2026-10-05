@@ -4,6 +4,16 @@
 <div class="container my-5">
     <div class="row justify-content-center">
         <div class="col-md-6">
+
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
             <div class="card shadow-sm">
                 <div class="card-header bg-primary text-white">
                     <h4 class="mb-0">{% if es_edicion %}Editar Usuario{% else %}Nuevo Usuario{% endif %}</h4>

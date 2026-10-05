@@ -7,11 +7,13 @@
             <div class="card shadow-sm">
                 <div class="card-body p-4">
                     <h3 class="text-center mb-4">Iniciar Sesión</h3>
-                    
-                    {% if form.errors %}
-                        <div class="alert alert-danger p-2 text-center" role="alert">
-                            Usuario o contraseña incorrectos.
-                        </div>
+
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-danger p-2 text-center mb-3" role="alert">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
                     {% endif %}
 
                     <form method="post">

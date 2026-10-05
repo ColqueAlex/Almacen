@@ -1,0 +1,222 @@
+{% extends 'plantillas.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container my-4">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <h2 class="mb-4"><i class="fa-solid fa-truck-ramp-box me-2"></i>Registrar Ingreso de Compra</h2>
+
+    <div class="row">
+        <!-- Panel Izquierdo: Selección de Proveedor y Producto -->
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white fw-semibold">
+                    1. Datos del Proveedor
+                </div>
+                <div class="card-body">
+                    <label class="form-label fw-semibold">Seleccionar Proveedor:</label>
+                    <select id="proveedor-select" class="form-select">
+                        <option value="" selected>Sin proveedor</option>
+                        {% for p in proveedores %}
+                            <option value="{{ p.id }}">{{ p.nombre }} ({{ p.tipo_productos }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white fw-semibold">
+                    2. Carga de Producto y Lote
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Producto del Catálogo:</label>
+                        <select id="producto-select" class="form-select">
+                            <option value="" disabled selected>Seleccione producto...</option>
+                            {% for prod in productos %}
+                                <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-marca="{{ prod.marca }}">
+                                    {{ prod.nombre }} ({{ prod.marca }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">N° de Lote:</label>
+                            <input type="text" id="lote-input" class="form-control" placeholder="Ej: L3042">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Fecha Vencimiento:</label>
+                            <input type="date" id="vencimiento-input" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Cantidad:</label>
+                            <input type="number" id="cantidad-input" min="1" class="form-control" value="1">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Precio de Costo ($):</label>
+                            <input type="number" id="costo-input" min="0.01" step="0.01" class="form-control" placeholder="0.00">
+                        </div>
+                    </div>
+
+                    <button type="button" id="btn-agregar-item" class="btn btn-success w-100">
+                        <i class="fa-solid fa-plus me-1"></i> Agregar a la Compra
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Detalle de la Compra -->
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-dark text-white fw-semibold d-flex justify-content-between align-items-center">
+                    <span>Detalle de la Compra</span>
+                    <span id="total-compra" class="badge bg-success fs-6">$0.00</span>
+                </div>
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle text-center" id="tabla-compra">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Lote</th>
+                                    <th>Cant.</th>
+                                    <th>Costo</th>
+                                    <th>Subtotal</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="carrito-body">
+                                <tr>
+                                    <td colspan="6" class="text-muted py-4">No hay ítems agregados a la compra.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <form method="post" action="{% url 'registrar_compra' %}" id="form-compra" class="mt-3">
+                        {% csrf_token %}
+                        <input type="hidden" name="id_proveedor" id="input-proveedor-id">
+                        <input type="hidden" name="cart_data" id="input-cart-data" value="[]">
+
+                        <button type="submit" class="btn btn-primary w-100 btn-lg" id="btn-finalizar">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Finalizar Registro de Compra
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const cart = [];
+        const btnAgregar = document.getElementById('btn-agregar-item');
+        const carritoBody = document.getElementById('carrito-body');
+        const totalCompraEl = document.getElementById('total-compra');
+        const formCompra = document.getElementById('form-compra');
+        const inputProveedor = document.getElementById('input-proveedor-id');
+        const inputCartData = document.getElementById('input-cart-data');
+        const proveedorSelect = document.getElementById('proveedor-select');
+
+        function renderCart() {
+            if (!cart.length) {
+                carritoBody.innerHTML = '<tr><td colspan="6" class="text-muted py-4">No hay ítems agregados a la compra.</td></tr>';
+                totalCompraEl.textContent = '$0.00';
+                return;
+            }
+
+            let total = 0;
+            carritoBody.innerHTML = cart.map((item, index) => {
+                const subtotal = item.cantidad * item.precio_costo;
+                total += subtotal;
+                return `
+                    <tr>
+                        <td class="text-start"><strong>${item.nombre}</strong></td>
+                        <td><small class="badge bg-secondary">${item.lote}</small></td>
+                        <td>${item.cantidad}</td>
+                        <td>$${item.precio_costo.toFixed(2)}</td>
+                        <td class="fw-bold">$${subtotal.toFixed(2)}</td>
+                        <td>
+                            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="eliminarItem(${index})">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            totalCompraEl.textContent = '$' + total.toFixed(2);
+        }
+
+        window.eliminarItem = function (index) {
+            cart.splice(index, 1);
+            renderCart();
+        };
+
+        btnAgregar.addEventListener('click', function () {
+            const prodSelect = document.getElementById('producto-select');
+            const prodOption = prodSelect.options[prodSelect.selectedIndex];
+            const loteVal = document.getElementById('lote-input').value.trim() || 'Sin lote';
+            const vencVal = document.getElementById('vencimiento-input').value;
+            const cantVal = parseInt(document.getElementById('cantidad-input').value) || 0;
+            const costoVal = parseFloat(document.getElementById('costo-input').value) || 0;
+
+            if (!prodSelect.value) {
+                alert('Debe seleccionar un producto.');
+                return;
+            }
+            if (cantVal <= 0) {
+                alert('La cantidad debe ser mayor a 0.');
+                return;
+            }
+            if (costoVal <= 0) {
+                alert('El precio de costo debe ser mayor a 0.');
+                return;
+            }
+
+            cart.push({
+                id_producto: prodSelect.value,
+                nombre: prodOption.dataset.nombre,
+                lote: loteVal,
+                fecha_vencimiento: vencVal,
+                cantidad: cantVal,
+                precio_costo: costoVal
+            });
+
+            renderCart();
+
+            // Limpiar campos del producto
+            prodSelect.selectedIndex = 0;
+            document.getElementById('lote-input').value = '';
+            document.getElementById('vencimiento-input').value = '';
+            document.getElementById('cantidad-input').value = 1;
+            document.getElementById('costo-input').value = '';
+        });
+
+            formCompra.addEventListener('submit', function (e) {
+            if (!cart.length) {
+                e.preventDefault();
+                alert('El detalle de la compra está vacío.');
+                return;
+            }
+
+            inputProveedor.value = proveedorSelect.value || '';
+            inputCartData.value = JSON.stringify(cart);
+        });
+    });
+</script>
+{% endblock %}

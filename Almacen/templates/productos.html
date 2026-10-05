@@ -3,7 +3,6 @@
 {% block content %}
 <div class="container my-4">
 
-    <!-- Mensajes de Django -->
     {% if messages %}
         {% for message in messages %}
             <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags %}{{ message.tags }}{% else %}info{% endif %} alert-dismissible fade show" role="alert">
@@ -13,68 +12,48 @@
         {% endfor %}
     {% endif %}
 
-    <!-- Encabezado con Botón para Abrir Modal -->
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-        <h2>Productos</h2>
+        <h2>Catálogo de Productos</h2>
         <div class="d-flex align-items-center gap-2">
             <form method="get" class="d-flex align-items-center gap-2 m-0">
-                <label for="busqueda" class="visually-hidden">Buscar producto por nombre</label>
-                <input type="search" id="busqueda" name="busqueda" class="form-control" placeholder="Buscar Producto" value="{{ busqueda }}">
-                <label for="stock_filtro" class="visually-hidden">Filtrar por stock</label>
-                <select id="stock_filtro" name="stock_filtro" class="form-select" onchange="this.form.submit()">
-                    <option value="todos" {% if stock_filtro == 'todos' %}selected{% endif %}>Todos los productos</option>
-                    <option value="cero" {% if stock_filtro == 'cero' %}selected{% endif %}>productos con stock 0</option>
-                    <option value="hasta_diez" {% if stock_filtro == 'hasta_diez' %}selected{% endif %}>productos con stock menor o igual a 10</option>
-                    <option value="mayor_diez" {% if stock_filtro == 'mayor_diez' %}selected{% endif %}>productos con stock mayor a 10</option>
-                </select>
+                <input type="search" id="busqueda" name="busqueda" class="form-control" placeholder="Buscar Producto..." value="{{ busqueda }}">
+                <button type="submit" class="btn btn-outline-secondary"><i class="fa-solid fa-magnifying-glass"></i></button>
             </form>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalGuardar">
-                <i class="fa-solid fa-plus me-1"></i> Añadir Producto
+                <i class="fa-solid fa-plus me-1"></i> Nuevo Producto
             </button>
         </div>
     </div>
 
-    <!-- Modal con tu Formulario -->
+    <!-- Modal Agregar Producto -->
     <div class="modal fade" id="modalGuardar" tabindex="-1" aria-labelledby="modalGuardarLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modalGuardarLabel">Añadir Nuevo Producto</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalGuardarLabel">Añadir Producto al Catálogo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <form action="{% url 'guardar' %}" method="post">
                     {% csrf_token %}
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label">Nombre:</label>
+                            <label class="form-label fw-semibold">Nombre:</label>
                             <input type="text" name="nombre" class="form-control" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Lote:</label>
-                            <input type="text" name="lote" class="form-control" placeholder="Sin lote">
-                        </div>
-                        <div class="md-3">
-                            <label class="form-label">categoria:</label>
+                            <label class="form-label fw-semibold">Categoría:</label>
                             <input type="text" name="categoria" class="form-control" required pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
                         </div>
-                        <div class="md-3">
-                            <label class="form-label">Marca</label>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Marca:</label>
                             <input type="text" name="marca" class="form-control" placeholder="Sin marca">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Precio:</label>
-                            <input type="number" min="0" step="0.01" name="precio" class="form-control" required>
+                            <label class="form-label fw-semibold">Precio Venta ($):</label>
+                            <input type="number" min="0.01" step="0.01" name="precio" class="form-control" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Fecha de vencimiento:</label>
-                            <input type="date" name="fecha_vencimiento" class="form-control" min="{% now 'Y' %}-01-01" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Stock:</label>
-                            <input type="number" min="0" name="stock" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Estado:</label>
+                            <label class="form-label fw-semibold">Estado:</label>
                             <select name="estado" class="form-select" required>
                                 <option value="activo" selected>Activo</option>
                                 <option value="inactivo">Inactivo</option>
@@ -83,25 +62,23 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Guardar</button>
+                        <button type="submit" class="btn btn-primary">Guardar en Catálogo</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Tabla con tus Formularios de Eliminar y Detalle -->
+    <!-- Tabla Catálogo -->
     <div class="table-responsive shadow-sm rounded">
         <table class="table table-hover table-light align-middle text-center mb-0">
             <thead class="table-dark">
                 <tr>
                     <th>Nombre</th>
-                    <th>Lote</th>
-                    <th>Categoria</th>
+                    <th>Categoría</th>
                     <th>Marca</th>
-                    <th>Precio</th>
-                    <th>Fecha de vencimientos</th>
-                    <th>Stock</th>
+                    <th>Precio Venta</th>
+                    <th>Stock Disponible</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
@@ -110,46 +87,46 @@
                 {% for producto in productos %}
                 <tr>
                     <td>{{ producto.nombre }}</td>
-                    <td>{{ producto.lote|default:"Sin lote" }}</td>
                     <td>{{ producto.categoria }}</td>
                     <td>{{ producto.marca }}</td>
                     <td>${{ producto.precio }}</td>
-                    <td>{{ producto.fecha_vencimiento|date:"d/m/Y"|default:"-" }}</td>
                     <td>
-                        <span class="{% if producto.stock == 0 %}text-danger{% elif producto.stock <= 10 %}text-warning{% endif %}">
-                            {{ producto.stock }}
-                        </span>
+                        {% if producto.stock > 10 %}
+                            <span class="badge bg-success fs-6">{{ producto.stock }} unidades</span>
+                        {% elif producto.stock > 0 %}
+                            <span class="badge bg-warning text-dark fs-6">{{ producto.stock }} unidades (Bajo)</span>
+                        {% else %}
+                            <span class="badge bg-danger fs-6">Sin Stock</span>
+                        {% endif %}
                     </td>
                     <td>
                         <span class="badge {% if producto.estado == 'activo' %}bg-success{% else %}bg-secondary{% endif %}">
                             {{ producto.get_estado_display }}
                         </span>
                     </td>
+                    
                     <td>
                         <div class="d-flex justify-content-center gap-2">
                             <form action="{% url 'cambiar_estado' producto.id %}" method="post" class="d-inline">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-sm {% if producto.estado == 'activo' %}btn-outline-secondary{% else %}btn-success{% endif %}" title="{% if producto.estado == 'activo' %}Desactivar{% else %}Activar{% endif %}">
-                                    {% if producto.estado == 'activo' %}
-                                        <i class="fa-solid fa-toggle-off"></i>
-                                    {% else %}
-                                        <i class="fa-solid fa-toggle-on"></i>
-                                    {% endif %}
+                                    <i class="fa-solid {% if producto.estado == 'activo' %}fa-toggle-off{% else %}fa-toggle-on{% endif %}"></i>
                                 </button>
                             </form>
-                            <form action="{% url 'detalle' producto.id %}" method="post" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-warning btn-sm text-white">
-                                    <i class="fa-sharp fa-solid fa-pen-to-square"></i>
-                                </button>
-                            </form>
+                            <a href="{% url 'detalle' producto.id %}" class="btn btn-warning btn-sm text-white" title="Editar">
+                                <i class="fa-sharp fa-solid fa-pen-to-square"></i>
+                            </a>
                             {% if producto.estado == 'inactivo' %}
-                            <button type="button" class="btn btn-sm btn-light border rounded-circle p-2" data-circle-toggle data-selected="false" aria-label="Seleccionar producto" aria-pressed="false" style="width: 38px; height: 38px; line-height: 1;">
+                            <button type="button" class="btn btn-sm btn-light border rounded-circle p-2" data-circle-toggle data-selected="false" style="width: 38px; height: 38px; line-height: 1;">
                                 <i class="fa-regular fa-circle"></i>
                             </button>
                             {% endif %}
                         </div>
                     </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">No hay productos en el catálogo.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -161,8 +138,8 @@
         <form id="formEliminarSeleccionados" method="post" action="{% url 'eliminar_seleccionados' %}">
             {% csrf_token %}
             <input type="hidden" name="selected_ids" id="selectedIdsInput">
-            <button type="submit" class="btn btn-danger btn-sm opacity-50" id="btnEliminarMarcados" disabled>
-                <i class="fa-solid fa-trash"></i>
+            <button type="submit" class="btn btn-danger btn-sm opacity-50" id="btnEliminarMarcados" disabled title="Eliminar seleccionados">
+                <i class="fa-solid fa-trash me-1"></i> Eliminar Selección
             </button>
         </form>
     </div>
@@ -172,22 +149,14 @@
 
 <script>
     const selectedIds = new Set();
-    const hasInactiveProducts = Array.from(document.querySelectorAll('[data-circle-toggle]')).length > 0;
-    const borrarBtn = document.getElementById('btnEliminarMarcados');
-
-    if (!hasInactiveProducts && borrarBtn) {
-        borrarBtn.closest('div').style.display = 'none';
-    }
-
     document.addEventListener('click', function (event) {
         const btn = event.target.closest('[data-circle-toggle]');
         if (!btn) return;
 
         const icon = btn.querySelector('i');
-        if (!icon) return;
-
         const row = btn.closest('tr');
-        const productId = row?.querySelector('form[action*="detalle"]')?.action?.split('/').pop();
+        const editLink = row?.querySelector('a[href*="detalle"]')?.href;
+        const productId = editLink ? editLink.split('/').filter(Boolean).pop() : null;
 
         if (!productId) return;
 
@@ -195,8 +164,6 @@
         const nextSelected = !wasSelected;
 
         btn.dataset.selected = String(nextSelected);
-        btn.setAttribute('aria-pressed', String(nextSelected));
-
         icon.classList.remove('fa-regular', 'fa-solid');
         icon.classList.add(nextSelected ? 'fa-solid' : 'fa-regular', 'fa-circle');
 
@@ -207,11 +174,12 @@
         }
 
         const input = document.getElementById('selectedIdsInput');
-        input.value = Array.from(selectedIds).join(',');
-
         const borrarBtn = document.getElementById('btnEliminarMarcados');
-        borrarBtn.disabled = selectedIds.size === 0;
-        borrarBtn.classList.toggle('opacity-50', selectedIds.size === 0);
+        if (input) input.value = Array.from(selectedIds).join(',');
+        if (borrarBtn) {
+            borrarBtn.disabled = selectedIds.size === 0;
+            borrarBtn.classList.toggle('opacity-50', selectedIds.size === 0);
+        }
     });
 </script>
 {% endblock %}

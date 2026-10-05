@@ -71,13 +71,21 @@
 
                         <!-- Alta o Baja -->
                         {% if u.activo %}
-                            <a href="{% url 'baja_usuario' u.dni %}" class="btn btn-danger" title="Dar de Baja">
-                                <i class="fa-solid fa-user-slash"></i>
-                            </a>
+                            {% if u.dni == user.dni or user.id_perfil.nombre not in 'Administrador,Propietario' or u.id_perfil.nombre == user.id_perfil.nombre %}
+                                <button class="btn btn-secondary btn-sm" disabled title="No tienes permiso para dar de baja a este usuario">
+                                    <i class="fa-solid fa-user-slash"></i>
+                                </button>
+                            {% else %}
+                                <a href="{% url 'baja_usuario' u.dni %}" class="btn btn-danger btn-sm" title="Dar de Baja" onclick="return confirm('¿Seguro que deseas dar de baja a {{ u.username }}?')">
+                                    <i class="fa-solid fa-user-slash"></i>
+                                </a>
+                            {% endif %}
                         {% else %}
-                            <a href="{% url 'alta_usuario' u.dni %}" class="btn btn-success" title="Dar de Alta">
-                                <i class="fa-solid fa-user-check"></i>
-                            </a>
+                            {% if user.id_perfil.nombre in 'Administrador,Propietario' %}
+                                <a href="{% url 'alta_usuario' u.dni %}" class="btn btn-success btn-sm" title="Dar de Alta">
+                                    <i class="fa-solid fa-user-check"></i>
+                                </a>
+                            {% endif %}
                         {% endif %}
                     </td>
                 </tr>

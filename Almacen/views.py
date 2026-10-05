@@ -1,3 +1,9 @@
+from io import BytesIO
+from django.http import HttpResponse
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import json
 from django.db.models import ProtectedError
 from decimal import Decimal
@@ -7,18 +13,29 @@ from Almacen.models import Productos, Proveedor, Usuario, Perfil, Ventas, Detall
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import update_session_auth_hash
-from django.db.models import Max
+from django.db.models import Max, Sum, Q
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.contrib.auth import logout
+from django.contrib.auth import authenticate, login
+from .models import Productos, Proveedor, Compras, DetallesCompra, LotesProducto, Ventas, Clientes
+from datetime import date, datetime
 
 
 
 @login_required
 def home(request):
+    if not request.user.activo:
+        logout(request)
+        messages.error(request, 'Tu cuenta ha sido dada de baja.')
+        return redirect('login')
+
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
+        
     return render(request, "principal.html")
+
 
 
 @login_required
@@ -26,25 +43,16 @@ def consultar(request):
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
         
-    productos = Productos.objects.all()
-    stock_filtro = request.GET.get('stock_filtro', 'todos')
+    productos = Productos.objects.all().order_by('nombre')
     busqueda = request.GET.get('busqueda', '').strip()
 
     if busqueda:
         productos = productos.filter(nombre__icontains=busqueda)
 
-    if stock_filtro == 'cero':
-        productos = productos.filter(stock=0)
-    elif stock_filtro == 'hasta_diez':
-        productos = productos.filter(stock__gt=0, stock__lte=10)
-    elif stock_filtro == 'mayor_diez':
-        productos = productos.filter(stock__gt=10)
-
     has_inactive_products = productos.filter(estado='inactivo').exists()
 
     return render(request, "productos.html", {
         'productos': productos,
-        'stock_filtro': stock_filtro,
         'busqueda': busqueda,
         'has_inactive_products': has_inactive_products,
     })
@@ -52,43 +60,34 @@ def consultar(request):
 
 @login_required
 def guardar(request):
-    nombre = request.POST["nombre"].strip()
-    lote = (request.POST.get("lote") or "").strip() or "Sin lote"
-    categoria = request.POST["categoria"].strip()
-    marca = (request.POST.get("marca") or "").strip() or "Sin marca"
-    precio = request.POST["precio"]
-    fecha_vencimiento = request.POST.get("fecha_vencimiento")
-    stock = request.POST["stock"]
-    estado = request.POST.get("estado", "activo")
+    if request.method == 'POST':
+        nombre = request.POST.get("nombre", "").strip()
+        categoria = request.POST.get("categoria", "").strip()
+        marca = (request.POST.get("marca") or "").strip() or "Sin marca"
+        precio = request.POST.get("precio")
+        estado = request.POST.get("estado", "activo")
 
-    if not fecha_vencimiento:
-        messages.error(request, 'La fecha de vencimiento es obligatoria')
-        return redirect('consultar')
+        if Productos.objects.filter(nombre__iexact=nombre, marca__iexact=marca).exists():
+            messages.error(request, f'Ya existe el producto "{nombre}" de marca "{marca}" en el catálogo.')
+            return redirect('consultar')
 
-    if Productos.objects.filter(nombre=nombre, lote=lote).exists():
-        messages.error(request, 'Ya existe un producto con ese nombre y lote')
-        return redirect('consultar')
-
-    p = Productos(
-        nombre=nombre,
-        lote=lote,
-        categoria=categoria,
-        marca=marca,
-        precio=precio,
-        fecha_vencimiento=fecha_vencimiento,
-        stock=stock,
-        estado=estado,
-    )
-    try:
-        p.full_clean()
-        p.save()
-    except ValidationError as e:
-        if hasattr(e, 'message_dict') and 'categoria' in e.message_dict:
-            messages.error(request, 'La categor?a no puede contener n?meros')
-        else:
-            messages.error(request, 'El precio y el stock no pueden ser negativos')
-        return redirect('consultar')
-    messages.success(request, 'Producto Agregado')
+        p = Productos(
+            nombre=nombre,
+            categoria=categoria,
+            marca=marca,
+            precio=precio,
+            estado=estado,
+        )
+        try:
+            p.full_clean()
+            p.save()
+            messages.success(request, f'Producto "{nombre}" agregado al catálogo.')
+        except ValidationError as e:
+            if hasattr(e, 'message_dict') and 'categoria' in e.message_dict:
+                messages.error(request, 'La categoría no puede contener números.')
+            else:
+                messages.error(request, 'Verifique que el precio sea mayor a 0.')
+    
     return redirect('consultar')
 
 @login_required
@@ -106,7 +105,7 @@ def ventas(request):
         return redirect('cambiar_clave')
 
     hoy = timezone.now().date()
-    periodo = request.GET.get('periodo', 'todos')
+    periodo = request.GET.get('filtro', 'todos')
 
     ventas_qs = Ventas.objects.prefetch_related('detalles__producto').order_by('-fecha', '-hora')
 
@@ -130,134 +129,103 @@ def ventas(request):
 
 @login_required
 def registrar_venta(request):
-    if request.user.debe_cambiar_clave:
-        return redirect('cambiar_clave')
-
     if request.method == 'POST':
-        cart_data = request.POST.get('cart_data', '[]')
-        fiado = request.POST.get('fiado', 'false') == 'true'
-
         try:
-            cart_items = json.loads(cart_data)
-        except json.JSONDecodeError:
-            messages.error(request, 'No se pudo procesar la venta.')
-            return redirect('registrar_venta')
+            cart_data = request.POST.get('cart_data', '[]')
+            fiado = request.POST.get('fiado') == 'true'
+            id_cliente_post = request.POST.get('id_cliente')
+            items = json.loads(cart_data)
 
-        if not cart_items:
-            messages.error(request, 'Agrega al menos un producto al carrito.')
-            return redirect('registrar_venta')
-
-        consolidated = {}
-        for item in cart_items:
-            try:
-                p_id = int(item.get('id'))
-                qty = int(item.get('cantidad', 0) or 0)
-            except (ValueError, TypeError):
-                continue
-            if p_id and qty > 0:
-                consolidated[p_id] = consolidated.get(p_id, 0) + qty
-
-        if not consolidated:
-            messages.error(request, 'La venta no tiene productos válidos.')
-            return redirect('registrar_venta')
-
-        venta_total = Decimal('0.00')
-        items_para_guardar = []
-
-        for producto_id, cantidad in consolidated.items():
-            producto = get_object_or_404(Productos, pk=producto_id)
-            if producto.estado != 'activo':
-                messages.error(request, f'El producto {producto.nombre} no está activo para la venta.')
+            if not items:
+                messages.error(request, 'El carrito está vacío.')
                 return redirect('registrar_venta')
 
-            nombre_limpio = producto.nombre.strip()
-            lotes = list(Productos.objects.filter(
-                nombre__iexact=nombre_limpio,
-                estado='activo',
-                stock__gt=0
-            ).order_by('fecha_vencimiento', 'id'))
+            # Si es fiado
+            id_cliente_final = int(id_cliente_post) if (fiado and id_cliente_post) else 0
 
-            # Fallback: si iexact no encuentra nada por espacios en DB, buscar con TRIM
-            if not lotes:
-                from django.db.models.functions import Trim
-                lotes = list(Productos.objects.annotate(
-                    nombre_trim=Trim('nombre')
-                ).filter(
-                    nombre_trim__iexact=nombre_limpio,
-                    estado='activo',
-                    stock__gt=0
-                ).order_by('fecha_vencimiento', 'id'))
+            with transaction.atomic():
+                estado_pago = 'Fiado' if fiado else 'Pagado'
+                ahora = datetime.now()
 
-            stock_total = sum(int(l.stock) for l in lotes)
-            if cantidad > stock_total:
-                messages.error(request, f'No hay stock suficiente para {producto.nombre}.')
-                return redirect('registrar_venta')
+                ultimo_id_venta = Ventas.objects.aggregate(Max('id_ventas'))['id_ventas__max'] or 0
+                nuevo_id_venta = ultimo_id_venta + 1
 
-            cantidad_restante = cantidad
-            for lote in lotes:
-                if cantidad_restante <= 0:
-                    break
-                deducir = min(int(lote.stock), cantidad_restante)
-                subtotal = Decimal(str(lote.precio)) * deducir
-                venta_total += subtotal
-                items_para_guardar.append((lote, deducir, subtotal))
-                cantidad_restante -= deducir
-
-        with transaction.atomic():
-            ultima_venta = Ventas.objects.aggregate(max_id=Max('id_ventas'))['max_id'] or 0
-            ultima_detalle = DetallesVentas.objects.aggregate(max_id=Max('id_detalles_ventas'))['max_id'] or 0
-
-            venta = Ventas.objects.create(
-                id_ventas=ultima_venta + 1,
-                id_caja=1,
-                total=venta_total,
-                fecha=timezone.now().date(),
-                hora=timezone.now().time(),
-                id_clientes=0,
-                estado_de_pago='fiado' if fiado else 'pagado',
-            )
-
-            for producto, cantidad, subtotal in items_para_guardar:
-                ultima_detalle += 1
-                DetallesVentas.objects.create(
-                    id_detalles_ventas=ultima_detalle,
-                    venta=venta,
-                    producto=producto,
-                    cantidad=cantidad,
-                    precio_unitario_compra=Decimal(str(producto.precio)),
-                    subtotal=subtotal,
+                venta = Ventas.objects.create(
+                    id_ventas=nuevo_id_venta,
+                    id_caja=1,
+                    total=Decimal('0.00'),
+                    fecha=date.today(),
+                    hora=ahora.time(),
+                    id_clientes=id_cliente_final,
+                    estado_de_pago=estado_pago
                 )
-                producto.stock -= cantidad
-                producto.save()
 
-        messages.success(request, 'Venta registrada con éxito.')
-        return redirect('ventas')
+                total_venta = Decimal('0.00')
 
-    productos = Productos.objects.filter(estado='activo').order_by('nombre')
-    categorias = sorted({producto.categoria.strip() for producto in productos if producto.categoria and producto.categoria.strip()})
-    agrupados = {}
+                ultimo_id_detalle = DetallesVentas.objects.aggregate(Max('id_detalles_ventas'))['id_detalles_ventas__max'] or 0
 
-    for producto in productos:
-        clave = producto.nombre.strip().lower()
-        if clave not in agrupados:
-            agrupados[clave] = {
-                'id': producto.id,
-                'nombre': producto.nombre,
-                'categoria': producto.categoria,
-                'precio': producto.precio,
-                'stock': int(producto.stock),
-            }
-        else:
-            agrupados[clave]['stock'] += int(producto.stock)
+                for item in items:
+                    producto = get_object_or_404(Productos, pk=item['id'])
+                    cantidad_necesaria = int(item['cantidad'])
+                    precio_unitario = Decimal(str(item['precio']))
 
-    productos_agrupados = sorted(
-        agrupados.values(),
-        key=lambda item: item['nombre'].lower()
-    )
+                    if producto.stock < cantidad_necesaria:
+                        raise ValueError(f'Stock insuficiente para "{producto.nombre}". Disponible: {producto.stock}')
+
+                    subtotal = cantidad_necesaria * precio_unitario
+
+                    ultimo_id_detalle += 1
+
+                    DetallesVentas.objects.create(
+                        id_detalles_ventas=ultimo_id_detalle,
+                        venta=venta,
+                        producto=producto,
+                        cantidad=cantidad_necesaria,
+                        precio_unitario_compra=precio_unitario,
+                        subtotal=subtotal
+                    )
+
+                    lotes = LotesProducto.objects.filter(
+                        id_producto=producto,
+                        activo=True,
+                        stock_actual__gt=0
+                    ).order_by('fecha_vencimiento', 'id')
+
+                    pendiente = cantidad_necesaria
+                    for lote in lotes:
+                        if pendiente <= 0:
+                            break
+
+                        if lote.stock_actual >= pendiente:
+                            lote.stock_actual -= pendiente
+                            pendiente = 0
+                        else:
+                            pendiente -= lote.stock_actual
+                            lote.stock_actual = 0
+                        
+                        lote.save()
+
+                    total_venta += subtotal
+
+                venta.total = total_venta
+                venta.save()
+
+            messages.success(request, f'Venta #{venta.id_ventas} registrada exitosamente.')
+            return redirect('ventas')
+
+        except Exception as e:
+            messages.error(request, f'Error al registrar la venta: {str(e)}')
+            return redirect('registrar_venta')
+
+    # GET: Cargar productos, categorías y clientes ordenados por nombre
+    productos = Productos.objects.filter(estado='activo')
+    categorias = Productos.objects.filter(estado='activo').values_list('categoria', flat=True).distinct()
+    clientes = Clientes.objects.all().order_by('nombre')
 
     return render(request, 'Registro_ventas.html', {
-        'productos': productos_agrupados,
+        'productos': productos,
         'categorias': categorias,
+        'clientes': clientes
     })
 
 
@@ -351,43 +319,53 @@ def eliminar_seleccionados(request):
 
 @login_required
 def editar(request):
-    nombre = request.POST["nombre"].strip()
-    lote = (request.POST.get("lote") or "").strip() or "Sin lote"
-    categoria = request.POST["categoria"].strip()
-    marca = (request.POST.get("marca") or "").strip() or "Sin marca"
-    precio = request.POST["precio"]
-    fecha_vencimiento = request.POST.get("fecha_vencimiento") or None
-    stock = request.POST["stock"]
-    estado = request.POST.get("estado", "activo")
-    id = request.POST["id"]
-    producto = Productos.objects.get(pk=id)
-    producto.nombre = nombre
-    producto.lote = lote
-    producto.categoria = categoria
-    producto.marca = marca
-    producto.precio = precio
-    producto.fecha_vencimiento = fecha_vencimiento
-    producto.stock = stock
-    producto.estado = estado
-    try:
-        producto.full_clean()
-        producto.save()
-    except ValidationError as e:
-        if hasattr(e, 'message_dict') and 'categoria' in e.message_dict:
-            messages.error(request, 'La categor?a no puede contener n?meros')
-        else:
-            messages.error(request, 'El precio y el stock no pueden ser negativos')
-        return redirect('consultar')
-    messages.success(request, 'Producto Actualizado')
+    if request.method == 'POST':
+        id_prod = request.POST.get("id")
+        producto = get_object_or_404(Productos, pk=id_prod)
+
+        producto.nombre = request.POST.get("nombre", "").strip()
+        producto.categoria = request.POST.get("categoria", "").strip()
+        producto.marca = (request.POST.get("marca") or "").strip() or "Sin marca"
+        producto.precio = request.POST.get("precio")
+        producto.estado = request.POST.get("estado", "activo")
+
+        try:
+            producto.full_clean()
+            producto.save()
+            messages.success(request, f'Producto "{producto.nombre}" actualizado correctamente.')
+        except ValidationError as e:
+            if hasattr(e, 'message_dict') and 'categoria' in e.message_dict:
+                messages.error(request, 'La categoría no puede contener números.')
+            else:
+                messages.error(request, 'Error al actualizar: Verifique que el precio sea válido.')
+            return redirect('detalle', id=id_prod)
+
     return redirect('consultar')
 
 @login_required
 def baja_usuario(request, dni):
-    usuario = get_object_or_404(Usuario, dni=dni)
-    usuario.activo = False
-    usuario.fecha_baja = timezone.now()
-    usuario.save()
-    messages.success(request, f'Usuario {usuario.username} dado de baja.')
+    usuario_destino = get_object_or_404(Usuario, dni=dni)
+    usuario_actual = request.user
+
+    if usuario_actual.dni == usuario_destino.dni:
+        messages.error(request, 'No puedes darte de baja a ti mismo.')
+        return redirect('listar_usuarios')
+
+    rol_actual = usuario_actual.id_perfil.nombre if usuario_actual.id_perfil else ''
+    rol_destino = usuario_destino.id_perfil.nombre if usuario_destino.id_perfil else ''
+
+    if rol_actual not in ['Administrador', 'Propietario']:
+        messages.error(request, 'No tienes permisos para dar de baja a ningún usuario.')
+        return redirect('listar_usuarios')
+
+    if rol_actual == rol_destino:
+        messages.error(request, f'No puedes dar de baja a otro usuario con el mismo rango ({rol_actual}).')
+        return redirect('listar_usuarios')
+
+    usuario_destino.activo = False
+    usuario_destino.fecha_baja = timezone.now()
+    usuario_destino.save()
+    messages.success(request, f'Usuario {usuario_destino.username} dado de baja correctamente.')
     return redirect('listar_usuarios')
 
 
@@ -423,9 +401,22 @@ def crear_usuario(request):
         apellido = (request.POST.get('apellido') or '').strip()
         nombre = (request.POST.get('nombre') or '').strip()
         correo = (request.POST.get('correo') or '').strip()
-        password = request.POST.get('password')
         perfil_id = request.POST.get('perfil')
 
+        if Usuario.objects.filter(dni=dni).exists():
+            messages.error(request, f'Ya existe un usuario registrado con el DNI {dni}.')
+            perfiles = Perfil.objects.all()
+            return render(request, 'usuario_form.html', {
+                'perfiles': perfiles,
+                'es_edicion': False,
+                'dni': dni,
+                'apellido': apellido,
+                'nombre': nombre,
+                'correo': correo,
+                'perfil_id': perfil_id,
+            })
+
+        password = request.POST.get('password') or str(dni)
         perfil = Perfil.objects.filter(id=perfil_id).first() if perfil_id else None
 
         usuario = Usuario.objects.create_user(
@@ -440,7 +431,7 @@ def crear_usuario(request):
         usuario.debe_cambiar_clave = True
         usuario.save()
 
-        messages.success(request, 'Usuario creado exitosamente.')
+        messages.success(request, f'Usuario {usuario.username} creado exitosamente.')
         return redirect('listar_usuarios')
 
     perfiles = Perfil.objects.all()
@@ -510,3 +501,359 @@ def lista_ventas(request):
 
     context = {'ventas': ventas, 'filtro_activo': filtro}
     return render(request, 'tu_app/ventas.html', context)
+
+def login_usuario(request):
+    if request.user.is_authenticated:
+        return redirect('inicio')
+
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '').strip()
+
+        user_exists = Usuario.objects.filter(username=username).first()
+
+        if user_exists and not user_exists.activo:
+            messages.error(request, 'Cuenta inactiva.')
+            return render(request, 'login.html')
+
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            login(request, user)
+            if user.debe_cambiar_clave:
+                return redirect('cambiar_clave')
+            return redirect('inicio')
+        else:
+            messages.error(request, 'Usuario o contraseña incorrectos.')
+            return render(request, 'login.html')
+
+    return render(request, 'login.html')
+
+@login_required
+def listar_proveedores(request):
+    proveedores = Proveedor.objects.all().order_by('nombre')
+    return render(request, 'proveedores_list.html', {'proveedores': proveedores})
+
+
+@login_required
+def crear_proveedor(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+        telefono = request.POST.get('telefono', '').strip()
+        tipo_productos = request.POST.get('tipo_productos', '').strip()
+
+        if Proveedor.objects.filter(nombre__iexact=nombre).exists():
+            messages.error(request, f'Ya existe un proveedor registrado con el nombre "{nombre}".')
+            return render(request, 'proveedor_form.html', {'es_edicion': False})
+
+        Proveedor.objects.create(
+            nombre=nombre,
+            numero_telefono=telefono,
+            tipo_productos=tipo_productos,
+            activo=True
+        )
+        messages.success(request, f'Proveedor "{nombre}" registrado correctamente.')
+        return redirect('listar_proveedores')
+
+    return render(request, 'proveedor_form.html', {'es_edicion': False})
+
+
+@login_required
+def editar_proveedor(request, id):
+    proveedor = get_object_or_404(Proveedor, pk=id)
+    if request.method == 'POST':
+        proveedor.nombre = request.POST.get('nombre', '').strip()
+        proveedor.numero_telefono = request.POST.get('telefono', '').strip()
+        proveedor.tipo_productos = request.POST.get('tipo_productos', '').strip()
+        proveedor.save()
+        messages.success(request, f'Proveedor "{proveedor.nombre}" actualizado correctamente.')
+        return redirect('listar_proveedores')
+
+    return render(request, 'proveedor_form.html', {'proveedor': proveedor, 'es_edicion': True})
+
+
+@login_required
+def baja_proveedor(request, id):
+    if request.method == 'POST':
+        proveedor = get_object_or_404(Proveedor, pk=id)
+        proveedor.activo = False
+        proveedor.save()
+        messages.success(request, f'Proveedor "{proveedor.nombre}" dado de baja.')
+    return redirect('listar_proveedores')
+
+
+@login_required
+def alta_proveedor(request, id):
+    if request.method == 'POST':
+        proveedor = get_object_or_404(Proveedor, pk=id)
+        proveedor.activo = True
+        proveedor.save()
+        messages.success(request, f'Proveedor "{proveedor.nombre}" reactivado correctamente.')
+    return redirect('listar_proveedores')
+
+@login_required
+def registro_compras(request):
+    if request.method == 'POST':
+        try:
+            cart_data = request.POST.get('cart_data', '[]')
+            proveedor_id = request.POST.get('id_proveedor')
+            items = json.loads(cart_data)
+
+            if not items:
+                messages.error(request, 'Debe agregar al menos un producto a la compra.')
+                return redirect('registrar_compra')
+
+            proveedor = None
+            if proveedor_id:
+                proveedor = Proveedor.objects.filter(pk=proveedor_id).first()
+
+            with transaction.atomic():
+                compra = Compras.objects.create(
+                    id_proveedor=proveedor,
+                    id_usuario=request.user,
+                    total=Decimal('0.00')
+                )
+
+                total_compra = Decimal('0.00')
+
+                for item in items:
+                    producto = get_object_or_404(Productos, pk=item['id_producto'])
+                    cantidad = int(item['cantidad'])
+                    precio_costo = Decimal(str(item['precio_costo']))
+                    lote_str = item.get('lote', 'Sin lote').strip()
+                    fecha_venc = item.get('fecha_vencimiento') or None
+                    subtotal = cantidad * precio_costo
+
+                    DetallesCompra.objects.create(
+                        id_compra=compra,
+                        id_producto=producto,
+                        lote=lote_str,
+                        fecha_vencimiento=fecha_venc,
+                        cantidad=cantidad,
+                        precio_unitario_compra=precio_costo,
+                        subtotal=subtotal
+                    )
+
+                    lote_obj, created = LotesProducto.objects.get_or_create(
+                        id_producto=producto,
+                        lote=lote_str,
+                        fecha_vencimiento=fecha_venc,
+                        defaults={'precio_costo': precio_costo, 'stock_actual': 0}
+                    )
+                    lote_obj.stock_actual += cantidad
+                    lote_obj.save()
+
+                    total_compra += subtotal
+
+                compra.total = total_compra
+                compra.save()
+
+            messages.success(request, f'Compra #{compra.id} registrada exitosamente. Stock actualizado.')
+            return redirect('listar_compras')
+
+        except Exception as e:
+            messages.error(request, f'Error al procesar la compra: {str(e)}')
+            return redirect('registrar_compra')
+
+    proveedores = Proveedor.objects.filter(activo=True).order_by('nombre')
+    productos = Productos.objects.filter(estado='activo').order_by('nombre')
+    return render(request, 'registro_compras.html', {
+        'proveedores': proveedores,
+        'productos': productos
+    })
+
+
+@login_required
+def listar_compras(request):
+    compras = Compras.objects.all().order_by('-id')
+    return render(request, 'compras_list.html', {'compras': compras})
+
+@login_required
+def anular_venta(request, id_venta):
+    venta = get_object_or_404(Ventas, pk=id_venta)
+
+    if venta.estado_de_pago == 'Anulado':
+        messages.warning(request, f'La Venta #{venta.id_ventas} ya se encuentra anulada.')
+        return redirect('ventas')
+
+    try:
+        with transaction.atomic():
+            venta.estado_de_pago = 'Anulado'
+            venta.save()
+
+            detalles = DetallesVentas.objects.filter(venta=venta)
+
+            for detalle in detalles:
+                producto = detalle.producto
+                cantidad_a_devolver = detalle.cantidad
+
+                lote = LotesProducto.objects.filter(
+                    id_producto=producto,
+                    activo=True
+                ).order_by('-fecha_vencimiento', '-id').first()
+
+                if lote:
+                    lote.stock_actual += cantidad_a_devolver
+                    lote.save()
+                else:
+                    LotesProducto.objects.create(
+                        id_producto=producto,
+                        lote='LOTE-DEVOLUCION',
+                        precio_costo=producto.precio,
+                        stock_actual=cantidad_a_devolver,
+                        activo=True
+                    )
+
+        messages.success(request, f'Venta #{venta.id_ventas} anulada exitosamente y stock reincorporado al almacén.')
+
+    except Exception as e:
+        messages.error(request, f'Error al anular la venta: {str(e)}')
+
+    return redirect('ventas')
+
+@login_required
+def generar_comprobante_pdf(request, id_venta):
+    venta = get_object_or_404(Ventas, pk=id_venta)
+    detalles = DetallesVentas.objects.filter(venta=venta)
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    story = []
+    styles = getSampleStyleSheet()
+
+    style_title = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1, spaceAfter=10)
+    style_sub = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=10, alignment=1, spaceAfter=20)
+    style_body = ParagraphStyle('Body', parent=styles['Normal'], fontSize=10, spaceAfter=5)
+
+    # Cabecera del ticket
+    story.append(Paragraph("<b>ALMACÉN EL REFUGIO</b>", style_title))
+    story.append(Paragraph(f"Comprobante de Venta #{venta.id_ventas}<br/>Fecha: {venta.fecha.strftime('%d/%m/%Y')} - Hora: {venta.hora.strftime('%H:%M')}", style_sub))
+    story.append(Paragraph(f"<b>Estado de Pago:</b> {venta.estado_de_pago.title()}", style_body))
+    story.append(Spacer(1, 10))
+
+    data = [["Producto", "Cant.", "P. Unitario", "Subtotal"]]
+    for detalle in detalles:
+        data.append([
+            detalle.producto.nombre,
+            str(detalle.cantidad),
+            f"${detalle.precio_unitario_compra:.2f}",
+            f"${detalle.subtotal:.2f}"
+        ])
+
+    data.append(["", "", "TOTAL:", f"${venta.total:.2f}"])
+
+    table = Table(data, colWidths=[250, 60, 100, 100])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('GRID', (0, 0), (-1, -2), 0.5, colors.lightgrey),
+        ('FONTNAME', (2, -1), (-1, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (2, -1), (-1, -1), colors.HexColor('#f8f9fa')),
+    ]))
+
+    story.append(table)
+    story.append(Spacer(1, 20))
+    story.append(Paragraph("¡Gracias por su compra!", style_sub))
+
+    doc.build(story)
+    buffer.seek(0)
+
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="Comprobante_Venta_{venta.id_ventas}.pdf"'
+    return response
+
+@login_required
+def cuentas_clientes(request):
+    clientes = Clientes.objects.all()
+    lista_cuentas = []
+
+    for cliente in clientes:
+        ventas_pendientes = Ventas.objects.filter(
+            id_clientes=cliente.id_clientes
+        ).filter(
+            Q(estado_de_pago__iexact='fiado') | 
+            Q(estado_de_pago__iexact='pendiente') |
+            Q(estado_de_pago__iexact='abono_parcial') |
+            Q(estado_de_pago__iexact='abono parcial')
+        ).order_by('fecha', 'hora')
+
+        saldo_total = ventas_pendientes.aggregate(total=Sum('total'))['total'] or 0.0
+
+        lista_cuentas.append({
+            'cliente': cliente,
+            'saldo_total': saldo_total,
+            'ventas_pendientes': ventas_pendientes,
+            'cantidad_ventas': ventas_pendientes.count()
+        })
+
+    return render(request, 'cuentas_clientes.html', {'cuentas': lista_cuentas})
+
+
+@login_required
+def registrar_pago_cliente(request, id_cliente):
+    if request.method == 'POST':
+        cliente = get_object_or_404(Clientes, pk=id_cliente)
+        monto_pago = float(request.POST.get('monto', 0))
+
+        if monto_pago <= 0:
+            messages.error(request, 'El monto a abonar debe ser mayor a 0.')
+            return redirect('cuentas_clientes')
+
+        try:
+            with transaction.atomic():
+                ventas_pendientes = Ventas.objects.filter(
+                    id_clientes=cliente.id_clientes
+                ).filter(
+                    Q(estado_de_pago__iexact='fiado') | 
+                    Q(estado_de_pago__iexact='pendiente') |
+                    Q(estado_de_pago__iexact='abono_parcial') |
+                    Q(estado_de_pago__iexact='abono parcial')
+                ).order_by('fecha', 'hora')
+
+                monto_restante = monto_pago
+
+                for venta in ventas_pendientes:
+                    if monto_restante <= 0:
+                        break
+
+                    venta_total = float(venta.total)
+
+                    if monto_restante >= venta_total:
+                        monto_restante -= venta_total
+                        venta.estado_de_pago = 'pagado'
+                        venta.save()
+                    else:
+                        venta.estado_de_pago = 'abono_parcial'
+                        venta.save()
+                        monto_restante = 0
+
+                messages.success(request, f'Se registró el pago de ${monto_pago:.2f} para {cliente.nombre}.')
+
+        except Exception as e:
+            messages.error(request, f'Error al registrar el pago: {str(e)}')
+
+    return redirect('cuentas_clientes')
+
+@login_required
+def crear_cliente(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+        apellido = request.POST.get('apellido', '').strip()
+        telefono = request.POST.get('telefono', '').strip()
+
+        if not nombre:
+            messages.error(request, 'El nombre del cliente es obligatorio.')
+            return redirect('cuentas_clientes')
+
+        cliente = Clientes.objects.create(
+            nombre=nombre,
+            apellido=apellido,
+            telefono=telefono
+        )
+        messages.success(request, f'Cliente "{cliente.nombre} {cliente.apellido or ""}" registrado con éxito.')
+    
+    return redirect('cuentas_clientes')

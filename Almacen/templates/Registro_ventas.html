@@ -1,4 +1,3 @@
-
 {% extends 'plantillas.html' %}
 {% load static %}
 
@@ -16,6 +15,7 @@
             {% endfor %}
         </div>
     {% endif %}
+
     <div class="sales-layout">
         <main class="products-section">
             <div class="search-bar">
@@ -36,19 +36,20 @@
 
             <div class="product-list" id="product-list">
                 {% for producto in productos %}
+                    {% if producto.stock > 0 %}
                     <article class="product-card" data-product-category="{{ producto.categoria|default:'' }}">
                         <div class="product-info">
                             <div class="product-img product-placeholder" aria-label="{{ producto.nombre }}">{{ producto.nombre|slice:":1"|upper }}</div>
                             <div class="product-text">
                                 <h3>{{ producto.nombre }}</h3>
-                                <p>Precio: ${{ producto.precio }}</p>
+                                <p>Marca: {{ producto.marca }} | Precio: ${{ producto.precio }}</p>
                             </div>
                         </div>
                         <div class="product-controls">
                             <div class="stock-block">
                                 <span class="stock-label">Stock: {{ producto.stock }}</span>
                                 <div class="qty-control"
-                                    data-product-id="{{ producto.id|default:forloop.counter0 }}"
+                                    data-product-id="{{ producto.id }}"
                                     data-product-name="{{ producto.nombre }}"
                                     data-product-price="{{ producto.precio }}"
                                     data-stock="{{ producto.stock }}">
@@ -59,8 +60,9 @@
                             </div>
                         </div>
                     </article>
+                    {% endif %}
                 {% empty %}
-                    <div class="empty-products">No hay productos registrados.</div>
+                    <div class="empty-products py-4 text-center text-muted">No hay productos con stock disponible en el almacén.</div>
                 {% endfor %}
             </div>
         </main>
@@ -78,10 +80,29 @@
             </div>
 
             <div class="cart-footer">
-                <label class="credit-option">
+                <!-- Opción Fiar Venta -->
+                <label class="credit-option mb-2 d-flex align-items-center justify-content-between">
                     <span>Fiar la venta al cliente</span>
                     <input type="checkbox" id="fiado-checkbox">
                 </label>
+
+                <!-- Desplegable para Seleccionar / Crear Cliente (Oculto por defecto) -->
+                <div id="seccion-cliente" class="mb-3" style="display: none;">
+                    <label for="cliente-select" class="form-label small fw-semibold text-muted mb-1">Seleccionar Cliente:</label>
+                    <div class="input-group input-group-sm">
+                        <select class="form-select" id="cliente-select">
+                            <option value="">-- Seleccionar cliente --</option>
+                            {% for cliente in clientes %}
+                                <option value="{{ cliente.id_clientes }}">
+                                    {{ cliente.nombre }} {{ cliente.apellido|default:'' }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalNuevoCliente" title="Registrar nuevo cliente">
+                            <i class="fa-solid fa-user-plus"></i>
+                        </button>
+                    </div>
+                </div>
 
                 <div class="total-container">
                     <span>Total:</span>
@@ -92,10 +113,46 @@
                     {% csrf_token %}
                     <input type="hidden" name="cart_data" id="cart_data" value="[]">
                     <input type="hidden" name="fiado" id="fiado_value" value="false">
-                    <button type="submit" class="btn-finalize" id="finalize-btn">Finalizar</button>
+                    <input type="hidden" name="id_cliente" id="id_cliente_value" value="">
+                    <button type="submit" class="btn-finalize mt-3" id="finalize-btn">Finalizar Venta</button>
                 </form>
             </div>
         </aside>
+    </div>
+</div>
+
+<!-- Modal: Crear Cliente Rápido -->
+<div class="modal fade" id="modalNuevoCliente" tabindex="-1" aria-labelledby="modalNuevoClienteLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6" id="modalNuevoClienteLabel">
+                    <i class="fa-solid fa-user-plus me-2"></i>Registrar Nuevo Cliente
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'crear_cliente' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Nombre *</label>
+                        <input type="text" name="nombre" class="form-control form-control-sm" required placeholder="Nombre del cliente">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Apellido</label>
+                        <input type="text" name="apellido" class="form-control form-control-sm" placeholder="Apellido (Opcional)">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Teléfono / Celular</label>
+                        <input type="text" name="telefono" class="form-control form-control-sm" placeholder="Número de contacto (Opcional)">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Guardar Cliente</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -108,8 +165,13 @@
         const filterToggle = document.getElementById('filter-toggle');
         const filterMenu = document.getElementById('filter-menu');
         const filterOptions = document.querySelectorAll('.filter-option');
+        
         const fiadoCheckbox = document.getElementById('fiado-checkbox');
+        const seccionCliente = document.getElementById('seccion-cliente');
+        const clienteSelect = document.getElementById('cliente-select');
         const fiadoValue = document.getElementById('fiado_value');
+        const idClienteValue = document.getElementById('id_cliente_value');
+        
         const cartDataField = document.getElementById('cart_data');
         const saleForm = document.getElementById('sale-form');
         const cart = {};
@@ -207,11 +269,13 @@
             productCard.dataset.productName = name;
         });
 
-        searchInput.addEventListener('input', applySearchFilter);
+        if (searchInput) searchInput.addEventListener('input', applySearchFilter);
 
-        filterToggle.addEventListener('click', function () {
-            filterMenu.classList.toggle('open');
-        });
+        if (filterToggle) {
+            filterToggle.addEventListener('click', function () {
+                filterMenu.classList.toggle('open');
+            });
+        }
 
         filterOptions.forEach(function (option) {
             option.addEventListener('click', function () {
@@ -225,26 +289,47 @@
             });
         });
 
+        // Alternar visualización del selector de cliente al tildar "Fiar"
+        fiadoCheckbox.addEventListener('change', function () {
+            if (this.checked) {
+                seccionCliente.style.display = 'block';
+                fiadoValue.value = 'true';
+            } else {
+                seccionCliente.style.display = 'none';
+                fiadoValue.value = 'false';
+                clienteSelect.value = '';
+                idClienteValue.value = '';
+            }
+        });
+
+        clienteSelect.addEventListener('change', function () {
+            idClienteValue.value = this.value;
+        });
+
         function syncCartToForm() {
             const items = Object.values(cart).map(function (item) {
                 return {
                     id: Number(item.id),
-                    cantidad: Number(item.quantity)
+                    cantidad: Number(item.quantity),
+                    precio: Number(item.price)
                 };
             });
             cartDataField.value = JSON.stringify(items);
             fiadoValue.value = fiadoCheckbox.checked ? 'true' : 'false';
+            idClienteValue.value = clienteSelect.value || '';
         }
-
-        fiadoCheckbox.addEventListener('change', function () {
-            fiadoValue.value = fiadoCheckbox.checked ? 'true' : 'false';
-        });
 
         saleForm.addEventListener('submit', function (event) {
             const items = Object.values(cart);
             if (!items.length) {
                 event.preventDefault();
                 alert('Debe agregar al menos un producto al carrito antes de finalizar.');
+                return;
+            }
+
+            if (fiadoCheckbox.checked && !clienteSelect.value) {
+                event.preventDefault();
+                alert('Debe seleccionar un cliente para registrar la venta como fiada.');
                 return;
             }
 

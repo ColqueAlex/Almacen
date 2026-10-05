@@ -6,10 +6,7 @@ from django.contrib.auth import views as auth_views
 urlpatterns = [
     path('', views.home, name='inicio'),
 
-    path('login/', auth_views.LoginView.as_view(
-        template_name='login.html',
-        redirect_authenticated_user=True
-    ), name='login'),
+    path('login/', views.login_usuario, name='login'),
     path('logout/', auth_views.LogoutView.as_view(next_page='login'), name='logout'),
 
     path('admin/', admin.site.urls),
@@ -29,5 +26,17 @@ urlpatterns = [
     path('usuarios/baja/<int:dni>/', views.baja_usuario, name='baja_usuario'),
     path('usuarios/restablecer/<int:dni>/', views.restablecer_clave, name='restablecer_clave'),
     path('cambiar-clave/', views.cambiar_clave, name='cambiar_clave'),
-    path('usuarios/alta/<str:dni>/', views.alta_usuario, name='alta_usuario'),
+    path('usuarios/alta/<int:dni>/', views.alta_usuario, name='alta_usuario'),
+    path('proveedores/', views.listar_proveedores, name='listar_proveedores'),
+    path('proveedores/crear/', views.crear_proveedor, name='crear_proveedor'),
+    path('proveedores/editar/<int:id>/', views.editar_proveedor, name='editar_proveedor'),
+    path('proveedores/baja/<int:id>/', views.baja_proveedor, name='baja_proveedor'),
+    path('proveedores/alta/<int:id>/', views.alta_proveedor, name='alta_proveedor'),
+    path('compras/', views.listar_compras, name='listar_compras'),
+    path('compras/nueva/', views.registro_compras, name='registrar_compra'),
+    path('ventas/anular/<int:id_venta>/', views.anular_venta, name='anular_venta'),
+    path('ventas/comprobante/<int:id_venta>/', views.generar_comprobante_pdf, name='generar_comprobante_pdf'),
+    path('cuentas-clientes/', views.cuentas_clientes, name='cuentas_clientes'),
+    path('cuentas-clientes/pago/<int:id_cliente>/', views.registrar_pago_cliente, name='registrar_pago_cliente'),
+    path('cuentas-clientes/crear/', views.crear_cliente, name='crear_cliente'),
 ]

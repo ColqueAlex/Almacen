@@ -29,7 +29,10 @@
                                 <a class="nav-link text-white fw-bold fs-5" href="{% url 'consultar' %}">Productos</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link text-white fw-bold fs-5" href="#">Proveedores</a>
+                                <a class="nav-link text-white fw-bold fs-5" href="{% url 'listar_proveedores' %}">Proveedores</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-white fw-bold fs-5" href="{% url 'listar_compras' %}">Compras</a>
                             </li>
                         {% endif %}
 

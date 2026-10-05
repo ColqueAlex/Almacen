@@ -20,18 +20,17 @@
         <h2>Ventas</h2>
         <div class="d-flex align-items-center gap-2">
             <form method="GET" action="" class="m-0">
-            <select name="filtro" onchange="this.form.submit()" class="form-select" style="cursor: pointer;">
-                <option value="todos" {% if filtro_activo == 'todos' %}selected{% endif %}> Todas</option>
-                <option value="semana" {% if filtro_activo == 'semana' %}selected{% endif %}> Última semana</option>
-                <option value="mes" {% if filtro_activo == 'mes' %}selected{% endif %}> Último mes</option>
-                <option value="anio" {% if filtro_activo == 'anio' %}selected{% endif %}> Este año</option>
-            </select>
-        </form>
-        <a href="{% url 'registrar_venta' %}" class="btn btn-primary">
-            <i class="fa-solid fa-cart-plus me-1"></i> Registrar Venta
-        </a>
+                <select name="filtro" onchange="this.form.submit()" class="form-select" style="cursor: pointer;">
+                    <option value="todos" {% if filtro_activo == 'todos' %}selected{% endif %}> Todas</option>
+                    <option value="semana" {% if filtro_activo == 'semana' %}selected{% endif %}> Última semana</option>
+                    <option value="mes" {% if filtro_activo == 'mes' %}selected{% endif %}> Último mes</option>
+                    <option value="anio" {% if filtro_activo == 'anio' %}selected{% endif %}> Este año</option>
+                </select>
+            </form>
+            <a href="{% url 'registrar_venta' %}" class="btn btn-primary">
+                <i class="fa-solid fa-cart-plus me-1"></i> Registrar Venta
+            </a>
         </div>
-        
     </div>
 
     <div class="ventas-wrapper table-responsive rounded">
@@ -57,15 +56,17 @@
                     <td>{{ venta.fecha|date:"d/m/Y" }}</td>
                     <td>{{ venta.hora|time:"H:i" }}</td>
                     <td>
-                        {% if venta.id_clientes %}
-                            Cliente {{ venta.id_clientes }}
+                        {% if venta.cliente_info == "Sin fiar" %}
+                            <span class="text-muted">Sin fiar</span>
                         {% else %}
-                            No se fió
+                            <span class="fw-semibold text-primary">{{ venta.cliente_info }}</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if venta.estado_de_pago|lower == 'pagado' %}
                             <span class="badge bg-success">Pagado</span>
+                        {% elif venta.estado_de_pago|lower == 'anulado' %}
+                            <span class="badge bg-danger">Anulado</span>
                         {% elif venta.estado_de_pago|lower == 'pendiente' %}
                             <span class="badge bg-warning text-dark">Pendiente</span>
                         {% elif venta.estado_de_pago|lower == 'abono parcial' or venta.estado_de_pago|lower == 'abono_parcial' %}
@@ -76,28 +77,38 @@
                     </td>
                     <td>
                         <div class="d-flex justify-content-center gap-2">
-                            <button type="button"
-                                class="btn btn-warning btn-sm text-white btn-modificar"
-                                title="Modificar estado de pago"
-                                data-venta-id="{{ venta.id_ventas }}"
-                                data-estado-actual="{{ venta.estado_de_pago|lower }}"
-                                data-bs-toggle="modal"
-                                data-bs-target="#modalEstadoPago">
-                                <i class="fa-sharp fa-solid fa-pen-to-square"></i>
-                            </button>
+                            <!-- Botón Imprimir Comprobante PDF -->
+                            <a href="{% url 'generar_comprobante_pdf' venta.id_ventas %}" 
+                               target="_blank" 
+                               class="btn btn-info btn-sm text-white" 
+                               title="Imprimir comprobante PDF">
+                                <i class="fa-solid fa-print"></i>
+                            </a>
+
+                            {% if venta.estado_de_pago|lower != 'anulado' %}
+                                <button type="button"
+                                    class="btn btn-warning btn-sm text-white btn-modificar"
+                                    title="Modificar estado de pago"
+                                    data-venta-id="{{ venta.id_ventas }}"
+                                    data-estado-actual="{{ venta.estado_de_pago|lower }}"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalEstadoPago">
+                                    <i class="fa-sharp fa-solid fa-pen-to-square"></i>
+                                </button>
+                            {% endif %}
+
                             <button type="button" class="btn btn-secondary btn-sm text-white btn-toggle" title="Ver detalle" aria-label="Ver detalle" data-venta-id="{{ venta.id_ventas }}">
                                 <i class="fa-solid fa-chevron-down"></i>
                             </button>
-                            {% if venta.fecha <= fecha_limite %}
-                            <form method="post" action="{% url 'eliminar_venta' venta.id_ventas %}" style="display:inline"
-                                  class="form-eliminar-venta"
-                                  data-venta-id="{{ venta.id_ventas }}"
-                                  data-venta-fecha="{{ venta.fecha|date:'d/m/Y' }}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-danger btn-sm" title="Eliminar venta antigua">
-                                    <i class="fa-solid fa-trash"></i>
-                                </button>
-                            </form>
+
+                            {% if venta.estado_de_pago|lower != 'anulado' %}
+                                <form method="post" action="{% url 'eliminar_venta' venta.id_ventas %}" style="display:inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger btn-sm" title="Anular venta y reincorporar stock"
+                                            onclick="return confirm('¿Está seguro de que desea anular la Venta #{{ venta.id_ventas }}?\nLos productos serán reincorporados al almacén.');">
+                                        <i class="fa-solid fa-ban"></i>
+                                    </button>
+                                </form>
                             {% endif %}
                         </div>
                     </td>
@@ -196,18 +207,6 @@
                     detailRow.classList.toggle('hidden');
                 }
                 mainRow.classList.toggle('expanded');
-            });
-        });
-
-        // Confirmación al eliminar venta
-        document.querySelectorAll('.form-eliminar-venta').forEach(function (form) {
-            form.addEventListener('submit', function (e) {
-                const id = form.dataset.ventaId;
-                const fecha = form.dataset.ventaFecha;
-                const ok = confirm(
-                    '¿Eliminar la venta #' + id + ' del ' + fecha + '?\nEsta acción no se puede deshacer.'
-                );
-                if (!ok) e.preventDefault();
             });
         });
 

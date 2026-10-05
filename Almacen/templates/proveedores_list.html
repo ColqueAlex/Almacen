@@ -1,0 +1,82 @@
+{% extends 'plantillas.html' %}
+
+{% block content %}
+<div class="container my-4">
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Gestión de Proveedores</h2>
+        <a href="{% url 'crear_proveedor' %}" class="btn btn-primary">
+            <i class="fa-solid fa-truck-field me-1"></i> Nuevo Proveedor
+        </a>
+    </div>
+
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-hover table-light align-middle text-center mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Nombre</th>
+                    <th>Teléfono</th>
+                    <th>Tipo de Productos</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in proveedores %}
+                <tr>
+                    <td class="fw-semibold">{{ p.nombre }}</td>
+                    <td>{{ p.numero_telefono }}</td>
+                    <td>{{ p.tipo_productos }}</td>
+                    <td>
+                        {% if p.activo %}
+                            <span class="badge bg-success">Activo</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex justify-content-center gap-2">
+                            <!-- Editar -->
+                            <a href="{% url 'editar_proveedor' p.id %}" class="btn btn-warning btn-sm text-white" title="Editar Proveedor">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </a>
+
+                            <!-- Alta / Baja -->
+                            {% if p.activo %}
+                                <form action="{% url 'baja_proveedor' p.id %}" method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger btn-sm" title="Dar de baja" onclick="return confirm('¿Seguro que deseas dar de baja a {{ p.nombre }}?')">
+                                        <i class="fa-solid fa-user-slash"></i>
+                                    </button>
+                                </form>
+                            {% else %}
+                                <form action="{% url 'alta_proveedor' p.id %}" method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-success btn-sm" title="Reactivar proveedor">
+                                        <i class="fa-solid fa-user-check"></i>
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-3">No hay proveedores registrados.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}

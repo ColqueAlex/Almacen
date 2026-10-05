@@ -1,0 +1,125 @@
+{% extends 'plantillas.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container my-4">
+    {% if messages %}
+        <div class="my-3">
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'success' }}{% endif %} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fa-solid fa-users-rectangle me-2"></i>Cuentas Corrientes - Clientes Fiados</h2>
+    </div>
+
+    <div class="table-responsive rounded shadow-sm border bg-white">
+        <table class="table table-hover align-middle text-center mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Cliente</th>
+                    <th>Contacto</th>
+                    <th>Ventas Pendientes</th>
+                    <th>Saldo Deudor Total</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in cuentas %}
+                <tr>
+                    <td class="fw-bold">{{ item.cliente.nombre }} {{ item.cliente.apellido|default:'' }}</td>
+                    <td>{{ item.cliente.telefono|default:'Sin teléfono' }}</td>
+                    <td>
+                        <span class="badge bg-secondary">{{ item.cantidad_ventas }} comprobantes</span>
+                    </td>
+                    <td class="fw-bold text-danger fs-5">
+                        ${{ item.saldo_total|floatformat:2 }}
+                    </td>
+                    <td>
+                        {% if item.saldo_total > 0 %}
+                            <span class="badge bg-danger">Con Deuda</span>
+                        {% else %}
+                            <span class="badge bg-success">Al Día</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex justify-content-center gap-2">
+                            {% if item.saldo_total > 0 %}
+                                <button type="button" 
+                                        class="btn btn-success btn-sm btn-pagar"
+                                        data-cliente-id="{{ item.cliente.id_clientes }}"
+                                        data-cliente-nombre="{{ item.cliente.nombre }}"
+                                        data-saldo="{{ item.saldo_total|floatformat:2 }}"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalRegistrarPago">
+                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Registrar Pago
+                                </button>
+                            {% else %}
+                                <button class="btn btn-outline-secondary btn-sm" disabled>Sin Deuda</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">No hay clientes con cuentas registradas.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Registrar Pago / Abono -->
+<div class="modal fade" id="modalRegistrarPago" tabindex="-1" aria-labelledby="modalRegistrarPagoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalRegistrarPagoLabel">
+                    <i class="fa-solid fa-money-bill-wave me-2"></i>Registrar Entrega de Dinero
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" id="formRegistrarPago" action="">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p class="mb-1">Cliente: <strong id="modalClienteNombre"></strong></p>
+                    <p class="text-danger mb-3">Deuda Actual: <strong>$<span id="modalClienteSaldo"></span></strong></p>
+
+                    <div class="mb-3">
+                        <label for="monto" class="form-label fw-semibold">Monto que entrega ($):</label>
+                        <input type="number" step="0.01" min="0.01" class="form-control" id="monto" name="monto" required placeholder="0.00">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Confirmar Cobro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.btn-pagar').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const id = btn.dataset.clienteId;
+                const nombre = btn.dataset.clienteNombre;
+                const saldo = btn.dataset.saldo;
+
+                document.getElementById('modalClienteNombre').textContent = nombre;
+                document.getElementById('modalClienteSaldo').textContent = saldo;
+                document.getElementById('monto').value = saldo; // Precalcula el total
+                document.getElementById('formRegistrarPago').action = '/cuentas-clientes/pago/' + id + '/';
+            });
+        });
+    });
+</script>
+{% endblock %}
