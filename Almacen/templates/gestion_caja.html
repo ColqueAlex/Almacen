@@ -1,0 +1,151 @@
+{% extends 'plantillas.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container my-4">
+    {% if messages %}
+        <div class="my-3">
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'success' }}{% endif %} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fa-solid fa-cash-register me-2"></i>Control y Gestión de Caja</h2>
+        {% if caja_activa %}
+            <span class="badge bg-success fs-6"><i class="fa-solid fa-lock-open me-1"></i> Caja Abierta (#{{ caja_activa.id_caja }})</span>
+        {% else %}
+            <span class="badge bg-danger fs-6"><i class="fa-solid fa-lock me-1"></i> Caja Cerrada</span>
+        {% endif %}
+    </div>
+
+    {% if not caja_activa %}
+        <!-- Formulario Apertura de Caja -->
+        <div class="card shadow-sm border-primary mb-4">
+            <div class="card-header bg-primary text-white font-weight-bold">
+                <i class="fa-solid fa-door-open me-2"></i>Apertura de Caja Diario
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'abrir_caja' %}" class="row g-3 align-items-end">
+                    {% csrf_token %}
+                    <div class="col-md-6">
+                        <label for="monto_inicial" class="form-label fw-semibold">Monto de Inicio / Cambio en Efectivo ($):</label>
+                        <input type="number" step="0.01" min="0" class="form-control" id="monto_inicial" name="monto_inicial" value="0.00" required>
+                    </div>
+                    <div class="col-md-6">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fa-solid fa-key me-1"></i> Abrir Turno de Caja
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    {% else %}
+        <!-- Panel de Estado de Caja Activa -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-light border-0 shadow-sm text-center py-3">
+                    <span class="text-muted small">Monto Inicial</span>
+                    <strong class="fs-4 text-dark">${{ caja_activa.monto_inicial|floatformat:2 }}</strong>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light border-0 shadow-sm text-center py-3">
+                    <span class="text-muted small">Ventas en Efectivo</span>
+                    <strong class="fs-4 text-success">+${{ ventas_efectivo|floatformat:2 }}</strong>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-light border-0 shadow-sm text-center py-3">
+                    <span class="text-muted small">Ventas Fiadas (Pendientes)</span>
+                    <strong class="fs-4 text-warning">${{ ventas_fiado|floatformat:2 }}</strong>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-primary text-white border-0 shadow-sm text-center py-3">
+                    <span class="small opacity-75">Total Esperado en Caja</span>
+                    <strong class="fs-4">${{ monto_esperado|floatformat:2 }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulario Cierre de Caja -->
+        <div class="card shadow-sm border-danger mb-4">
+            <div class="card-header bg-danger text-white font-weight-bold">
+                <i class="fa-solid fa-calculator me-2"></i>Arqueo y Cierre de Caja
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'cerrar_caja' %}">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="monto_real" class="form-label fw-semibold">Efectivo Físico en Caja ($):</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="monto_real" name="monto_real" required placeholder="0.00">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="observaciones" class="form-label fw-semibold">Observaciones / Notas:</label>
+                            <input type="text" class="form-control" id="observaciones" name="observaciones" placeholder="Opcional">
+                        </div>
+                        <div class="col-12 text-end">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fa-solid fa-lock me-1"></i> Confirmar Cierre de Caja
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Historial de Cajas -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-secondary text-white fw-bold">
+            <i class="fa-solid fa-clock-rotate-left me-2"></i>Historial Reciente de Cajas
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>N° Caja</th>
+                        <th>Apertura</th>
+                        <th>Cierre</th>
+                        <th>M. Inicial</th>
+                        <th>Esperado</th>
+                        <th>Real</th>
+                        <th>Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in historial_cajas %}
+                    <tr>
+                        <td>#{{ c.id_caja }}</td>
+                        <td>{{ c.fecha_apertura|date:"d/m/Y H:i" }}</td>
+                        <td>{{ c.fecha_cierre|date:"d/m/Y H:i"|default:"En curso" }}</td>
+                        <td>${{ c.monto_inicial|floatformat:2 }}</td>
+                        <td>${{ c.monto_final_esperado|default:0.00|floatformat:2 }}</td>
+                        <td>${{ c.monto_final_real|default:0.00|floatformat:2 }}</td>
+                        <td>
+                            {% if c.diferencia > 0 %}
+                                <span class="badge bg-info text-dark">+${{ c.diferencia|floatformat:2 }} (Sobrante)</span>
+                            {% elif c.diferencia < 0 %}
+                                <span class="badge bg-danger">${{ c.diferencia|floatformat:2 }} (Faltante)</span>
+                            {% else %}
+                                <span class="badge bg-success">$0.00 (Ok)</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-muted py-3">No hay cierres de caja registrados.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

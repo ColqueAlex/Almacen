@@ -137,3 +137,5 @@ LOGIN_REDIRECT_URL = 'inicio'
 LOGOUT_REDIRECT_URL = 'login'     
 LOGIN_URL = 'login'               
 AUTH_USER_MODEL = 'Almacen.Usuario'
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_SAVE_EVERY_REQUEST = True

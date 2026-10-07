@@ -15,7 +15,6 @@
     <h2 class="mb-4"><i class="fa-solid fa-truck-ramp-box me-2"></i>Registrar Ingreso de Compra</h2>
 
     <div class="row">
-        <!-- Panel Izquierdo: Selección de Proveedor y Producto -->
         <div class="col-md-6">
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-primary text-white fw-semibold">
@@ -56,7 +55,9 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-semibold">Fecha Vencimiento:</label>
-                            <input type="date" id="vencimiento-input" class="form-control">
+                            <input type="date" id="fecha_vencimiento" class="form-control" 
+                                min="{% now 'Y-m-d' %}" 
+                                max="2036-12-31">
                         </div>
                     </div>
 
@@ -78,7 +79,7 @@
             </div>
         </div>
 
-        <!-- Panel Derecho: Detalle de la Compra -->
+ 
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-header bg-dark text-white fw-semibold d-flex justify-content-between align-items-center">
@@ -171,7 +172,8 @@
             const prodSelect = document.getElementById('producto-select');
             const prodOption = prodSelect.options[prodSelect.selectedIndex];
             const loteVal = document.getElementById('lote-input').value.trim() || 'Sin lote';
-            const vencVal = document.getElementById('vencimiento-input').value;
+            const vencInput = document.getElementById('fecha_vencimiento');
+            const vencVal = vencInput.value;
             const cantVal = parseInt(document.getElementById('cantidad-input').value) || 0;
             const costoVal = parseFloat(document.getElementById('costo-input').value) || 0;
 
@@ -188,6 +190,25 @@
                 return;
             }
 
+            // Validar fecha de vencimiento si fue ingresada
+            if (vencVal) {
+                const fechaSeleccionada = new Date(vencVal);
+                const hoy = new Date();
+                hoy.setHours(0, 0, 0, 0);
+
+                const limiteMax = new Date();
+                limiteMax.setFullYear(limiteMax.getFullYear() + 10);
+
+                if (fechaSeleccionada < hoy) {
+                    alert('La fecha de vencimiento no puede ser anterior a la fecha actual.');
+                    return;
+                }
+                if (fechaSeleccionada > limiteMax) {
+                    alert('La fecha de vencimiento excede el límite permitido (máximo 10 años).');
+                    return;
+                }
+            }
+
             cart.push({
                 id_producto: prodSelect.value,
                 nombre: prodOption.dataset.nombre,
@@ -202,12 +223,12 @@
             // Limpiar campos del producto
             prodSelect.selectedIndex = 0;
             document.getElementById('lote-input').value = '';
-            document.getElementById('vencimiento-input').value = '';
+            vencInput.value = '';
             document.getElementById('cantidad-input').value = 1;
             document.getElementById('costo-input').value = '';
         });
 
-            formCompra.addEventListener('submit', function (e) {
+        formCompra.addEventListener('submit', function (e) {
             if (!cart.length) {
                 e.preventDefault();
                 alert('El detalle de la compra está vacío.');

@@ -24,7 +24,8 @@
                 
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav me-auto ms-3">
-                        {% if not user.id_perfil or user.id_perfil.nombre != 'Vendedor' %}
+                        <!-- Módulos exclusivos de Administrador / Superusuario -->
+                        {% if user.is_superuser or user.id_perfil.nombre_perfil|lower != 'vendedor' and user.id_perfil.nombre|lower != 'vendedor' %}
                             <li class="nav-item">
                                 <a class="nav-link text-white fw-bold fs-5" href="{% url 'consultar' %}">Productos</a>
                             </li>
@@ -34,18 +35,21 @@
                             <li class="nav-item">
                                 <a class="nav-link text-white fw-bold fs-5" href="{% url 'listar_compras' %}">Compras</a>
                             </li>
-                        {% endif %}
-
-                        <li class="nav-item">
-                            <a class="nav-link text-white fw-bold fs-5" href="{% url 'ventas' %}">Ventas</a>
-                        </li>
-                        {% if user.is_superuser or user.is_admin or user.id_perfil.nombre != 'Vendedor' %}
-                            {% if user.is_superuser or user.is_admin %}
                             <li class="nav-item">
                                 <a class="nav-link text-white fw-bold fs-5" href="{% url 'listar_usuarios' %}">Usuarios</a>
                             </li>
-                            {% endif %}
                         {% endif %}
+
+                        <!-- Módulos accesibles para Vendedor y Administrador -->
+                        <li class="nav-item">
+                            <a class="nav-link text-white fw-bold fs-5" href="{% url 'ventas' %}">Ventas</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white fw-bold fs-5" href="{% url 'cuentas_clientes' %}">Cuentas Clientes</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white fw-bold fs-5" href="{% url 'gestion_caja' %}">Caja</a>
+                        </li>
                     </ul>
 
                     <ul class="navbar-nav ms-auto align-items-center">

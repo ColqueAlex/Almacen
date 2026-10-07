@@ -7,21 +7,56 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import json
 from django.db.models import ProtectedError
 from decimal import Decimal
-from datetime import timedelta
+from datetime import timedelta, date, datetime
 from django.shortcuts import render, redirect, get_object_or_404
-from Almacen.models import Productos, Proveedor, Usuario, Perfil, Ventas, DetallesVentas
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth import update_session_auth_hash, logout, authenticate, login
 from django.db.models import Max, Sum, Q
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from django.contrib.auth import logout
-from django.contrib.auth import authenticate, login
-from .models import Productos, Proveedor, Compras, DetallesCompra, LotesProducto, Ventas, Clientes
-from datetime import date, datetime
+from functools import wraps
 
+from .models import (
+    Productos, Proveedor, Usuario, Perfil, Ventas, DetallesVentas,
+    Compras, DetallesCompra, LotesProducto, Clientes, Caja
+)
+
+from functools import wraps
+from django.shortcuts import redirect
+from django.contrib import messages
+
+def requiere_perfil(*perfiles_permitidos):
+    """
+    Decorador para restringir vistas según el perfil del usuario.
+    Si es superusuario (admin de Django), siempre tiene acceso.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return redirect('login')
+            
+            # Superusuario de Django siempre pasa
+            if request.user.is_superuser:
+                return view_func(request, *args, **kwargs) # <-- AHORA LLAMA A view_func
+
+            # Obtener el nombre del perfil de forma segura
+            perfil_obj = getattr(request.user, 'id_perfil', None)
+            perfil_nombre = ''
+            if perfil_obj:
+                perfil_nombre = (getattr(perfil_obj, 'nombre_perfil', '') or getattr(perfil_obj, 'nombre', '')).lower()
+
+            perfiles_lower = [p.lower() for p in perfiles_permitidos]
+
+            if perfil_nombre in perfiles_lower or request.user.is_staff:
+                return view_func(request, *args, **kwargs) # <-- AHORA LLAMA A view_func
+            else:
+                messages.error(request, 'No tiene permisos para acceder a esta sección.')
+                return redirect('inicio')
+        return _wrapped_view
+    return decorator
 
 
 @login_required
@@ -37,8 +72,8 @@ def home(request):
     return render(request, "principal.html")
 
 
-
 @login_required
+@requiere_perfil('Administrador')
 def consultar(request):
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
@@ -90,6 +125,7 @@ def guardar(request):
     
     return redirect('consultar')
 
+
 @login_required
 def cambiar_estado(request, id):
     producto = get_object_or_404(Productos, pk=id)
@@ -100,6 +136,7 @@ def cambiar_estado(request, id):
 
 
 @login_required
+@requiere_perfil('Administrador', 'Vendedor')
 def ventas(request):
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
@@ -128,8 +165,16 @@ def ventas(request):
 
 
 @login_required
+@requiere_perfil('Administrador', 'Vendedor')
 def registrar_venta(request):
+    # Verificar si hay una caja abierta
+    caja_activa = Caja.objects.filter(estado='abierta').last()
+
     if request.method == 'POST':
+        if not caja_activa:
+            messages.error(request, 'No hay ninguna caja abierta. Debe abrir caja antes de registrar ventas.')
+            return redirect('gestion_caja')
+
         try:
             cart_data = request.POST.get('cart_data', '[]')
             fiado = request.POST.get('fiado') == 'true'
@@ -140,7 +185,6 @@ def registrar_venta(request):
                 messages.error(request, 'El carrito está vacío.')
                 return redirect('registrar_venta')
 
-            # Si es fiado
             id_cliente_final = int(id_cliente_post) if (fiado and id_cliente_post) else 0
 
             with transaction.atomic():
@@ -152,7 +196,7 @@ def registrar_venta(request):
 
                 venta = Ventas.objects.create(
                     id_ventas=nuevo_id_venta,
-                    id_caja=1,
+                    id_caja=caja_activa.id_caja,
                     total=Decimal('0.00'),
                     fecha=date.today(),
                     hora=ahora.time(),
@@ -161,7 +205,6 @@ def registrar_venta(request):
                 )
 
                 total_venta = Decimal('0.00')
-
                 ultimo_id_detalle = DetallesVentas.objects.aggregate(Max('id_detalles_ventas'))['id_detalles_ventas__max'] or 0
 
                 for item in items:
@@ -173,7 +216,6 @@ def registrar_venta(request):
                         raise ValueError(f'Stock insuficiente para "{producto.nombre}". Disponible: {producto.stock}')
 
                     subtotal = cantidad_necesaria * precio_unitario
-
                     ultimo_id_detalle += 1
 
                     DetallesVentas.objects.create(
@@ -217,7 +259,10 @@ def registrar_venta(request):
             messages.error(request, f'Error al registrar la venta: {str(e)}')
             return redirect('registrar_venta')
 
-    # GET: Cargar productos, categorías y clientes ordenados por nombre
+    # GET
+    if not caja_activa:
+        messages.warning(request, 'Atención: Debe abrir la caja para poder cobrar ventas.')
+
     productos = Productos.objects.filter(estado='activo')
     categorias = Productos.objects.filter(estado='activo').values_list('categoria', flat=True).distinct()
     clientes = Clientes.objects.all().order_by('nombre')
@@ -225,26 +270,9 @@ def registrar_venta(request):
     return render(request, 'Registro_ventas.html', {
         'productos': productos,
         'categorias': categorias,
-        'clientes': clientes
+        'clientes': clientes,
+        'caja_activa': caja_activa
     })
-
-
-@login_required
-def eliminar_venta(request, id_venta):
-    if request.method != 'POST':
-        return redirect('ventas')
-
-    venta = get_object_or_404(Ventas, pk=id_venta)
-    hace_un_año = timezone.now().date().replace(year=timezone.now().date().year - 1)
-
-    if venta.fecha > hace_un_año:
-        messages.error(request, f'La venta #{id_venta} no puede eliminarse: tiene menos de 1 año de antigüedad.')
-        return redirect('ventas')
-
-    venta.detalles.all().delete()
-    venta.delete()
-    messages.success(request, f'Venta #{id_venta} y sus detalles eliminados correctamente.')
-    return redirect('ventas')
 
 
 @login_required
@@ -342,7 +370,9 @@ def editar(request):
 
     return redirect('consultar')
 
+
 @login_required
+@requiere_perfil('Administrador')
 def baja_usuario(request, dni):
     usuario_destino = get_object_or_404(Usuario, dni=dni)
     usuario_actual = request.user
@@ -370,6 +400,7 @@ def baja_usuario(request, dni):
 
 
 @login_required
+@requiere_perfil('Administrador')
 def editar_usuario(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
     if request.method == 'POST':
@@ -389,12 +420,14 @@ def editar_usuario(request, dni):
 
 
 @login_required
+@requiere_perfil('Administrador')
 def listar_usuarios(request):
     usuarios = Usuario.objects.all()
     return render(request, 'usuarios_list.html', {'usuarios': usuarios})
 
 
 @login_required
+@requiere_perfil('Administrador')
 def crear_usuario(request):
     if request.method == 'POST':
         dni = request.POST.get('dni')
@@ -437,17 +470,23 @@ def crear_usuario(request):
     perfiles = Perfil.objects.all()
     return render(request, 'usuario_form.html', {'perfiles': perfiles, 'es_edicion': False})
 
+
 @login_required
 def cambiar_clave(request):
     if request.method == 'POST':
-        nueva_clave = request.POST.get('nueva_clave')
-        confirmar_clave = request.POST.get('confirmar_clave')
+        nueva_clave = request.POST.get('nueva_clave', '').strip()
+        confirmar_clave = request.POST.get('confirmar_clave', '').strip()
 
         if not nueva_clave or not confirmar_clave:
-            return render(request, 'cambiar_clave.html', {'error': 'La contrase?a no puede estar vac?a'})
+            return render(request, 'cambiar_clave.html', {'error': 'La contraseña no puede estar vacía.'})
 
         if nueva_clave != confirmar_clave:
-            return render(request, 'cambiar_clave.html', {'error': 'Las contrase?as no coinciden'})
+            return render(request, 'cambiar_clave.html', {'error': 'Las contraseñas no coinciden.'})
+
+        if nueva_clave == str(request.user.dni):
+            return render(request, 'cambiar_clave.html', {
+                'error': 'Por Seguridad debe ser otra clave.'
+            })
 
         request.user.set_password(nueva_clave)
         request.user.debe_cambiar_clave = False
@@ -455,10 +494,11 @@ def cambiar_clave(request):
 
         update_session_auth_hash(request, request.user)
 
-        messages.success(request, 'Contrase?a actualizada con ?xito.')
+        messages.success(request, 'Contraseña actualizada con éxito.')
         return redirect('consultar')
 
     return render(request, 'cambiar_clave.html')
+
 
 @login_required
 def restablecer_clave(request, dni):
@@ -474,6 +514,7 @@ def restablecer_clave(request, dni):
         )
     return redirect('listar_usuarios')
 
+
 @login_required
 def alta_usuario(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
@@ -483,24 +524,6 @@ def alta_usuario(request, dni):
     messages.success(request, f'Usuario {usuario.username} reactivado correctamente.')
     return redirect('listar_usuarios')
 
-def lista_ventas(request):
-    filtro = request.GET.get('filtro', 'todos')
-    ventas = Ventas.objects.all().order_by('-fecha', '-hora')
-    hoy = timezone.now().date()
-
-    if filtro == 'semana':
-        hace_una_semana = hoy - timedelta(days=7)
-        ventas = ventas.filter(fecha__gte=hace_una_semana)
-
-    elif filtro == 'mes':
-        hace_un_mes = hoy - timedelta(days=30)
-        ventas = ventas.filter(fecha__gte=hace_un_mes)
-
-    elif filtro == 'anio':
-        ventas = ventas.filter(fecha__year=hoy.year)
-
-    context = {'ventas': ventas, 'filtro_activo': filtro}
-    return render(request, 'tu_app/ventas.html', context)
 
 def login_usuario(request):
     if request.user.is_authenticated:
@@ -529,13 +552,16 @@ def login_usuario(request):
 
     return render(request, 'login.html')
 
+
 @login_required
+@requiere_perfil('Administrador')
 def listar_proveedores(request):
     proveedores = Proveedor.objects.all().order_by('nombre')
     return render(request, 'proveedores_list.html', {'proveedores': proveedores})
 
 
 @login_required
+@requiere_perfil('Administrador')
 def crear_proveedor(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
@@ -559,6 +585,7 @@ def crear_proveedor(request):
 
 
 @login_required
+@requiere_perfil('Administrador')
 def editar_proveedor(request, id):
     proveedor = get_object_or_404(Proveedor, pk=id)
     if request.method == 'POST':
@@ -573,6 +600,7 @@ def editar_proveedor(request, id):
 
 
 @login_required
+@requiere_perfil('Administrador')
 def baja_proveedor(request, id):
     if request.method == 'POST':
         proveedor = get_object_or_404(Proveedor, pk=id)
@@ -583,6 +611,7 @@ def baja_proveedor(request, id):
 
 
 @login_required
+@requiere_perfil('Administrador')
 def alta_proveedor(request, id):
     if request.method == 'POST':
         proveedor = get_object_or_404(Proveedor, pk=id)
@@ -591,7 +620,9 @@ def alta_proveedor(request, id):
         messages.success(request, f'Proveedor "{proveedor.nombre}" reactivado correctamente.')
     return redirect('listar_proveedores')
 
+
 @login_required
+@requiere_perfil('Administrador')
 def registro_compras(request):
     if request.method == 'POST':
         try:
@@ -607,6 +638,9 @@ def registro_compras(request):
             if proveedor_id:
                 proveedor = Proveedor.objects.filter(pk=proveedor_id).first()
 
+            hoy = date.today()
+            limite_maximo = hoy.replace(year=hoy.year + 10)
+
             with transaction.atomic():
                 compra = Compras.objects.create(
                     id_proveedor=proveedor,
@@ -621,7 +655,18 @@ def registro_compras(request):
                     cantidad = int(item['cantidad'])
                     precio_costo = Decimal(str(item['precio_costo']))
                     lote_str = item.get('lote', 'Sin lote').strip()
-                    fecha_venc = item.get('fecha_vencimiento') or None
+                    
+                    fecha_venc_str = item.get('fecha_vencimiento')
+                    fecha_venc = None
+
+                    if fecha_venc_str:
+                        fecha_venc = datetime.strptime(fecha_venc_str, '%Y-%m-%d').date()
+                        
+                        if fecha_venc < hoy:
+                            raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" no puede ser anterior a hoy.')
+                        if fecha_venc > limite_maximo:
+                            raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" excede el límite máximo permitido (hasta {limite_maximo.year}).')
+
                     subtotal = cantidad * precio_costo
 
                     DetallesCompra.objects.create(
@@ -664,16 +709,33 @@ def registro_compras(request):
 
 
 @login_required
+@requiere_perfil('Administrador')
 def listar_compras(request):
     compras = Compras.objects.all().order_by('-id')
     return render(request, 'compras_list.html', {'compras': compras})
 
+
 @login_required
 def anular_venta(request, id_venta):
+    # Validar que haya una caja abierta actualmente
+    caja_activa = Caja.objects.filter(estado='abierta').last()
+    if not caja_activa:
+        messages.error(request, 'No se puede anular la venta porque la caja está cerrada. Abra caja para realizar movimientos.')
+        return redirect('ventas')
+
     venta = get_object_or_404(Ventas, pk=id_venta)
 
     if venta.estado_de_pago == 'Anulado':
         messages.warning(request, f'La Venta #{venta.id_ventas} ya se encuentra anulada.')
+        return redirect('ventas')
+
+    # Validar si la caja original de la venta ya está cerrada
+    caja_origen = Caja.objects.filter(pk=venta.id_caja).first()
+    if caja_origen and caja_origen.estado == 'cerrada':
+        messages.error(
+            request, 
+            f'No se puede anular la Venta #{venta.id_ventas} porque pertenece a la Caja #{caja_origen.id_caja}, la cual ya fue CERRADA.'
+        )
         return redirect('ventas')
 
     try:
@@ -711,6 +773,7 @@ def anular_venta(request, id_venta):
 
     return redirect('ventas')
 
+
 @login_required
 def generar_comprobante_pdf(request, id_venta):
     venta = get_object_or_404(Ventas, pk=id_venta)
@@ -725,7 +788,6 @@ def generar_comprobante_pdf(request, id_venta):
     style_sub = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=10, alignment=1, spaceAfter=20)
     style_body = ParagraphStyle('Body', parent=styles['Normal'], fontSize=10, spaceAfter=5)
 
-    # Cabecera del ticket
     story.append(Paragraph("<b>ALMACÉN EL REFUGIO</b>", style_title))
     story.append(Paragraph(f"Comprobante de Venta #{venta.id_ventas}<br/>Fecha: {venta.fecha.strftime('%d/%m/%Y')} - Hora: {venta.hora.strftime('%H:%M')}", style_sub))
     story.append(Paragraph(f"<b>Estado de Pago:</b> {venta.estado_de_pago.title()}", style_body))
@@ -766,6 +828,7 @@ def generar_comprobante_pdf(request, id_venta):
     response['Content-Disposition'] = f'inline; filename="Comprobante_Venta_{venta.id_ventas}.pdf"'
     return response
 
+
 @login_required
 def cuentas_clientes(request):
     clientes = Clientes.objects.all()
@@ -794,12 +857,17 @@ def cuentas_clientes(request):
 
 
 @login_required
+@requiere_perfil('Administrador', 'Vendedor')
 def registrar_pago_cliente(request, id_cliente):
     if request.method == 'POST':
         cliente = get_object_or_404(Clientes, pk=id_cliente)
-        monto_pago = float(request.POST.get('monto', 0))
+        
+        try:
+            monto_pago = Decimal(request.POST.get('monto', '0.00'))
+        except Exception:
+            monto_pago = Decimal('0.00')
 
-        if monto_pago <= 0:
+        if monto_pago <= Decimal('0.00'):
             messages.error(request, 'El monto a abonar debe ser mayor a 0.')
             return redirect('cuentas_clientes')
 
@@ -817,19 +885,20 @@ def registrar_pago_cliente(request, id_cliente):
                 monto_restante = monto_pago
 
                 for venta in ventas_pendientes:
-                    if monto_restante <= 0:
+                    if monto_restante <= Decimal('0.00'):
                         break
 
-                    venta_total = float(venta.total)
+                    venta_total = Decimal(str(venta.total))
 
                     if monto_restante >= venta_total:
                         monto_restante -= venta_total
                         venta.estado_de_pago = 'pagado'
                         venta.save()
                     else:
+                        venta.total = venta_total - monto_restante
                         venta.estado_de_pago = 'abono_parcial'
                         venta.save()
-                        monto_restante = 0
+                        monto_restante = Decimal('0.00')
 
                 messages.success(request, f'Se registró el pago de ${monto_pago:.2f} para {cliente.nombre}.')
 
@@ -837,6 +906,7 @@ def registrar_pago_cliente(request, id_cliente):
             messages.error(request, f'Error al registrar el pago: {str(e)}')
 
     return redirect('cuentas_clientes')
+
 
 @login_required
 def crear_cliente(request):
@@ -857,3 +927,122 @@ def crear_cliente(request):
         messages.success(request, f'Cliente "{cliente.nombre} {cliente.apellido or ""}" registrado con éxito.')
     
     return redirect('cuentas_clientes')
+
+
+@login_required
+def gestion_caja(request):
+    caja_activa = Caja.objects.filter(estado='abierta').last()
+    historial_cajas = Caja.objects.all().order_by('-fecha_apertura')[:10]
+
+    ventas_caja_efectivo = Decimal('0.00')
+    ventas_caja_fiado = Decimal('0.00')
+    monto_esperado = Decimal('0.00')
+
+    if caja_activa:
+        ventas_efectivo = Ventas.objects.filter(
+            id_caja=caja_activa.id_caja,
+            estado_de_pago__iexact='pagado'
+        ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+
+        ventas_fiado = Ventas.objects.filter(
+            id_caja=caja_activa.id_caja,
+            estado_de_pago__iexact='fiado'
+        ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+
+        ventas_caja_efectivo = Decimal(str(ventas_efectivo))
+        ventas_caja_fiado = Decimal(str(ventas_fiado))
+        monto_esperado = caja_activa.monto_inicial + ventas_caja_efectivo
+
+    return render(request, 'gestion_caja.html', {
+        'caja_activa': caja_activa,
+        'ventas_efectivo': ventas_caja_efectivo,
+        'ventas_fiado': ventas_caja_fiado,
+        'monto_esperado': monto_esperado,
+        'historial_cajas': historial_cajas,
+    })
+
+
+@login_required
+@requiere_perfil('Administrador', 'Vendedor')
+def abrir_caja(request):
+    if request.method == 'POST':
+        if Caja.objects.filter(estado='abierta').exists():
+            messages.warning(request, 'Ya existe una caja abierta en el sistema.')
+            return redirect('gestion_caja')
+
+        monto_inicial = Decimal(request.POST.get('monto_inicial', '0.00'))
+
+        Caja.objects.create(
+            usuario=request.user,
+            monto_inicial=monto_inicial,
+            estado='abierta'
+        )
+
+        messages.success(request, f'Caja abierta con un monto inicial de ${monto_inicial:.2f}')
+
+    return redirect('gestion_caja')
+
+
+@login_required
+@requiere_perfil('Administrador', 'Vendedor')
+def cerrar_caja(request):
+    if request.method == 'POST':
+        caja_activa = Caja.objects.filter(estado='abierta').last()
+
+        if not caja_activa:
+            messages.error(request, 'No hay ninguna caja abierta para cerrar.')
+            return redirect('gestion_caja')
+
+        monto_real = Decimal(request.POST.get('monto_real', '0.00'))
+        observaciones = request.POST.get('observaciones', '').strip()
+
+        ventas_efectivo = Ventas.objects.filter(
+            id_caja=caja_activa.id_caja,
+            estado_de_pago__iexact='pagado'
+        ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+
+        monto_esperado = caja_activa.monto_inicial + Decimal(str(ventas_efectivo))
+        diferencia = monto_real - monto_esperado
+
+        caja_activa.monto_final_esperado = monto_esperado
+        caja_activa.monto_final_real = monto_real
+        caja_activa.diferencia = diferencia
+        caja_activa.fecha_cierre = timezone.now()
+        caja_activa.estado = 'cerrada'
+        caja_activa.observaciones = observaciones
+        caja_activa.save()
+
+        if diferencia == Decimal('0.00'):
+            messages.success(request, 'Caja cerrada correctamente sin diferencias.')
+        elif diferencia > Decimal('0.00'):
+            messages.info(request, f'Caja cerrada con Sobrante de ${diferencia:.2f}.')
+        else:
+            messages.error(request, f'Caja cerrada con Faltante de ${abs(diferencia):.2f}.')
+
+    return redirect('gestion_caja')
+
+def requiere_perfil(*perfiles_permitidos):
+    """
+    Decorador para restringir vistas según el perfil del usuario.
+    Si es superusuario (admin de Django), siempre tiene acceso.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return redirect('login')
+            
+            if request.user.is_superuser:
+                return _wrapped_view(request, *args, **kwargs)
+
+            perfil_usuario = getattr(request.user.id_perfil, 'nombre_perfil', '').lower() if hasattr(request.user, 'id_perfil') else ''
+            
+            perfiles_lower = [p.lower() for p in perfiles_permitidos]
+
+            if perfil_usuario in perfiles_lower or request.user.is_staff:
+                return view_func(request, *args, **kwargs)
+            else:
+                messages.error(request, 'No tiene permisos para acceder a esta sección.')
+                return redirect('inicio')
+        return _wrapped_view
+    return decorator

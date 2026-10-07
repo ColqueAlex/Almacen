@@ -4,15 +4,30 @@
 {% block content %}
     <div class="container py-4">
         <div class="menu-container">
-            {% if user.id_perfil and user.id_perfil.nombre == 'Vendedor' %}
+            {% if not user.is_superuser and user.id_perfil.nombre_perfil|lower == 'vendedor' or not user.is_superuser and user.id_perfil.nombre|lower == 'vendedor' %}
+                <!-- Menú restringido para Perfil Vendedor -->
                 <a href="{% url 'registrar_venta' %}" class="menu-btn">
                     <div class="icon-box">
                         <i class="fa-solid fa-cart-arrow-down"></i>
                     </div>
                     <div class="text-box">Procesar Venta</div>
                 </a>
+
+                <a href="{% url 'cuentas_clientes' %}" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                    <div class="text-box">Cuentas de clientes</div>
+                </a>
+
+                <a href="{% url 'gestion_caja' %}" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-sharp fa-solid fa-cash-register"></i>
+                    </div>
+                    <div class="text-box">Caja</div>
+                </a>
             {% else %}
-                
+                <!-- Menú completo para Administrador / Superusuario -->
                 <a href="{% url 'registrar_compra' %}" class="menu-btn">
                     <div class="icon-box">
                         <i class="fa-solid fa-box-open"></i>
@@ -53,6 +68,13 @@
                         <i class="fa-solid fa-users"></i>
                     </div>
                     <div class="text-box">Cuentas de clientes</div>
+                </a>
+
+                <a href="{% url 'gestion_caja' %}" class="menu-btn">
+                    <div class="icon-box">
+                        <i class="fa-sharp fa-solid fa-cash-register"></i>
+                    </div>
+                    <div class="text-box">Caja</div>
                 </a>
             {% endif %}
         </div>

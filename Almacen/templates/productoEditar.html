@@ -2,36 +2,45 @@
 
 {% block content %}
 
+    <h2 class="text-center my-4">Editar Producto</h2>
 
-
-    <h2 class="text-center">Productos</h2>
-
-    <form action="{% url 'editar' %}" class="w-50 shadow mx-auto p-4 m-3" method="post">
+    <form action="{% url 'editar' %}" class="w-50 shadow mx-auto p-4 m-3 rounded bg-white" method="post">
         {% csrf_token %}
 
-        <input type="hidden" name="id" value="{{ producto.id}}">
+        <input type="hidden" name="id" value="{{ producto.id }}">
 
-        Nombre: <input type="text" name="nombre" class="form-control my-2" required value="{{ producto.nombre }}">
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Nombre:</label>
+            <input type="text" name="nombre" class="form-control" required value="{{ producto.nombre }}">
+        </div>
 
-        Lote: <input type="text" name="lote" class="form-control my-2" value="{% if producto.lote %}{{ producto.lote }}{% else %}Sin lote{% endif %}">
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Categoría:</label>
+            <input type="text" name="categoria" class="form-control" required value="{{ producto.categoria }}" pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
+        </div>
 
-        categoria: <input type="text" name="categoria" class="form-control my-2" required value="{{ producto.categoria }}" pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Marca:</label>
+            <input type="text" name="marca" class="form-control" value="{% if producto.marca %}{{ producto.marca }}{% else %}Sin marca{% endif %}">
+        </div>
 
-        Marca: <input type="text" name="marca" class="form-control my-2" value="{% if producto.marca %}{{ producto.marca }}{% else %}Sin marca{% endif %}">
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Precio de Venta ($):</label>
+            <input type="number" name="precio" min="0.01" step="0.01" class="form-control" required value="{{ producto.precio }}">
+        </div>
 
-        Precio: <input type="number" name="precio" min="0" step="0.01" class="form-control my-2" required value="{{ producto.precio }}">
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Estado:</label>
+            <select name="estado" class="form-select" required>
+                <option value="activo" {% if producto.estado == 'activo' %}selected{% endif %}>Activo</option>
+                <option value="inactivo" {% if producto.estado == 'inactivo' %}selected{% endif %}>Inactivo</option>
+            </select>
+        </div>
 
-        Fecha de vencimiento: <input type="date" name="fecha_vencimiento" class="form-control my-2" min="{% now 'Y' %}-01-01" value="{{ producto.fecha_vencimiento|date:'Y-m-d' }}">
-
-        Stock: <input type="number" name="stock" min="0"  class="form-control my-2" required value="{{ producto.stock }}">
-
-        Estado:
-        <select name="estado" class="form-select my-2" required>
-            <option value="activo" {% if producto.estado == 'activo' %}selected{% endif %}>Activo</option>
-            <option value="inactivo" {% if producto.estado == 'inactivo' %}selected{% endif %}>Inactivo</option>
-        </select>
-
-        <input type="submit" value="Actualizar" class="btn btn-primary">
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="{% url 'consultar' %}" class="btn btn-secondary">Cancelar</a>
+            <input type="submit" value="Actualizar Producto" class="btn btn-primary">
+        </div>
     </form>
 
 {% endblock %}

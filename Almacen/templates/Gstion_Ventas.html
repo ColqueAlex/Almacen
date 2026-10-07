@@ -102,7 +102,7 @@
                             </button>
 
                             {% if venta.estado_de_pago|lower != 'anulado' %}
-                                <form method="post" action="{% url 'eliminar_venta' venta.id_ventas %}" style="display:inline">
+                                <form method="post" action="{% url 'anular_venta' venta.id_ventas %}" style="display:inline">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-danger btn-sm" title="Anular venta y reincorporar stock"
                                             onclick="return confirm('¿Está seguro de que desea anular la Venta #{{ venta.id_ventas }}?\nLos productos serán reincorporados al almacén.');">
