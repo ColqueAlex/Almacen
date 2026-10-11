@@ -14,6 +14,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import update_session_auth_hash, logout, authenticate, login
 from django.db.models import Max, Sum, Q
 from django.db import transaction
+from django.core.paginator import Paginator
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from functools import wraps
@@ -85,9 +86,11 @@ def consultar(request):
         productos = productos.filter(nombre__icontains=busqueda)
 
     has_inactive_products = productos.filter(estado='inactivo').exists()
+    page_obj = Paginator(productos, 7).get_page(request.GET.get('page'))
 
     return render(request, "productos.html", {
-        'productos': productos,
+        'productos': page_obj,
+        'page_obj': page_obj,
         'busqueda': busqueda,
         'has_inactive_products': has_inactive_products,
     })
@@ -156,9 +159,11 @@ def ventas(request):
         desde = hoy - timezone.timedelta(days=365)
         ventas_qs = ventas_qs.filter(fecha__gte=desde)
 
+    page_obj = Paginator(ventas_qs, 7).get_page(request.GET.get('page'))
     fecha_limite = hoy.replace(year=hoy.year - 1)
     return render(request, 'Gstion_Ventas.html', {
-        'ventas': ventas_qs,
+        'ventas': page_obj,
+        'page_obj': page_obj,
         'fecha_limite': fecha_limite,
         'periodo': periodo,
     })
@@ -263,7 +268,12 @@ def registrar_venta(request):
     if not caja_activa:
         messages.warning(request, 'Atención: Debe abrir la caja para poder cobrar ventas.')
 
-    productos = Productos.objects.filter(estado='activo')
+    productos = Productos.objects.filter(estado='activo').annotate(
+        total_vendido=Sum(
+            'detalles_ventas__cantidad',
+            filter=~Q(detalles_ventas__venta__estado_de_pago__iexact='anulado'),
+        )
+    )
     categorias = Productos.objects.filter(estado='activo').values_list('categoria', flat=True).distinct()
     clientes = Clientes.objects.all().order_by('nombre')
 

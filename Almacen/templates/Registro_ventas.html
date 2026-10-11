@@ -32,12 +32,15 @@
                         {% endfor %}
                     </div>
                 </div>
+                <button type="button" class="btn-filter" id="sort-best-sellers" aria-pressed="false">
+                    <i class="fa-solid fa-arrow-down-wide-short me-1" aria-hidden="true"></i>Más vendidos
+                </button>
             </div>
 
             <div class="product-list" id="product-list">
                 {% for producto in productos %}
                     {% if producto.stock > 0 %}
-                    <article class="product-card" data-product-category="{{ producto.categoria|default:'' }}">
+                    <article class="product-card" data-product-category="{{ producto.categoria|default:'' }}" data-total-sold="{{ producto.total_vendido|default_if_none:0 }}">
                         <div class="product-info">
                             <div class="product-img product-placeholder" aria-label="{{ producto.nombre }}">{{ producto.nombre|slice:":1"|upper }}</div>
                             <div class="product-text">
@@ -65,6 +68,12 @@
                     <div class="empty-products py-4 text-center text-muted">No hay productos con stock disponible en el almacén.</div>
                 {% endfor %}
             </div>
+            <div class="product-pagination" id="product-pagination" data-page-size="7" aria-label="Paginación de productos">
+                <button type="button" class="pagination-button" id="previous-products" aria-label="Página anterior">Anterior</button>
+                <span id="product-page-status" aria-live="polite"></span>
+                <button type="button" class="pagination-button" id="next-products" aria-label="Página siguiente">Siguiente</button>
+            </div>
+            <p class="empty-products py-4 text-center text-muted" id="no-matching-products" hidden>No se encontraron productos para esta búsqueda.</p>
         </main>
 
         <aside class="cart-section">
@@ -165,6 +174,12 @@
         const filterToggle = document.getElementById('filter-toggle');
         const filterMenu = document.getElementById('filter-menu');
         const filterOptions = document.querySelectorAll('.filter-option');
+        const sortBestSellersButton = document.getElementById('sort-best-sellers');
+        const pagination = document.getElementById('product-pagination');
+        const previousProductsButton = document.getElementById('previous-products');
+        const nextProductsButton = document.getElementById('next-products');
+        const productPageStatus = document.getElementById('product-page-status');
+        const noMatchingProducts = document.getElementById('no-matching-products');
         
         const fiadoCheckbox = document.getElementById('fiado-checkbox');
         const seccionCliente = document.getElementById('seccion-cliente');
@@ -175,7 +190,11 @@
         const cartDataField = document.getElementById('cart_data');
         const saleForm = document.getElementById('sale-form');
         const cart = {};
+        const pageSize = Number(pagination.dataset.pageSize);
+        const productCards = Array.from(productList.querySelectorAll('.product-card'));
         let selectedCategory = '';
+        let showBestSellersFirst = false;
+        let currentPage = 1;
 
         function formatMoney(value) {
             return '$' + Number(value).toFixed(2);
@@ -253,15 +272,41 @@
 
         function applySearchFilter() {
             const query = searchInput.value.trim().toLowerCase();
-            const products = productList.querySelectorAll('.product-card');
-
-            products.forEach(function (productCard) {
+            const matchingProducts = productCards.filter(function (productCard) {
                 const productName = (productCard.dataset.productName || productCard.querySelector('h3')?.textContent || '').toLowerCase();
                 const categoryName = (productCard.dataset.productCategory || '').toLowerCase();
                 const matchesCategory = !selectedCategory || categoryName === selectedCategory.toLowerCase();
-                const visible = (!query || productName.includes(query) || categoryName.includes(query)) && matchesCategory;
-                productCard.style.display = visible ? '' : 'none';
+                return (!query || productName.includes(query) || categoryName.includes(query)) && matchesCategory;
             });
+            if (showBestSellersFirst) {
+                matchingProducts.sort(function (productA, productB) {
+                    return Number(productB.dataset.totalSold) - Number(productA.dataset.totalSold);
+                });
+            }
+            const matchingProductSet = new Set(matchingProducts);
+            const orderedProducts = matchingProducts.concat(
+                productCards.filter(function (productCard) {
+                    return !matchingProductSet.has(productCard);
+                })
+            );
+            orderedProducts.forEach(function (productCard) {
+                productList.appendChild(productCard);
+            });
+            const totalPages = Math.max(1, Math.ceil(matchingProducts.length / pageSize));
+
+            currentPage = Math.min(currentPage, totalPages);
+            const firstProductIndex = (currentPage - 1) * pageSize;
+            const visibleProducts = new Set(matchingProducts.slice(firstProductIndex, firstProductIndex + pageSize));
+
+            productCards.forEach(function (productCard) {
+                productCard.style.display = visibleProducts.has(productCard) ? '' : 'none';
+            });
+
+            pagination.hidden = matchingProducts.length <= pageSize;
+            noMatchingProducts.hidden = matchingProducts.length > 0;
+            productPageStatus.textContent = 'Página ' + currentPage + ' de ' + totalPages;
+            previousProductsButton.disabled = currentPage === 1;
+            nextProductsButton.disabled = currentPage === totalPages;
         }
 
         document.querySelectorAll('.product-card').forEach(function (productCard) {
@@ -269,7 +314,32 @@
             productCard.dataset.productName = name;
         });
 
-        if (searchInput) searchInput.addEventListener('input', applySearchFilter);
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                currentPage = 1;
+                applySearchFilter();
+            });
+        }
+
+        sortBestSellersButton.addEventListener('click', function () {
+            showBestSellersFirst = !showBestSellersFirst;
+            sortBestSellersButton.setAttribute('aria-pressed', String(showBestSellersFirst));
+            sortBestSellersButton.classList.toggle('active', showBestSellersFirst);
+            currentPage = 1;
+            applySearchFilter();
+        });
+
+        previousProductsButton.addEventListener('click', function () {
+            if (currentPage > 1) {
+                currentPage -= 1;
+                applySearchFilter();
+            }
+        });
+
+        nextProductsButton.addEventListener('click', function () {
+            currentPage += 1;
+            applySearchFilter();
+        });
 
         if (filterToggle) {
             filterToggle.addEventListener('click', function () {
@@ -285,6 +355,7 @@
                 });
                 filterToggle.textContent = selectedCategory ? selectedCategory : 'Filtrar';
                 filterMenu.classList.remove('open');
+                currentPage = 1;
                 applySearchFilter();
             });
         });
@@ -376,6 +447,7 @@
             });
         });
 
+        applySearchFilter();
         syncCartToForm();
     });
 </script>

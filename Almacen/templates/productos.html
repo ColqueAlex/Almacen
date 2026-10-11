@@ -126,12 +126,38 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center text-muted">No hay productos en el catálogo.</td>
+                    <td colspan="7" class="text-center text-muted">No hay productos en el catálogo.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-3" aria-label="Paginación de productos">
+        <ul class="pagination justify-content-center flex-wrap mb-0">
+            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+                {% if page_obj.has_previous %}
+                    <a class="page-link" href="?busqueda={{ busqueda|urlencode }}&page={{ page_obj.previous_page_number }}">Anterior</a>
+                {% else %}
+                    <span class="page-link">Anterior</span>
+                {% endif %}
+            </li>
+            {% for page_number in page_obj.paginator.page_range %}
+                <li class="page-item {% if page_obj.number == page_number %}active{% endif %}">
+                    <a class="page-link" href="?busqueda={{ busqueda|urlencode }}&page={{ page_number }}" {% if page_obj.number == page_number %}aria-current="page"{% endif %}>{{ page_number }}</a>
+                </li>
+            {% endfor %}
+            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+                {% if page_obj.has_next %}
+                    <a class="page-link" href="?busqueda={{ busqueda|urlencode }}&page={{ page_obj.next_page_number }}">Siguiente</a>
+                {% else %}
+                    <span class="page-link">Siguiente</span>
+                {% endif %}
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
 
     {% if has_inactive_products %}
     <div class="d-flex justify-content-end mt-3">

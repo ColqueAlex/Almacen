@@ -4,10 +4,43 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
-from Almacen.models import Productos, Usuario, Ventas, DetallesVentas
+from Almacen.models import Productos, Usuario, Ventas, DetallesVentas, LotesProducto
 
 
 class ProductosEstadoTests(TestCase):
+    def test_catalogo_muestra_siete_productos_por_pagina(self):
+        usuario = Usuario.objects.create_user(
+            dni=99999998,
+            apellido='Admin',
+            nombre='Super',
+            correo='admin-pagination@example.com',
+            password='123456',
+        )
+        usuario.is_superuser = True
+        usuario.debe_cambiar_clave = False
+        usuario.save()
+        self.client.force_login(usuario)
+
+        for number in range(8):
+            Productos.objects.create(
+                nombre=f'Producto {number}',
+                categoria='General',
+                marca='Marca',
+                precio=1.0,
+            )
+
+        primera_pagina = self.client.get(reverse('consultar'))
+        segunda_pagina = self.client.get(reverse('consultar'), {'page': 2})
+
+        self.assertEqual(primera_pagina.status_code, 200)
+        self.assertEqual(len(primera_pagina.context['productos']), 7)
+        self.assertContains(primera_pagina, 'Anterior')
+        self.assertContains(primera_pagina, 'Siguiente')
+        self.assertContains(primera_pagina, 'page=2')
+        self.assertEqual(segunda_pagina.status_code, 200)
+        self.assertEqual(len(segunda_pagina.context['productos']), 1)
+        self.assertEqual(segunda_pagina.context['page_obj'].number, 2)
+
     def test_producto_tiene_estado_por_defecto_activo(self):
         producto = Productos.objects.create(
             nombre='Leche',
@@ -105,6 +138,7 @@ class VentasViewTests(TestCase):
             correo='ana@example.com',
             password='123456',
         )
+        self.usuario.is_superuser = True
         self.usuario.debe_cambiar_clave = False
         self.usuario.save()
         self.client.force_login(self.usuario)
@@ -141,19 +175,131 @@ class VentasViewTests(TestCase):
         self.assertContains(response, '129.90')
         self.assertContains(response, 'Pendiente')
 
+    def test_tabla_de_ventas_muestra_siete_ventas_por_pagina(self):
+        for number in range(8):
+            Ventas.objects.create(
+                id_ventas=number + 1,
+                id_caja=1,
+                total=10.0,
+                fecha='2026-10-10',
+                hora='18:10:00',
+                id_clientes=0,
+                estado_de_pago='pagado',
+            )
+
+        primera_pagina = self.client.get(reverse('ventas'), {'filtro': 'todos'})
+        segunda_pagina = self.client.get(
+            reverse('ventas'),
+            {'filtro': 'todos', 'page': 2},
+        )
+
+        self.assertEqual(primera_pagina.status_code, 200)
+        self.assertEqual(len(primera_pagina.context['ventas']), 7)
+        self.assertContains(primera_pagina, '?filtro=todos')
+        self.assertContains(primera_pagina, 'page=2')
+        self.assertEqual(segunda_pagina.status_code, 200)
+        self.assertEqual(len(segunda_pagina.context['ventas']), 1)
+        self.assertEqual(segunda_pagina.context['page_obj'].number, 2)
+
     def test_get_registrar_venta_renderiza_catalogo(self):
-        Productos.objects.create(
+        producto = Productos.objects.create(
             nombre='Banana',
             categoria='Frutas',
             marca='Natural',
             precio=5.0,
-            stock=20,
+        )
+        LotesProducto.objects.create(
+            id_producto=producto,
+            lote='BAN-1',
+            stock_actual=20,
+            precio_costo=4.0,
         )
         response = self.client.get(reverse('registrar_venta'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'Registro_ventas.html')
         self.assertContains(response, 'Banana')
         self.assertContains(response, 'Frutas')
+        self.assertContains(response, 'id="sort-best-sellers"')
+        self.assertContains(response, 'Más vendidos')
+        self.assertContains(response, 'data-page-size="7"')
+        self.assertContains(response, 'id="previous-products"')
+        self.assertContains(response, 'id="next-products"')
+
+    def test_catalogo_calcula_unidades_vendidas_y_excluye_ventas_anuladas(self):
+        producto = Productos.objects.create(
+            nombre='Arroz',
+            categoria='Cereales',
+            marca='Marca',
+            precio=3.0,
+        )
+        LotesProducto.objects.create(
+            id_producto=producto,
+            lote='ARR-1',
+            stock_actual=10,
+            precio_costo=2.0,
+        )
+        venta_pagada = Ventas.objects.create(
+            id_ventas=1,
+            id_caja=1,
+            total=15.0,
+            fecha='2026-10-10',
+            hora='10:00:00',
+            id_clientes=0,
+            estado_de_pago='pagado',
+        )
+        venta_anulada = Ventas.objects.create(
+            id_ventas=2,
+            id_caja=1,
+            total=300.0,
+            fecha='2026-10-10',
+            hora='11:00:00',
+            id_clientes=0,
+            estado_de_pago='anulado',
+        )
+        DetallesVentas.objects.create(
+            id_detalles_ventas=1,
+            venta=venta_pagada,
+            producto=producto,
+            cantidad=5,
+            precio_unitario_compra=3.0,
+            subtotal=15.0,
+        )
+        DetallesVentas.objects.create(
+            id_detalles_ventas=2,
+            venta=venta_anulada,
+            producto=producto,
+            cantidad=100,
+            precio_unitario_compra=3.0,
+            subtotal=300.0,
+        )
+
+        response = self.client.get(reverse('registrar_venta'))
+
+        self.assertEqual(response.status_code, 200)
+        producto_catalogo = response.context['productos'].get(pk=producto.pk)
+        self.assertEqual(producto_catalogo.total_vendido, 5)
+        self.assertContains(response, 'data-total-sold="5"')
+
+    def test_catalogo_de_ventas_renderiza_productos_para_paginacion(self):
+        for number in range(8):
+            producto = Productos.objects.create(
+                nombre=f'Producto {number}',
+                categoria='General',
+                marca='Marca',
+                precio=1.0,
+            )
+            LotesProducto.objects.create(
+                id_producto=producto,
+                lote=f'LOT-{number}',
+                stock_actual=10,
+                precio_costo=1.0,
+            )
+
+        response = self.client.get(reverse('registrar_venta'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content.count(b'class="product-card"'), 8)
+        self.assertContains(response, 'data-page-size="7"')
 
     def test_finalizar_guarda_venta_y_detalle_en_base_de_datos(self):
         producto = Productos.objects.create(
