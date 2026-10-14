@@ -133,6 +133,36 @@
         </table>
     </div>
 
+    {% if productos.paginator.num_pages > 1 %}
+    <nav aria-label="Paginación del catálogo" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if productos.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ productos.previous_page_number }}&busqueda={{ busqueda|urlencode }}">Anterior</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Anterior</span></li>
+            {% endif %}
+
+            {% for num in productos.paginator.page_range %}
+                {% if productos.number == num %}
+                    <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+                {% elif num > productos.number|add:'-3' and num < productos.number|add:'3' %}
+                    <li class="page-item"><a class="page-link" href="?page={{ num }}&busqueda={{ busqueda|urlencode }}">{{ num }}</a></li>
+                {% endif %}
+            {% endfor %}
+
+            {% if productos.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ productos.next_page_number }}&busqueda={{ busqueda|urlencode }}">Siguiente</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
     {% if has_inactive_products %}
     <div class="d-flex justify-content-end mt-3">
         <form id="formEliminarSeleccionados" method="post" action="{% url 'eliminar_seleccionados' %}">

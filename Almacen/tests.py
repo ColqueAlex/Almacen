@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
-from Almacen.models import Productos, Usuario, Ventas, DetallesVentas
+from Almacen.models import Productos, Usuario, Ventas, DetallesVentas, LotesProducto
 
 
 class ProductosEstadoTests(TestCase):
@@ -96,6 +96,42 @@ class ProductosEstadoTests(TestCase):
         self.assertTrue(Productos.objects.filter(pk=activo.pk).exists())
 
 
+class ProductosPaginacionTests(TestCase):
+    def test_catalogo_pagina_productos_y_conserva_busqueda(self):
+        administrador = Usuario.objects.create_user(
+            dni=87654321,
+            apellido='Admin',
+            nombre='Catálogo',
+            correo='catalogo@example.com',
+            password='123456',
+        )
+        administrador.is_superuser = True
+        administrador.is_staff = True
+        administrador.debe_cambiar_clave = False
+        administrador.save()
+        self.client.force_login(administrador)
+
+        for numero in range(8):
+            Productos.objects.create(
+                nombre=f'Producto {numero}',
+                categoria='General',
+                marca='Marca',
+                precio=5.0,
+            )
+
+        response = self.client.get(
+            reverse('consultar'),
+            {'busqueda': 'Producto', 'page': 2},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['productos'].number, 2)
+        self.assertEqual(len(response.context['productos']), 1)
+        self.assertContains(response, 'Producto 7')
+        self.assertNotContains(response, 'Producto 0')
+        self.assertContains(response, 'busqueda=Producto')
+
+
 class VentasViewTests(TestCase):
     def setUp(self):
         self.usuario = Usuario.objects.create_user(
@@ -141,6 +177,24 @@ class VentasViewTests(TestCase):
         self.assertContains(response, '129.90')
         self.assertContains(response, 'Pendiente')
 
+    def test_pagina_de_ventas_pagina_registros(self):
+        for numero in range(8):
+            Ventas.objects.create(
+                id_caja=1,
+                total=numero + 1,
+                fecha='2026-01-01',
+                hora=f'10:{numero:02d}:00',
+                id_clientes=0,
+                estado_de_pago='Pagado',
+            )
+
+        response = self.client.get(reverse('ventas'), {'page': 2})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['ventas'].number, 2)
+        self.assertEqual(len(response.context['ventas']), 1)
+        self.assertEqual(response.context['ventas'][0].total, 1)
+
     def test_get_registrar_venta_renderiza_catalogo(self):
         Productos.objects.create(
             nombre='Banana',
@@ -154,6 +208,103 @@ class VentasViewTests(TestCase):
         self.assertTemplateUsed(response, 'Registro_ventas.html')
         self.assertContains(response, 'Banana')
         self.assertContains(response, 'Frutas')
+
+    def test_get_registrar_venta_pagina_catalogo(self):
+        for numero in range(8):
+            producto = Productos.objects.create(
+                nombre=f'Producto {numero}',
+                categoria='General',
+                marca='Marca',
+                precio=5.0,
+            )
+            LotesProducto.objects.create(
+                id_producto=producto,
+                lote=f'Lote {numero}',
+                stock_actual=10,
+                precio_costo=5.0,
+            )
+
+        response = self.client.get(reverse('registrar_venta'), {'page': 2})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['productos']), 1)
+        self.assertEqual(response.context['productos'].number, 2)
+        self.assertContains(response, 'Producto 7')
+        self.assertNotContains(response, 'Producto 0')
+
+    def test_get_registrar_venta_ordena_por_cantidad_vendida(self):
+        producto_mas_vendido = Productos.objects.create(
+            nombre='Más vendido',
+            categoria='General',
+            marca='Marca',
+            precio=5.0,
+        )
+        producto_menos_vendido = Productos.objects.create(
+            nombre='Menos vendido',
+            categoria='General',
+            marca='Marca',
+            precio=5.0,
+        )
+        for producto in (producto_mas_vendido, producto_menos_vendido):
+            LotesProducto.objects.create(
+                id_producto=producto,
+                lote=f'Lote {producto.id}',
+                stock_actual=10,
+                precio_costo=5.0,
+            )
+
+        venta_activa = Ventas.objects.create(
+            id_caja=1,
+            total=40.0,
+            fecha='2026-01-01',
+            hora='10:00:00',
+            id_clientes=0,
+            estado_de_pago='Pagado',
+        )
+        venta_anulada = Ventas.objects.create(
+            id_caja=1,
+            total=200.0,
+            fecha='2026-01-02',
+            hora='10:00:00',
+            id_clientes=0,
+            estado_de_pago='Anulado',
+        )
+        DetallesVentas.objects.create(
+            id_detalles_ventas=1,
+            venta=venta_activa,
+            producto=producto_mas_vendido,
+            cantidad=4,
+            precio_unitario_compra=5.0,
+            subtotal=20.0,
+        )
+        DetallesVentas.objects.create(
+            id_detalles_ventas=2,
+            venta=venta_activa,
+            producto=producto_menos_vendido,
+            cantidad=5,
+            precio_unitario_compra=5.0,
+            subtotal=25.0,
+        )
+        DetallesVentas.objects.create(
+            id_detalles_ventas=3,
+            venta=venta_anulada,
+            producto=producto_mas_vendido,
+            cantidad=40,
+            precio_unitario_compra=5.0,
+            subtotal=200.0,
+        )
+
+        response = self.client.get(
+            reverse('registrar_venta'),
+            {'orden': 'mas_vendidos'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context['productos'][0].pk,
+            producto_menos_vendido.pk,
+        )
+        self.assertContains(response, 'Ordenar A-Z')
 
     def test_finalizar_guarda_venta_y_detalle_en_base_de_datos(self):
         producto = Productos.objects.create(

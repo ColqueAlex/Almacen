@@ -32,6 +32,11 @@
                         {% endfor %}
                     </div>
                 </div>
+                {% if orden == 'mas_vendidos' %}
+                    <a href="?page=1" class="btn-filter btn-order" aria-pressed="true">Ordenar A-Z</a>
+                {% else %}
+                    <a href="?orden=mas_vendidos&page=1" class="btn-filter btn-order" aria-pressed="false">Más vendidos</a>
+                {% endif %}
             </div>
 
             <div class="product-list" id="product-list">
@@ -65,7 +70,41 @@
                     <div class="empty-products py-4 text-center text-muted">No hay productos con stock disponible en el almacén.</div>
                 {% endfor %}
             </div>
+            {% if productos.paginator.num_pages > 1 %}
+                <nav aria-label="Paginación de productos" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if productos.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ productos.previous_page_number }}{% if orden %}&orden={{ orden }}{% endif %}">Anterior</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Anterior</span>
+                            </li>
+                        {% endif %}
+
+                        {% for num in productos.paginator.page_range %}
+                            {% if productos.number == num %}
+                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                            {% elif num > productos.number|add:'-3' and num < productos.number|add:'3' %}
+                                <li class="page-item"><a class="page-link" href="?page={{ num }}{% if orden %}&orden={{ orden }}{% endif %}">{{ num }}</a></li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if productos.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ productos.next_page_number }}{% if orden %}&orden={{ orden }}{% endif %}">Siguiente</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Siguiente</span>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
         </main>
+
 
         <aside class="cart-section">
             <h2 class="cart-title">Carrito de ventas</h2>

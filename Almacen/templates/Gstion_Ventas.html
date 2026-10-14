@@ -21,10 +21,10 @@
         <div class="d-flex align-items-center gap-2">
             <form method="GET" action="" class="m-0">
                 <select name="filtro" onchange="this.form.submit()" class="form-select" style="cursor: pointer;">
-                    <option value="todos" {% if filtro_activo == 'todos' %}selected{% endif %}> Todas</option>
-                    <option value="semana" {% if filtro_activo == 'semana' %}selected{% endif %}> Última semana</option>
-                    <option value="mes" {% if filtro_activo == 'mes' %}selected{% endif %}> Último mes</option>
-                    <option value="anio" {% if filtro_activo == 'anio' %}selected{% endif %}> Este año</option>
+                    <option value="todos" {% if periodo == 'todos' %}selected{% endif %}> Todas</option>
+                    <option value="semana" {% if periodo == 'semana' %}selected{% endif %}> Última semana</option>
+                    <option value="mes" {% if periodo == 'mes' %}selected{% endif %}> Último mes</option>
+                    <option value="anio" {% if periodo == 'anio' or periodo == 'año' %}selected{% endif %}> Este año</option>
                 </select>
             </form>
             <a href="{% url 'registrar_venta' %}" class="btn btn-primary">
@@ -155,6 +155,36 @@
             </tbody>
         </table>
     </div>
+
+    {% if ventas.paginator.num_pages > 1 %}
+    <nav aria-label="Paginación de ventas" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if ventas.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?filtro={{ periodo|urlencode }}&page={{ ventas.previous_page_number }}">Anterior</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Anterior</span></li>
+            {% endif %}
+
+            {% for num in ventas.paginator.page_range %}
+                {% if ventas.number == num %}
+                    <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+                {% elif num > ventas.number|add:'-3' and num < ventas.number|add:'3' %}
+                    <li class="page-item"><a class="page-link" href="?filtro={{ periodo|urlencode }}&page={{ num }}">{{ num }}</a></li>
+                {% endif %}
+            {% endfor %}
+
+            {% if ventas.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?filtro={{ periodo|urlencode }}&page={{ ventas.next_page_number }}">Siguiente</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
 </div>
 
 <!-- Modal: Cambiar estado de pago -->

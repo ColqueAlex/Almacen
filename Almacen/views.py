@@ -12,11 +12,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import update_session_auth_hash, logout, authenticate, login
-from django.db.models import Max, Sum, Q
+from django.db.models import Max, Sum, Q, OuterRef, Subquery, IntegerField, Value
+from django.db.models.functions import Coalesce
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from functools import wraps
+from django.core.paginator import Paginator
 
 from .models import (
     Productos, Proveedor, Usuario, Perfil, Ventas, DetallesVentas,
@@ -85,6 +87,7 @@ def consultar(request):
         productos = productos.filter(nombre__icontains=busqueda)
 
     has_inactive_products = productos.filter(estado='inactivo').exists()
+    productos = Paginator(productos, 7).get_page(request.GET.get('page'))
 
     return render(request, "productos.html", {
         'productos': productos,
@@ -152,13 +155,14 @@ def ventas(request):
     elif periodo == 'mes':
         desde = hoy - timezone.timedelta(days=30)
         ventas_qs = ventas_qs.filter(fecha__gte=desde)
-    elif periodo == 'año':
+    elif periodo in ('anio', 'año'):
         desde = hoy - timezone.timedelta(days=365)
         ventas_qs = ventas_qs.filter(fecha__gte=desde)
 
+    ventas_paginadas = Paginator(ventas_qs, 7).get_page(request.GET.get('page'))
     fecha_limite = hoy.replace(year=hoy.year - 1)
     return render(request, 'Gstion_Ventas.html', {
-        'ventas': ventas_qs,
+        'ventas': ventas_paginadas,
         'fecha_limite': fecha_limite,
         'periodo': periodo,
     })
@@ -263,7 +267,32 @@ def registrar_venta(request):
     if not caja_activa:
         messages.warning(request, 'Atención: Debe abrir la caja para poder cobrar ventas.')
 
-    productos = Productos.objects.filter(estado='activo')
+    detalles_ventas_producto = (
+        DetallesVentas.objects
+        .filter(producto_id=OuterRef('pk'))
+        .exclude(venta__estado_de_pago__iexact='anulado')
+        .values('producto_id')
+        .annotate(total_vendido=Sum('cantidad'))
+        .values('total_vendido')
+    )
+    productos_qs = Productos.objects.filter(
+        estado='activo',
+        lotes__activo=True,
+        lotes__stock_actual__gt=0,
+    ).distinct()
+    orden = request.GET.get('orden') == 'mas_vendidos'
+    if orden:
+        productos_qs = productos_qs.annotate(
+            total_vendido=Coalesce(
+                Subquery(detalles_ventas_producto, output_field=IntegerField()),
+                Value(0),
+            )
+        ).order_by('-total_vendido', 'nombre')
+    else:
+        productos_qs = productos_qs.order_by('nombre')
+
+    productos_paginados = Paginator(productos_qs, 7)
+    productos = productos_paginados.get_page(request.GET.get('page'))
     categorias = Productos.objects.filter(estado='activo').values_list('categoria', flat=True).distinct()
     clientes = Clientes.objects.all().order_by('nombre')
 
@@ -271,7 +300,8 @@ def registrar_venta(request):
         'productos': productos,
         'categorias': categorias,
         'clientes': clientes,
-        'caja_activa': caja_activa
+        'caja_activa': caja_activa,
+        'orden': 'mas_vendidos' if orden else '',
     })
 
 
@@ -1046,3 +1076,18 @@ def requiere_perfil(*perfiles_permitidos):
                 return redirect('inicio')
         return _wrapped_view
     return decorator
+
+def lista_productos(
+    request,
+):  
+    lista_productos = Productos.objects.all().order_by(
+        '-IDproducto'
+)  
+    paginator = Paginator(lista_productos, 7)
+    page_number = request.GET.get('page')
+    productos = paginator.get_page(page_number)
+
+    context = {
+        'productos': productos,  
+    }
+    return render(request, 'tu_app/productos.html', context)
