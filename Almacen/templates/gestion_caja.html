@@ -23,6 +23,26 @@
         {% endif %}
     </div>
 
+    {% if cajas_ajenas %}
+    <div class="alert alert-warning border-warning shadow-sm">
+        <h5 class="alert-heading"><i class="fa-solid fa-triangle-exclamation me-2"></i>Atención: Hay cajas abiertas por otros usuarios</h5>
+        <hr>
+        <ul class="mb-0">
+            {% for caja_ajena in cajas_ajenas %}
+            <li>
+                El usuario <strong>{{ caja_ajena.usuario.username }}</strong> dejó la Caja <strong>#{{ caja_ajena.id_caja }}</strong> abierta el {{ caja_ajena.fecha_apertura|date:"d/m/Y H:i" }}.
+                <form action="{% url 'forzar_cierre_caja' caja_ajena.id_caja %}" method="post" class="d-inline ms-2">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('¿Seguro que querés cerrar la caja de {{ caja_ajena.usuario.username }}? Se asumirá que el dinero físico coincide con el sistema.');">
+                        Forzar Cierre
+                    </button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     {% if not caja_activa %}
         <!-- Formulario Apertura de Caja -->
         <div class="card shadow-sm border-primary mb-4">
@@ -46,30 +66,33 @@
         </div>
     {% else %}
         <!-- Panel de Estado de Caja Activa -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card bg-light border-0 shadow-sm text-center py-3">
-                    <span class="text-muted small">Monto Inicial</span>
-                    <strong class="fs-4 text-dark">${{ caja_activa.monto_inicial|floatformat:2 }}</strong>
+        <div class="row mb-4 g-2">
+            <div class="row mb-4 g-2">
+                <div class="col-md-3">
+                    <div class="card bg-light border-0 shadow-sm text-center py-3 h-100">
+                        <span class="text-muted small">Monto Inicial</span>
+                        <strong class="fs-5 text-dark">${{ caja_activa.monto_inicial|floatformat:2 }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light border-0 shadow-sm text-center py-3 h-100 border-bottom border-success border-3">
+                        <span class="text-muted small">Efectivo (Ventas + Cobros)</span>
+                        <strong class="fs-5 text-success">+${{ ventas_efectivo|add:cobros_efectivo|floatformat:2 }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light border-0 shadow-sm text-center py-3 h-100 border-bottom border-info border-3">
+                        <span class="text-muted small">Transferencias (Banco)</span>
+                        <strong class="fs-5 text-info">${{ ventas_transferencia|add:cobros_transferencia|floatformat:2 }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white border-0 shadow-sm text-center py-3 h-100">
+                        <span class="small opacity-75">Efectivo Esperado en Caja</span>
+                        <strong class="fs-5">${{ monto_esperado|floatformat:2 }}</strong>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card bg-light border-0 shadow-sm text-center py-3">
-                    <span class="text-muted small">Ventas en Efectivo</span>
-                    <strong class="fs-4 text-success">+${{ ventas_efectivo|floatformat:2 }}</strong>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-light border-0 shadow-sm text-center py-3">
-                    <span class="text-muted small">Ventas Fiadas (Pendientes)</span>
-                    <strong class="fs-4 text-warning">${{ ventas_fiado|floatformat:2 }}</strong>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-primary text-white border-0 shadow-sm text-center py-3">
-                    <span class="small opacity-75">Total Esperado en Caja</span>
-                    <strong class="fs-4">${{ monto_esperado|floatformat:2 }}</strong>
-                </div>
             </div>
         </div>
 

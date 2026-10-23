@@ -79,7 +79,7 @@ import os
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('DB_NAME', 'mydatabase'),
+        'NAME': os.environ.get('DB_NAME', 'Almacen_ElRefugio'),
         'USER': os.environ.get('DB_USER', 'myuser'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'mypassword'),
         'HOST': os.environ.get('DB_HOST', '127.0.0.1'),

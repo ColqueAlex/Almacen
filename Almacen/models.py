@@ -5,11 +5,9 @@ from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
 
-
 def validar_categoria(value):
     if any(char.isdigit() for char in value):
         raise ValidationError('La categoría no puede contener números.')
-
 
 class Productos(models.Model):
     ESTADO_CHOICES = [
@@ -20,11 +18,7 @@ class Productos(models.Model):
     nombre = models.CharField(max_length=100)
     categoria = models.CharField(max_length=100, validators=[validar_categoria])
     marca = models.CharField(max_length=100, default='Sin marca')
-    precio = models.DecimalField(
-    max_digits=10, 
-    decimal_places=2, 
-    validators=[MinValueValidator(0.01)]
-    )
+    precio = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='activo')
 
     def __str__(self):
@@ -35,43 +29,6 @@ class Productos(models.Model):
         res = self.lotes.filter(activo=True).aggregate(total=Sum('stock_actual'))
         return res['total'] if res['total'] is not None else 0
 
-class Ventas(models.Model):
-    id_ventas = models.AutoField(primary_key=True, db_column='ID_ventas')
-    id_caja = models.IntegerField(db_column='ID_Caja')
-    total = models.DecimalField(max_digits=65, decimal_places=2)
-    fecha = models.DateField()
-    hora = models.TimeField(db_column='Hora')
-    id_clientes = models.IntegerField(db_column='ID_Clientes')
-    estado_de_pago = models.CharField(max_length=20, db_column='Estado_de_pago')
-
-    def __str__(self):
-        return f"Venta {self.id_ventas} - Total: {self.total}"
-
-    @property
-    def cliente_info(self):
-        if not self.id_clientes or self.id_clientes == 0:
-            return "Sin fiar"
-        
-        from .models import Clientes
-        try:
-            cliente = Clientes.objects.get(pk=self.id_clientes)
-            return f"{cliente.nombre} {cliente.apellido or ''}".strip()
-        except Clientes.DoesNotExist:
-            return f"Cliente #{self.id_clientes}"
-
-class DetallesVentas(models.Model):
-    id_detalles_ventas = models.IntegerField(primary_key=True, db_column='ID_Detalles_Ventas')
-    venta = models.ForeignKey('Ventas', on_delete=models.CASCADE, db_column='ID_ventas', related_name='detalles')
-    producto = models.ForeignKey('Productos', on_delete=models.PROTECT, db_column='ID_Productos', related_name='detalles_ventas')
-    cantidad = models.IntegerField(db_column='Cantidad')
-    precio_unitario_compra = models.DecimalField(max_digits=65, decimal_places=2, db_column='Precio_Unitario_Compra')
-    subtotal = models.DecimalField(max_digits=65, decimal_places=2, db_column='Subtotal')
-
-    def __str__(self):
-        return f"Detalle {self.id_detalles_ventas} - Venta: {self.venta_id}"
-
-
-    
 class Proveedor(models.Model):
     nombre = models.CharField(max_length=100)
     numero_telefono = models.CharField(max_length=20)
@@ -91,7 +48,7 @@ class Perfil(models.Model):
 class Permiso(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
     descripcion = models.TextField(blank=True, null=True)
-    perfiles = models.ManyToManyField(Perfil, related_name= 'permisos')
+    perfiles = models.ManyToManyField(Perfil, related_name='permisos')
 
     def __str__(self):
         return self.nombre
@@ -132,12 +89,7 @@ class UsuarioManager(BaseUserManager):
 
     def create_superuser(self, dni, apellido, nombre, correo, password=None, username=None, **extra_fields):
         user = self.create_user(
-            dni=dni,
-            apellido=apellido,
-            nombre=nombre,
-            correo=correo,
-            password=password,
-            username=username,
+            dni=dni, apellido=apellido, nombre=nombre, correo=correo, password=password, username=username,
         )
         user.is_admin = True
         user.is_superuser = True
@@ -146,11 +98,10 @@ class UsuarioManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-
 class Usuario(AbstractBaseUser, PermissionsMixin):
     dni = models.IntegerField(primary_key=True)
-    apellido = models.CharField(max_length=100)
-    nombre = models.CharField(max_length=100)
+    apellido = models.CharField(max_length=30)
+    nombre = models.CharField(max_length=30)
     correo = models.EmailField(unique=True)
     username = models.CharField(max_length=100, unique=True)
 
@@ -176,6 +127,37 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.username} - {self.nombre} {self.apellido}"
 
+class Caja(models.Model):
+    ESTADO_CHOICES = [
+        ('abierta', 'Abierta'),
+        ('cerrada', 'Cerrada'),
+    ]
+
+    id_caja = models.AutoField(primary_key=True, db_column='ID_Caja')
+    usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='cajas')
+    monto_inicial = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    monto_final_esperado = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
+    monto_final_real = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
+    diferencia = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
+    
+    fecha_apertura = models.DateTimeField(auto_now_add=True)
+    fecha_cierre = models.DateTimeField(null=True, blank=True)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='abierta')
+    observaciones = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Caja #{self.id_caja} ({self.get_estado_display()}) - {self.usuario.username}"
+
+class Clientes(models.Model):
+    id_clientes = models.AutoField(primary_key=True, db_column='ID_Clientes')
+    nombre = models.CharField(max_length=100)
+    apellido = models.CharField(max_length=100, blank=True, null=True)
+    telefono = models.CharField(max_length=20, blank=True, null=True)
+    saldo = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # NUEVO CAMPO
+
+    def __str__(self):
+        return f"{self.nombre} {self.apellido or ''} - Deuda: ${self.saldo}"
+
 class Compras(models.Model):
     fecha = models.DateField(auto_now_add=True)
     hora = models.TimeField(auto_now_add=True)
@@ -185,8 +167,8 @@ class Compras(models.Model):
     id_usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT)
 
     def __str__(self):
-        return f"Compra #{self.id} - Proveedor: {self.id_proveedor.nombre} - ${self.total}"
-
+        prov = self.id_proveedor.nombre if self.id_proveedor else "Sin proveedor"
+        return f"Compra #{self.id} - Proveedor: {prov} - ${self.total}"
 
 class DetallesCompra(models.Model):
     id_compra = models.ForeignKey(Compras, on_delete=models.CASCADE, related_name='detalles')
@@ -208,35 +190,67 @@ class LotesProducto(models.Model):
     precio_costo = models.DecimalField(max_digits=10, decimal_places=2)
     activo = models.BooleanField(default=True)
 
+    class Meta:
+        unique_together = ('id_producto', 'lote')
+
     def __str__(self):
         return f"{self.id_producto.nombre} - Lote: {self.lote} - Stock: {self.stock_actual}"
 
-class Clientes(models.Model):
-    id_clientes = models.AutoField(primary_key=True, db_column='ID_Clientes')
-    nombre = models.CharField(max_length=100)
-    apellido = models.CharField(max_length=100, blank=True, null=True)
-    telefono = models.CharField(max_length=20, blank=True, null=True)
-
-    def __str__(self):
-        return f"{self.nombre} {self.apellido or ''}"
-
-class Caja(models.Model):
-    ESTADO_CHOICES = [
-        ('abierta', 'Abierta'),
-        ('cerrada', 'Cerrada'),
+class Ventas(models.Model):
+    METODO_PAGO_CHOICES = [
+        ('efectivo', 'Efectivo'),
+        ('transferencia', 'Transferencia'),
+    ]
+    
+    ESTADO_PAGO_CHOICES = [
+        ('pagado', 'Pagado'),
+        ('fiado', 'Fiado'),
+        ('anulado', 'Anulado'),
     ]
 
-    id_caja = models.AutoField(primary_key=True, db_column='ID_Caja')
-    usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='cajas')
-    monto_inicial = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    monto_final_esperado = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
-    monto_final_real = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
-    diferencia = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
-    
-    fecha_apertura = models.DateTimeField(auto_now_add=True)
-    fecha_cierre = models.DateTimeField(null=True, blank=True)
-    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='abierta')
-    observaciones = models.TextField(blank=True, null=True)
+    id_ventas = models.AutoField(primary_key=True, db_column='ID_ventas')
+    id_caja = models.ForeignKey(Caja, on_delete=models.PROTECT, db_column='ID_Caja')
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha = models.DateField()
+    hora = models.TimeField(db_column='Hora')
+    id_clientes = models.ForeignKey(Clientes, on_delete=models.SET_NULL, null=True, blank=True, db_column='ID_Clientes')
+    estado_de_pago = models.CharField(max_length=20, choices=ESTADO_PAGO_CHOICES, default='pagado', db_column='Estado_de_pago') 
+    metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, null=True, blank=True)
 
     def __str__(self):
-        return f"Caja #{self.id_caja} ({self.get_estado_display()}) - {self.usuario.username}"
+        return f"Venta {self.id_ventas} - Total: {self.total}"
+
+    @property
+    def cliente_info(self):
+        if not self.id_clientes:
+            return "Consumidor Final"
+        return f"{self.id_clientes.nombre} {self.id_clientes.apellido or ''}".strip()
+
+class DetallesVentas(models.Model):
+    id_detalles_ventas = models.AutoField(primary_key=True, db_column='ID_Detalles_Ventas') # CORREGIDO A AutoField
+    venta = models.ForeignKey(Ventas, on_delete=models.CASCADE, db_column='ID_ventas', related_name='detalles')
+    producto = models.ForeignKey(Productos, on_delete=models.PROTECT, db_column='ID_Productos', related_name='detalles_ventas')
+    lote = models.ForeignKey(LotesProducto, on_delete=models.SET_NULL, null=True, blank=True, related_name='detalles_ventas') # NUEVO: Para saber de qué lote salió
+    cantidad = models.IntegerField(db_column='Cantidad')
+    precio_unitario_venta = models.DecimalField(max_digits=10, decimal_places=2, db_column='Precio_Unitario_Venta') # CORREGIDO
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, db_column='Subtotal')
+
+    def __str__(self):
+        return f"Detalle {self.id_detalles_ventas} - Venta: {self.venta_id}"
+
+class Pago(models.Model):
+    METODO_PAGO_CHOICES = [
+        ('efectivo', 'Efectivo'),
+        ('transferencia', 'Transferencia'),
+    ]
+    
+    cliente = models.ForeignKey(Clientes, on_delete=models.CASCADE, related_name='pagos')
+    id_caja = models.ForeignKey(Caja, on_delete=models.PROTECT)
+    monto = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
+    fecha = models.DateTimeField(auto_now_add=True)
+    usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT)
+    metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO_CHOICES, default='efectivo')
+
+
+    def __str__(self):
+        return f"Pago de {self.cliente.nombre} - ${self.monto} - {self.fecha.strftime('%d/%m/%Y')}"

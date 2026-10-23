@@ -88,44 +88,56 @@
                 <div class="empty-cart">Carrito vacío</div>
             </div>
 
-            <div class="cart-footer">
-                <!-- Opción Fiar Venta -->
-                <label class="credit-option mb-2 d-flex align-items-center justify-content-between">
-                    <span>Fiar la venta al cliente</span>
-                    <input type="checkbox" id="fiado-checkbox">
-                </label>
+            <form method="post" action="{% url 'registrar_venta' %}" id="sale-form">
+                <div class="cart-footer">
+                    <!-- Opción Fiar Venta -->
+                    <label class="credit-option mb-2 d-flex align-items-center justify-content-between">
+                        <span>Fiar la venta al cliente</span>
+                        <input type="checkbox" id="fiado-checkbox">
+                    </label>
 
-                <!-- Desplegable para Seleccionar / Crear Cliente (Oculto por defecto) -->
-                <div id="seccion-cliente" class="mb-3" style="display: none;">
-                    <label for="cliente-select" class="form-label small fw-semibold text-muted mb-1">Seleccionar Cliente:</label>
-                    <div class="input-group input-group-sm">
-                        <select class="form-select" id="cliente-select">
-                            <option value="">-- Seleccionar cliente --</option>
-                            {% for cliente in clientes %}
-                                <option value="{{ cliente.id_clientes }}">
-                                    {{ cliente.nombre }} {{ cliente.apellido|default:'' }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalNuevoCliente" title="Registrar nuevo cliente">
-                            <i class="fa-solid fa-user-plus"></i>
-                        </button>
+                    <!-- Desplegable para Seleccionar / Crear Cliente  -->
+                    <div id="seccion-cliente" class="mb-3" style="display: none;">
+                        <label for="cliente-select" class="form-label small fw-semibold text-muted mb-1">Seleccionar Cliente:</label>
+                        <div class="input-group input-group-sm">
+                            <select class="form-select" id="cliente-select">
+                                <option value="">-- Seleccionar cliente --</option>
+                                {% for cliente in clientes %}
+                                    <option value="{{ cliente.id_clientes }}">
+                                        {{ cliente.nombre }} {{ cliente.apellido|default:'' }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalNuevoCliente" title="Registrar nuevo cliente">
+                                <i class="fa-solid fa-user-plus"></i>
+                            </button>
+                        </div>
                     </div>
-                </div>
 
-                <div class="total-container">
-                    <span>Total:</span>
-                    <strong id="cart-total">$0.00</strong>
-                </div>
+                    <!-- Selector de Método de Pago -->
+                    <div class="mb-3" id="div-metodo-pago">
+                        <label class="form-label fw-bold">Método de Pago:</label>
+                        <select name="metodo_pago" id="metodo_pago" class="form-select">
+                            <option value="efectivo" selected>💵 Efectivo</option>
+                            <option value="transferencia">🏦 Transferencia</option>
+                        </select>
+                    </div>
 
-                <form method="post" action="{% url 'registrar_venta' %}" id="sale-form">
+                    <div class="total-container">
+                        <span>Total:</span>
+                        <strong id="cart-total">$0.00</strong>
+                    </div>
+
+                    <!-- Inputs ocultos del formulario -->
                     {% csrf_token %}
                     <input type="hidden" name="cart_data" id="cart_data" value="[]">
                     <input type="hidden" name="fiado" id="fiado_value" value="false">
                     <input type="hidden" name="id_cliente" id="id_cliente_value" value="">
+                    
                     <button type="submit" class="btn-finalize mt-3" id="finalize-btn">Finalizar Venta</button>
-                </form>
-            </div>
+                </div>
+            </form>
+            
         </aside>
     </div>
 </div>

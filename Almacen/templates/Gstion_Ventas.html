@@ -21,10 +21,10 @@
         <div class="d-flex align-items-center gap-2">
             <form method="GET" action="" class="m-0">
                 <select name="filtro" onchange="this.form.submit()" class="form-select" style="cursor: pointer;">
-                    <option value="todos" {% if filtro_activo == 'todos' %}selected{% endif %}> Todas</option>
-                    <option value="semana" {% if filtro_activo == 'semana' %}selected{% endif %}> Última semana</option>
-                    <option value="mes" {% if filtro_activo == 'mes' %}selected{% endif %}> Último mes</option>
-                    <option value="anio" {% if filtro_activo == 'anio' %}selected{% endif %}> Este año</option>
+                    <option value="todos" {% if periodo == 'todos' %}selected{% endif %}> Todas</option>
+                    <option value="semana" {% if periodo == 'semana' %}selected{% endif %}> Última semana</option>
+                    <option value="mes" {% if periodo == 'mes' %}selected{% endif %}> Último mes</option>
+                    <option value="año" {% if periodo == 'año' %}selected{% endif %}> Este año</option>
                 </select>
             </form>
             <a href="{% url 'registrar_venta' %}" class="btn btn-primary">
@@ -42,7 +42,7 @@
                     <th>Total</th>
                     <th>Fecha</th>
                     <th>Hora</th>
-                    <th>Cliente Fiado</th>
+                    <th>Cliente</th>
                     <th>Estado de pago</th>
                     <th>Acciones</th>
                 </tr>
@@ -51,13 +51,14 @@
                 {% for venta in ventas %}
                 <tr class="main-row">
                     <td>{{ venta.id_ventas }}</td>
-                    <td>Caja {{ venta.id_caja }}</td>
+                    <!-- CORREGIDO: Como id_caja ahora es un objeto, accedemos a su id interno -->
+                    <td>Caja {{ venta.id_caja.id_caja }}</td>
                     <td>${{ venta.total|floatformat:2 }}</td>
                     <td>{{ venta.fecha|date:"d/m/Y" }}</td>
                     <td>{{ venta.hora|time:"H:i" }}</td>
                     <td>
-                        {% if venta.cliente_info == "Sin fiar" %}
-                            <span class="text-muted">Sin fiar</span>
+                        {% if not venta.id_clientes %}
+                            <span class="text-muted">Consumidor Final</span>
                         {% else %}
                             <span class="fw-semibold text-primary">{{ venta.cliente_info }}</span>
                         {% endif %}
@@ -67,10 +68,8 @@
                             <span class="badge bg-success">Pagado</span>
                         {% elif venta.estado_de_pago|lower == 'anulado' %}
                             <span class="badge bg-danger">Anulado</span>
-                        {% elif venta.estado_de_pago|lower == 'pendiente' %}
-                            <span class="badge bg-warning text-dark">Pendiente</span>
-                        {% elif venta.estado_de_pago|lower == 'abono parcial' or venta.estado_de_pago|lower == 'abono_parcial' %}
-                            <span class="badge bg-info text-dark">Abono parcial</span>
+                        {% elif venta.estado_de_pago|lower == 'fiado' %}
+                            <span class="badge bg-warning text-dark">Fiado</span>
                         {% else %}
                             <span class="badge bg-secondary">{{ venta.estado_de_pago|title }}</span>
                         {% endif %}
@@ -122,7 +121,7 @@
                                         <th class="text-start ps-3">Nombre del producto</th>
                                         <th>Cantidad</th>
                                         <th>Precio unitario</th>
-                                        <th>Descuento aplicado</th>
+                                        <th>Lote Utilizado</th>
                                         <th class="text-end pe-3">Precio Total</th>
                                     </tr>
                                 </thead>
@@ -131,8 +130,15 @@
                                     <tr>
                                         <td class="text-start ps-3 fw-semibold">{{ detalle.producto.nombre }}</td>
                                         <td>{{ detalle.cantidad }}</td>
-                                        <td>${{ detalle.precio_unitario_compra|floatformat:2 }}</td>
-                                        <td><span class="badge bg-light text-secondary border">Sin descuento</span></td>
+                                        <!-- CORREGIDO: precio_unitario_compra -> precio_unitario_venta -->
+                                        <td>${{ detalle.precio_unitario_venta|floatformat:2 }}</td>
+                                        <td>
+                                            {% if detalle.lote %}
+                                                <span class="badge bg-secondary">{{ detalle.lote.lote }}</span>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="text-end pe-3 fw-bold">${{ detalle.subtotal|floatformat:2 }}</td>
                                     </tr>
                                     {% empty %}
@@ -208,7 +214,7 @@
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="estado_de_pago" id="optFiado" value="fiado">
                             <label class="form-check-label" for="optFiado">
-                                <span class="badge bg-secondary">Fiado</span>
+                                <span class="badge bg-warning text-dark">Fiado</span>
                             </label>
                         </div>
                     </div>
@@ -224,7 +230,6 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Toggle detalle de venta
         document.querySelectorAll('.btn-toggle').forEach(function (button) {
             button.addEventListener('click', function () {
                 const mainRow = this.closest('tr');
@@ -236,7 +241,6 @@
             });
         });
 
-        // Precargar modal con datos de la venta seleccionada
         document.querySelectorAll('.btn-modificar').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 const id = btn.dataset.ventaId;

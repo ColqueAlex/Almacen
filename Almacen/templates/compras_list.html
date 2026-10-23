@@ -36,7 +36,14 @@
                 <tr>
                     <td class="fw-bold">#{{ c.id }}</td>
                     <td>{{ c.fecha|date:"d/m/Y" }} {{ c.hora|time:"H:i" }}</td>
-                    <td>{{ c.id_proveedor.nombre }}</td>
+                    <td>
+                        <!-- Ajuste: Si la compra no tiene proveedor, muestra un texto por defecto -->
+                        {% if c.id_proveedor %}
+                            {{ c.id_proveedor.nombre }}
+                        {% else %}
+                            <span class="text-muted fst-italic">Sin proveedor</span>
+                        {% endif %}
+                    </td>
                     <td><span class="badge bg-secondary">{{ c.id_usuario.username }}</span></td>
                     <td><span class="badge bg-success">{{ c.estado }}</span></td>
                     <td class="fw-bold text-success">${{ c.total }}</td>
