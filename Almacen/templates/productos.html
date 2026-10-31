@@ -25,7 +25,7 @@
         </div>
     </div>
 
-    <!-- Modal Agregar Producto -->
+    <!--  Agregar Producto -->
     <div class="modal fade" id="modalGuardar" tabindex="-1" aria-labelledby="modalGuardarLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -52,6 +52,20 @@
                             <label class="form-label fw-semibold">Precio Venta ($):</label>
                             <input type="number" min="0.01" step="0.01" name="precio" class="form-control" required>
                         </div>
+                        
+                        <!-- Selector de Proveedores -->
+                        <div class="mb-3">
+                            <label for="proveedores" class="form-label fw-semibold">Proveedores Habituales:</label>
+                            <select name="proveedores" id="proveedores" class="form-select" multiple size="4">
+                                {% for prov in proveedores %}
+                                    <option value="{{ prov.id }}">{{ prov.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text text-muted small">
+                                <i class="fa-solid fa-circle-info me-1"></i>Mantené apretada la tecla <strong>Ctrl</strong> para seleccionar más de uno.
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Estado:</label>
                             <select name="estado" class="form-select" required>
@@ -76,7 +90,7 @@
                 <tr>
                     <th>Nombre</th>
                     <th>Categoría</th>
-                    <th>Marca</th>
+                    <th>Proveedores</th> <!-- NUEVA COLUMNA -->
                     <th>Precio Venta</th>
                     <th>Stock Disponible</th>
                     <th>Estado</th>
@@ -88,7 +102,14 @@
                 <tr>
                     <td>{{ producto.nombre }}</td>
                     <td>{{ producto.categoria }}</td>
-                    <td>{{ producto.marca }}</td>
+                    <!-- NUEVA COLUMNA: Muestra los proveedores del producto -->
+                    <td>
+                        {% for prov in producto.proveedores.all %}
+                            <span class="badge bg-secondary mb-1">{{ prov.nombre }}</span>
+                        {% empty %}
+                            <span class="text-muted small fst-italic">Sin asignar</span>
+                        {% endfor %}
+                    </td>
                     <td>${{ producto.precio }}</td>
                     <td>
                         {% if producto.stock > 10 %}

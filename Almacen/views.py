@@ -21,7 +21,7 @@ from functools import wraps
 
 from .models import (
     Productos, Proveedor, Usuario, Perfil, Ventas, DetallesVentas,
-    Compras, DetallesCompra, LotesProducto, Clientes, Caja, Pago
+    Compras, DetallesCompra, LotesProducto, Clientes, Caja, Pago, Auditoria
 )
 
 # =======================================================
@@ -89,6 +89,7 @@ def consultar(request):
         
     productos = Productos.objects.all().order_by('nombre')
     busqueda = request.GET.get('busqueda', '').strip()
+    proveedores = Proveedor.objects.filter(activo=True).order_by('nombre')
 
     if busqueda:
         productos = productos.filter(nombre__icontains=busqueda)
@@ -101,6 +102,7 @@ def consultar(request):
         'page_obj': page_obj,
         'busqueda': busqueda,
         'has_inactive_products': has_inactive_products,
+        'proveedores': proveedores,
     })
 
 
@@ -127,7 +129,10 @@ def guardar(request):
         try:
             p.full_clean()
             p.save()
+            proveedores_ids = request.POST.getlist('proveedores')
+            p.proveedores.set(proveedores_ids)
             messages.success(request, f'Producto "{nombre}" agregado al catálogo.')
+            
         except ValidationError as e:
             if hasattr(e, 'message_dict') and 'categoria' in e.message_dict:
                 messages.error(request, 'La categoría no puede contener números.')
@@ -149,8 +154,10 @@ def cambiar_estado(request, id):
 @login_required
 def detalle(request, id):
     producto = get_object_or_404(Productos, pk=id)
+    proveedores = Proveedor.objects.filter(activo=True).order_by('nombre')
     return render(request, "productoEditar.html", {
-        'producto': producto
+        'producto': producto,
+        'proveedores': proveedores,
     })
 
 
@@ -212,6 +219,8 @@ def editar(request):
         try:
             producto.full_clean()
             producto.save()
+            proveedores_ids = request.POST.getlist('proveedores')
+            producto.proveedores.set(proveedores_ids)
             messages.success(request, f'Producto "{producto.nombre}" actualizado correctamente.')
         except ValidationError as e:
             if hasattr(e, 'message_dict') and 'categoria' in e.message_dict:
@@ -710,6 +719,9 @@ def registro_compras(request):
                     precio_costo = Decimal(str(item['precio_costo']))
                     lote_str = item.get('lote', 'Sin lote').strip()
                     
+                    if precio_costo > producto.precio:
+                        raise ValueError(f'El costo de "{producto.nombre}" (${precio_costo}) no puede ser mayor a su precio de venta (${producto.precio}).')
+
                     fecha_venc_str = item.get('fecha_vencimiento')
                     fecha_venc = None
 
@@ -756,17 +768,69 @@ def registro_compras(request):
 
     proveedores = Proveedor.objects.filter(activo=True).order_by('nombre')
     productos = Productos.objects.filter(estado='activo').order_by('nombre')
+    
+    productos_sin_proveedor = list(Productos.objects.filter(estado='activo', proveedores__isnull=True).values_list('id', flat=True))
+    
+    mapeo_proveedores = {}
+    for prov in proveedores:
+        mapeo_proveedores[str(prov.id)] = list(prov.productos_que_suministra.values_list('id', flat=True))
+
     return render(request, 'registro_compras.html', {
         'proveedores': proveedores,
-        'productos': productos
+        'productos': productos,
+        'mapeo_proveedores': mapeo_proveedores, 
+        'productos_sin_proveedor': productos_sin_proveedor,
     })
 
 
 @login_required
 @requiere_perfil('Administrador')
 def listar_compras(request):
-    compras = Compras.objects.all().order_by('-id')
+    compras = Compras.objects.prefetch_related('detalles__id_producto').order_by('-id')
     return render(request, 'compras_list.html', {'compras': compras})
+
+@login_required
+@requiere_perfil('Administrador')
+def anular_compra(request, id_compra):
+    compra = get_object_or_404(Compras, pk=id_compra)
+    
+    if compra.estado == 'Anulado':
+        messages.warning(request, 'Esta compra ya fue anulada anteriormente.')
+        return redirect('listar_compras')
+        
+    if request.method == 'POST':
+        motivo = request.POST.get('motivo', '').strip()
+        if not motivo:
+            messages.error(request, 'Debe ingresar un motivo para anular la compra.')
+            return redirect('listar_compras')
+
+        try:
+            with transaction.atomic():
+                compra.estado = 'Anulado'
+                compra.motivo_anulacion = motivo
+                compra.fecha_anulacion = timezone.now()
+                compra.usuario_anulacion = request.user
+                compra.save()
+
+                detalles = DetallesCompra.objects.filter(id_compra=compra)
+                for detalle in detalles:
+                    lote = LotesProducto.objects.filter(
+                        id_producto=detalle.id_producto,
+                        lote=detalle.lote,
+                        fecha_vencimiento=detalle.fecha_vencimiento
+                    ).first()
+                    
+                    if lote:
+                        lote.stock_actual -= detalle.cantidad
+                        if lote.stock_actual < 0:
+                            lote.stock_actual = 0
+                        lote.save()
+
+            messages.success(request, f'Compra #{compra.id} anulada correctamente. El stock fue revertido.')
+        except Exception as e:
+            messages.error(request, f'Error al anular la compra: {str(e)}')
+
+    return redirect('listar_compras')
 
 
 # =======================================================
@@ -1089,3 +1153,15 @@ def generar_comprobante_pdf(request, id_venta):
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename="Comprobante_Venta_{venta.id_ventas}.pdf"'
     return response
+
+@login_required
+@requiere_perfil('Administrador')
+def listar_auditoria(request):
+    registros = Auditoria.objects.all().order_by('-fecha_hora')
+    
+    page_obj = Paginator(registros, 20).get_page(request.GET.get('page'))
+    
+    return render(request, 'auditoria.html', {
+        'registros': page_obj,
+        'page_obj': page_obj,
+    })

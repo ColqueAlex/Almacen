@@ -1,0 +1,65 @@
+{% extends 'plantillas.html' %}
+
+{% block content %}
+<div class="container my-4">
+    <h2 class="mb-4"><i class="fa-solid fa-shield-halved me-2"></i>Registro de Actividades</h2>
+
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-hover table-light align-middle text-center mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Fecha y Hora</th>
+                    <th>Usuario</th>
+                    <th>Acción</th>
+                    <th>Módulo</th>
+                    <th>Descripción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for reg in registros %}
+                <tr>
+                    <td>{{ reg.fecha_hora|date:"d/m/Y H:i" }}</td>
+                    <td>
+                        {% if reg.usuario %}
+                            <span class="badge bg-primary">{{ reg.usuario.username }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Sistema</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if reg.accion == 'creacion' %}
+                            <span class="badge bg-success">Creación</span>
+                        {% elif reg.accion == 'modificacion' %}
+                            <span class="badge bg-warning text-dark">Modificación</span>
+                        {% else %}
+                            <span class="badge bg-danger">Eliminación</span>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ reg.modelo }}</strong></td>
+                    <td class="text-start">{{ reg.descripcion }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-muted py-3">No hay registros de auditoría.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-3">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a></li>
+            {% endif %}
+            <li class="page-item active"><span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+            {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

@@ -20,6 +20,7 @@ class Productos(models.Model):
     marca = models.CharField(max_length=100, default='Sin marca')
     precio = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='activo')
+    proveedores = models.ManyToManyField('Proveedor', blank=True, related_name='productos_que_suministra')
 
     def __str__(self):
         return f"{self.nombre} ({self.marca}) - ${self.precio}"
@@ -165,6 +166,9 @@ class Compras(models.Model):
     estado = models.CharField(max_length=20, default='Confirmado')
     id_proveedor = models.ForeignKey(Proveedor, on_delete=models.PROTECT, null=True, blank=True)
     id_usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT)
+    motivo_anulacion = models.TextField(blank=True, null=True)
+    fecha_anulacion = models.DateTimeField(blank=True, null=True)
+    usuario_anulacion = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name='compras_anuladas')
 
     def __str__(self):
         prov = self.id_proveedor.nombre if self.id_proveedor else "Sin proveedor"
@@ -254,3 +258,25 @@ class Pago(models.Model):
 
     def __str__(self):
         return f"Pago de {self.cliente.nombre} - ${self.monto} - {self.fecha.strftime('%d/%m/%Y')}"
+
+class Auditoria(models.Model):
+    ACCIONES_CHOICES = [
+        ('creacion', 'Creación'),
+        ('modificacion', 'Modificación'),
+        ('eliminacion', 'Eliminación'),
+    ]
+
+    usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)
+    accion = models.CharField(max_length=20, choices=ACCIONES_CHOICES)
+    modelo = models.CharField(max_length=50)
+    objeto_id = models.IntegerField(null=True, blank=True)
+    descripcion = models.TextField()
+    fecha_hora = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Auditoría"
+        verbose_name_plural = "Auditorías"
+        ordering = ['-fecha_hora']
+
+    def __str__(self):
+        return f"{self.get_accion_display()} - {self.modelo} por {self.usuario.username if self.usuario else 'Sistema'}"

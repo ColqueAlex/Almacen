@@ -14,6 +14,10 @@
 
     <h2 class="mb-4"><i class="fa-solid fa-truck-ramp-box me-2"></i>Registrar Ingreso de Compra</h2>
 
+    <!-- INYECCIÓN SEGURA DE DATOS PARA JAVASCRIPT -->
+    {{ mapeo_proveedores|json_script:"mapeo-proveedores-data" }}
+    {{ productos_sin_proveedor|json_script:"productos-sin-proveedor-data" }}
+
     <div class="row">
         <div class="col-md-6">
             <div class="card shadow-sm mb-4">
@@ -41,7 +45,7 @@
                         <select id="producto-select" class="form-select">
                             <option value="" disabled selected>Seleccione producto...</option>
                             {% for prod in productos %}
-                                <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-marca="{{ prod.marca }}">
+                                <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-marca="{{ prod.marca }}" data-precio="{{ prod.precio }}">
                                     {{ prod.nombre }} ({{ prod.marca }})
                                 </option>
                             {% endfor %}
@@ -79,7 +83,6 @@
             </div>
         </div>
 
- 
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-header bg-dark text-white fw-semibold d-flex justify-content-between align-items-center">
@@ -124,6 +127,38 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        const mapeoProveedores = JSON.parse(document.getElementById('mapeo-proveedores-data').textContent);
+        const productosSinProveedor = JSON.parse(document.getElementById('productos-sin-proveedor-data').textContent);
+        
+        const proveedorSelect = document.getElementById('proveedor-select');
+        const productoSelect = document.getElementById('producto-select');
+        const todasLasOpciones = Array.from(productoSelect.options);
+
+        proveedorSelect.addEventListener('change', function () {
+            const proveedorId = this.value;
+            productoSelect.innerHTML = '<option value="" disabled selected>Seleccione producto...</option>';
+            
+            if (!proveedorId) {
+                todasLasOpciones.forEach(opt => {
+                    if (opt.value !== "") {
+                        const prodId = parseInt(opt.value);
+                        if (productosSinProveedor.includes(prodId)) {
+                            productoSelect.appendChild(opt.cloneNode(true));
+                        }
+                    }
+                });
+            } else {
+                const productosPermitidos = mapeoProveedores[proveedorId] || [];
+                todasLasOpciones.forEach(opt => {
+                    if (opt.value === "") return;
+                    const prodId = parseInt(opt.value);
+                    if (productosPermitidos.includes(prodId)) {
+                        productoSelect.appendChild(opt.cloneNode(true));
+                    }
+                });
+            }
+        });
+
         const cart = [];
         const btnAgregar = document.getElementById('btn-agregar-item');
         const carritoBody = document.getElementById('carrito-body');
@@ -131,7 +166,6 @@
         const formCompra = document.getElementById('form-compra');
         const inputProveedor = document.getElementById('input-proveedor-id');
         const inputCartData = document.getElementById('input-cart-data');
-        const proveedorSelect = document.getElementById('proveedor-select');
 
         function renderCart() {
             if (!cart.length) {
@@ -170,17 +204,21 @@
 
         btnAgregar.addEventListener('click', function () {
             const prodSelect = document.getElementById('producto-select');
+            
+            if (!prodSelect.value || prodSelect.selectedIndex === 0) {
+                alert('Debe seleccionar un producto.');
+                return;
+            }
+
             const prodOption = prodSelect.options[prodSelect.selectedIndex];
             const loteVal = document.getElementById('lote-input').value.trim() || 'Sin lote';
             const vencInput = document.getElementById('fecha_vencimiento');
             const vencVal = vencInput.value;
             const cantVal = parseInt(document.getElementById('cantidad-input').value) || 0;
+            
             const costoVal = parseFloat(document.getElementById('costo-input').value) || 0;
+            const precioVentaVal = parseFloat(prodOption.dataset.precio) || 0;
 
-            if (!prodSelect.value) {
-                alert('Debe seleccionar un producto.');
-                return;
-            }
             if (cantVal <= 0) {
                 alert('La cantidad debe ser mayor a 0.');
                 return;
@@ -190,7 +228,11 @@
                 return;
             }
 
-            // Validar fecha de vencimiento si fue ingresada
+            if (costoVal > precioVentaVal) {
+                alert("¡Atención! El precio de costo ($" + costoVal.toFixed(2) + ") no puede ser mayor al precio de venta ($" + precioVentaVal.toFixed(2) + ").");
+                return; 
+            }
+
             if (vencVal) {
                 const fechaSeleccionada = new Date(vencVal);
                 const hoy = new Date();
@@ -220,7 +262,6 @@
 
             renderCart();
 
-            // Limpiar campos del producto
             prodSelect.selectedIndex = 0;
             document.getElementById('lote-input').value = '';
             vencInput.value = '';

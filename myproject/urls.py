@@ -42,4 +42,6 @@ urlpatterns = [
     path('caja/abrir/', views.abrir_caja, name='abrir_caja'),
     path('caja/cerrar/', views.cerrar_caja, name='cerrar_caja'),
     path('caja/forzar-cierre/<int:id_caja>/', views.forzar_cierre_caja, name='forzar_cierre_caja'),
+    path('auditoria/', views.listar_auditoria, name='listar_auditoria'),
+    path('compras/anular/<int:id_compra>/', views.anular_compra, name='anular_compra'),
 ]

@@ -25,28 +25,115 @@
                 <tr>
                     <th>N° Compra</th>
                     <th>Fecha / Hora</th>
-                    <th>Proveedor</th>
-                    <th>Usuario Responsable</th>
+                    <th>Usuario</th>
                     <th>Estado</th>
                     <th>Total</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 {% for c in compras %}
-                <tr>
+                <tr class="main-row">
                     <td class="fw-bold">#{{ c.id }}</td>
                     <td>{{ c.fecha|date:"d/m/Y" }} {{ c.hora|time:"H:i" }}</td>
+                    
+                    
+                    <td><span class="badge bg-secondary">{{ c.id_usuario.username }}</span></td>
+                    
                     <td>
-                        <!-- Ajuste: Si la compra no tiene proveedor, muestra un texto por defecto -->
-                        {% if c.id_proveedor %}
-                            {{ c.id_proveedor.nombre }}
+                        {% if c.estado == 'Anulado' %}
+                            <span class="badge bg-danger" title="Motivo: {{ c.motivo_anulacion }}">Anulado</span>
                         {% else %}
-                            <span class="text-muted fst-italic">Sin proveedor</span>
+                            <span class="badge bg-success">{{ c.estado }}</span>
                         {% endif %}
                     </td>
-                    <td><span class="badge bg-secondary">{{ c.id_usuario.username }}</span></td>
-                    <td><span class="badge bg-success">{{ c.estado }}</span></td>
+                    
                     <td class="fw-bold text-success">${{ c.total }}</td>
+                    
+                    <td>
+                        <div class="d-flex justify-content-center gap-2">
+                            <button type="button" class="btn btn-secondary btn-sm btn-toggle" title="Ver detalle" aria-label="Ver detalle">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+
+                            {% if c.estado == 'Anulado' %}
+                                <button class="btn btn-sm btn-outline-danger" disabled title="Anulada por {{ c.usuario_anulacion.username }} el {{ c.fecha_anulacion|date:'d/m/Y H:i' }}">
+                                    <i class="fa-solid fa-ban"></i> Anulada
+                                </button>
+                            {% else %}
+                                <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalAnular{{ c.id }}">
+                                    <i class="fa-solid fa-xmark"></i> Anular
+                                </button>
+
+                                <div class="modal fade" id="modalAnular{{ c.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content text-start">
+                                            <form method="post" action="{% url 'anular_compra' c.id %}">
+                                                {% csrf_token %}
+                                                <div class="modal-header bg-danger text-white">
+                                                    <h5 class="modal-title">Anular Compra #{{ c.id }}</h5>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>¿Está seguro de anular esta compra? <strong>El stock de los productos será revertido automáticamente.</strong></p>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-semibold">Motivo de anulación:</label>
+                                                        <textarea name="motivo" class="form-control" rows="3" required placeholder="Ej: Mercadería vencida, error de carga, etc."></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                    <button type="submit" class="btn btn-danger">Confirmar Anulación</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+
+                <tr class="detail-row hidden" style="display: none;">
+                    <!-- CAMBIAMOS COLSPAN DE 7 A 6 -->
+                    <td colspan="6" class="p-3 bg-light">
+                        <div class="table-responsive bg-white rounded border shadow-sm p-2">
+                            <table class="table table-sm table-hover align-middle text-center mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-start ps-3">Producto</th>
+                                        <th>Lote</th>
+                                        <th>Vencimiento</th>
+                                        <th>Cantidad</th>
+                                        <th>Precio Costo</th>
+                                        <th class="text-end pe-3">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for detalle in c.detalles.all %}
+                                    <tr>
+                                        <td class="text-start ps-3 fw-semibold">{{ detalle.id_producto.nombre }}</td>
+                                        <td><span class="badge bg-secondary">{{ detalle.lote }}</span></td>
+                                        <td>
+                                            {% if detalle.fecha_vencimiento %}
+                                                {{ detalle.fecha_vencimiento|date:"d/m/Y" }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ detalle.cantidad }}</td>
+                                        <td>${{ detalle.precio_unitario_compra|floatformat:2 }}</td>
+                                        <td class="text-end pe-3 fw-bold">${{ detalle.subtotal|floatformat:2 }}</td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-2">No hay productos registrados en esta compra.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
@@ -58,4 +145,24 @@
     </div>
 
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.btn-toggle').forEach(function (button) {
+            button.addEventListener('click', function () {
+                const mainRow = this.closest('tr');
+                const detailRow = mainRow.nextElementSibling;
+                if (detailRow && detailRow.classList.contains('detail-row')) {
+                    if (detailRow.style.display === 'none') {
+                        detailRow.style.display = 'table-row';
+                        this.querySelector('i').classList.replace('fa-chevron-down', 'fa-chevron-up');
+                    } else {
+                        detailRow.style.display = 'none';
+                        this.querySelector('i').classList.replace('fa-chevron-up', 'fa-chevron-down');
+                    }
+                }
+            });
+        });
+    });
+</script>
 {% endblock %}
