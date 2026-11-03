@@ -1,36 +1,85 @@
-{% extends 'plantillas.html' %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Iniciar Sesión</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/auth.css' %}">
+</head>
+<body>
 
-{% block content %}
-<div class="container my-5">
-    <div class="row justify-content-center">
-        <div class="col-md-4">
-            <div class="card shadow-sm">
-                <div class="card-body p-4">
-                    <h3 class="text-center mb-4">Iniciar Sesión</h3>
-
-                    {% if messages %}
-                        {% for message in messages %}
-                            <div class="alert alert-danger p-2 text-center mb-3" role="alert">
-                                {{ message }}
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-
-                    <form method="post">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label">Usuario:</label>
-                            <input type="text" name="username" class="form-control" required autofocus>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Contraseña:</label>
-                            <input type="password" name="password" class="form-control" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Ingresar</button>
-                    </form>
-                </div>
-            </div>
+    <div class="auth-wrapper">
+        <!-- LOGO DE LA EMPRESA -->
+        <div class="auth-brand" style="margin-bottom: 30px;">
+            <img src="{% static 'img/logo.png' %}" alt="Almacén El Refugio" class="auth-logo-img">
         </div>
+
+        <!-- TARJETA PRINCIPAL -->
+        <div class="auth-card">
+            <div class="auth-header">
+                <h2>Bienvenido de nuevo</h2>
+                <p>Ingresá tus credenciales para acceder al sistema.</p>
+            </div>
+
+            <!-- MENSAJES DE ERROR (Usuario/Contraseña incorrectos, cuenta inactiva) -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert-error">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">error</span>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <form method="POST" action="{% url 'login' %}">
+                {% csrf_token %}
+                
+                <div class="input-group">
+                    <label>Usuario</label>
+                    <div style="position: relative;">
+                        <span class="material-symbols-outlined" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted); font-size: 20px;">person</span>
+                        <input type="text" name="username" class="form-control" required placeholder="Ingresá tu usuario" style="padding-left: 40px;">
+                    </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 24px;">
+                    <label>Contraseña</label>
+                    <div style="position: relative;">
+                        <span class="material-symbols-outlined" style="position: absolute; left: 12px; top: 12px; color: var(--text-muted); font-size: 20px;">lock</span>
+                        <input type="password" name="password" id="password-input" class="form-control" required placeholder="••••••••" style="padding-left: 40px; padding-right: 40px;">
+                        
+                        <!-- Botón para ver/ocultar contraseña -->
+                        <span class="material-symbols-outlined btn-toggle-pass" style="position: absolute; right: 12px; top: 12px; color: var(--text-muted); font-size: 20px; cursor: pointer;" onclick="togglePassword()">visibility_off</span>
+                    </div>
+                </div>
+
+                <!-- Ya no hay enlace de olvidar contraseña ni checkbox de recordarme -->
+
+                <button type="submit" class="btn-submit">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">login</span>
+                    Ingresar al Sistema
+                </button>
+            </form>
+        </div>
+
     </div>
-</div>
-{% endblock %}
+
+    <script>
+        // Función para mostrar/ocultar la contraseña
+        function togglePassword() {
+            const input = document.getElementById('password-input');
+            const icon = document.querySelector('.btn-toggle-pass');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.textContent = 'visibility';
+            } else {
+                input.type = 'password';
+                icon.textContent = 'visibility_off';
+            }
+        }
+    </script>
+</body>
+</html>

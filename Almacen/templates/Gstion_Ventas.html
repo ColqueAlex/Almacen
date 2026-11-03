@@ -1,258 +1,210 @@
-{% extends 'plantillas.html' %}
 {% load static %}
-
-{% block content %}
-<link rel="stylesheet" href="{% static 'css/Gestion_Ventas.css' %}">
-
-<div class="container my-4">
-    {% if messages %}
-        <div class="my-3">
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'success' }}{% endif %} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            {% endfor %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Historial de Ventas</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/historiales.css' %}">
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
         </div>
-    {% endif %}
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas / POS</a>
+            <a href="{% url 'consultar' %}" class="nav-item"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
+            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
+            <a href="{% url 'ventas' %}" class="nav-item active"><span class="material-symbols-outlined">receipt_long</span> Historial Ventas</a>
+            <a href="{% url 'listar_compras' %}" class="nav-item"><span class="material-symbols-outlined">shopping_bag</span> Historial Compras</a>
+        </nav>
+    </aside>
 
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-        <h2>Ventas</h2>
-        <div class="d-flex align-items-center gap-2">
-            <form method="GET" action="" class="m-0">
-                <select name="filtro" onchange="this.form.submit()" class="form-select" style="cursor: pointer;">
-                    <option value="todos" {% if periodo == 'todos' %}selected{% endif %}> Todas</option>
-                    <option value="semana" {% if periodo == 'semana' %}selected{% endif %}> Última semana</option>
-                    <option value="mes" {% if periodo == 'mes' %}selected{% endif %}> Último mes</option>
-                    <option value="año" {% if periodo == 'año' %}selected{% endif %}> Este año</option>
-                </select>
-            </form>
-            <a href="{% url 'registrar_venta' %}" class="btn btn-primary">
-                <i class="fa-solid fa-cart-plus me-1"></i> Registrar Venta
-            </a>
-        </div>
-    </div>
-
-    <div class="ventas-wrapper table-responsive rounded">
-        <table class="ventas-table table table-hover align-middle text-center mb-0">
-            <thead>
-                <tr>
-                    <th>N° Venta</th>
-                    <th>N° Caja</th>
-                    <th>Total</th>
-                    <th>Fecha</th>
-                    <th>Hora</th>
-                    <th>Cliente</th>
-                    <th>Estado de pago</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for venta in ventas %}
-                <tr class="main-row">
-                    <td>{{ venta.id_ventas }}</td>
-                    <!-- CORREGIDO: Como id_caja ahora es un objeto, accedemos a su id interno -->
-                    <td>Caja {{ venta.id_caja.id_caja }}</td>
-                    <td>${{ venta.total|floatformat:2 }}</td>
-                    <td>{{ venta.fecha|date:"d/m/Y" }}</td>
-                    <td>{{ venta.hora|time:"H:i" }}</td>
-                    <td>
-                        {% if not venta.id_clientes %}
-                            <span class="text-muted">Consumidor Final</span>
-                        {% else %}
-                            <span class="fw-semibold text-primary">{{ venta.cliente_info }}</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if venta.estado_de_pago|lower == 'pagado' %}
-                            <span class="badge bg-success">Pagado</span>
-                        {% elif venta.estado_de_pago|lower == 'anulado' %}
-                            <span class="badge bg-danger">Anulado</span>
-                        {% elif venta.estado_de_pago|lower == 'fiado' %}
-                            <span class="badge bg-warning text-dark">Fiado</span>
-                        {% else %}
-                            <span class="badge bg-secondary">{{ venta.estado_de_pago|title }}</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div class="d-flex justify-content-center gap-2">
-                            <!-- Botón Imprimir Comprobante PDF -->
-                            <a href="{% url 'generar_comprobante_pdf' venta.id_ventas %}" 
-                               target="_blank" 
-                               class="btn btn-info btn-sm text-white" 
-                               title="Imprimir comprobante PDF">
-                                <i class="fa-solid fa-print"></i>
-                            </a>
-
-                            {% if venta.estado_de_pago|lower != 'anulado' %}
-                                <button type="button"
-                                    class="btn btn-warning btn-sm text-white btn-modificar"
-                                    title="Modificar estado de pago"
-                                    data-venta-id="{{ venta.id_ventas }}"
-                                    data-estado-actual="{{ venta.estado_de_pago|lower }}"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#modalEstadoPago">
-                                    <i class="fa-sharp fa-solid fa-pen-to-square"></i>
-                                </button>
-                            {% endif %}
-
-                            <button type="button" class="btn btn-secondary btn-sm text-white btn-toggle" title="Ver detalle" aria-label="Ver detalle" data-venta-id="{{ venta.id_ventas }}">
-                                <i class="fa-solid fa-chevron-down"></i>
-                            </button>
-
-                            {% if venta.estado_de_pago|lower != 'anulado' %}
-                                <form method="post" action="{% url 'anular_venta' venta.id_ventas %}" style="display:inline">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-danger btn-sm" title="Anular venta y reincorporar stock"
-                                            onclick="return confirm('¿Está seguro de que desea anular la Venta #{{ venta.id_ventas }}?\nLos productos serán reincorporados al almacén.');">
-                                        <i class="fa-solid fa-ban"></i>
-                                    </button>
-                                </form>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                <tr class="detail-row hidden">
-                    <td colspan="8" class="p-3 bg-light">
-                        <div class="table-responsive bg-white rounded border shadow-sm p-2">
-                            <table class="table table-sm table-hover align-middle text-center mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="text-start ps-3">Nombre del producto</th>
-                                        <th>Cantidad</th>
-                                        <th>Precio unitario</th>
-                                        <th>Lote Utilizado</th>
-                                        <th class="text-end pe-3">Precio Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for detalle in venta.detalles.all %}
-                                    <tr>
-                                        <td class="text-start ps-3 fw-semibold">{{ detalle.producto.nombre }}</td>
-                                        <td>{{ detalle.cantidad }}</td>
-                                        <!-- CORREGIDO: precio_unitario_compra -> precio_unitario_venta -->
-                                        <td>${{ detalle.precio_unitario_venta|floatformat:2 }}</td>
-                                        <td>
-                                            {% if detalle.lote %}
-                                                <span class="badge bg-secondary">{{ detalle.lote.lote }}</span>
-                                            {% else %}
-                                                <span class="text-muted">-</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end pe-3 fw-bold">${{ detalle.subtotal|floatformat:2 }}</td>
-                                    </tr>
-                                    {% empty %}
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-2">
-                                            No hay detalles registrados para esta venta.
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="8" class="text-center text-muted">No hay ventas registradas.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    {% if page_obj.paginator.num_pages > 1 %}
-    <nav class="mt-3" aria-label="Paginación de ventas">
-        <ul class="pagination justify-content-center flex-wrap mb-0">
-            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
-                {% if page_obj.has_previous %}
-                    <a class="page-link" href="?filtro={{ periodo|urlencode }}&page={{ page_obj.previous_page_number }}">Anterior</a>
-                {% else %}
-                    <span class="page-link">Anterior</span>
-                {% endif %}
-            </li>
-            {% for page_number in page_obj.paginator.page_range %}
-                <li class="page-item {% if page_obj.number == page_number %}active{% endif %}">
-                    <a class="page-link" href="?filtro={{ periodo|urlencode }}&page={{ page_number }}" {% if page_obj.number == page_number %}aria-current="page"{% endif %}>{{ page_number }}</a>
-                </li>
-            {% endfor %}
-            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
-                {% if page_obj.has_next %}
-                    <a class="page-link" href="?filtro={{ periodo|urlencode }}&page={{ page_obj.next_page_number }}">Siguiente</a>
-                {% else %}
-                    <span class="page-link">Siguiente</span>
-                {% endif %}
-            </li>
-        </ul>
-    </nav>
-    {% endif %}
-</div>
-
-<!-- Modal: Cambiar estado de pago -->
-<div class="modal fade" id="modalEstadoPago" tabindex="-1" aria-labelledby="modalEstadoPagoLabel" aria-hidden="true">
-    <div class="modal-dialog modal-sm">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modalEstadoPagoLabel">
-                    <i class="fa-solid fa-pen-to-square me-2"></i>Modificar estado de pago
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+    <div class="main-content">
+        <header class="top-header">
+            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime"></span>
             </div>
-            <form method="post" id="formEstadoPago" action="">
-                {% csrf_token %}
-                <div class="modal-body">
-                    <p class="text-muted mb-3">Venta <strong id="modalVentaId"></strong></p>
-                    <label class="form-label fw-semibold">Nuevo estado:</label>
-                    <div class="d-grid gap-2">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="estado_de_pago" id="optPagado" value="pagado">
-                            <label class="form-check-label" for="optPagado">
-                                <span class="badge bg-success">Pagado</span>
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="estado_de_pago" id="optFiado" value="fiado">
-                            <label class="form-check-label" for="optFiado">
-                                <span class="badge bg-warning text-dark">Fiado</span>
-                            </label>
-                        </div>
-                    </div>
+            <div class="header-user">
+                <div style="display: flex; flex-direction: column; text-align: right;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Cajero" }}</span>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-warning btn-sm text-white">Guardar</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+            </div>
+        </header>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.btn-toggle').forEach(function (button) {
-            button.addEventListener('click', function () {
+        <main class="inv-container">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <span class="subtitle-badge">Registro de Operaciones</span>
+                    <h1 class="page-title">Historial de Ventas</h1>
+                </div>
+                <a href="{% url 'registrar_venta' %}" class="btn-primary">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nueva Venta
+                </a>
+            </div>
+
+            <!-- TOOLBAR -->
+            <div class="toolbar">
+                <div class="search-box">
+                    <span class="material-symbols-outlined">search</span>
+                    <input type="text" id="search-venta" placeholder="Buscar por N° Venta o Cliente...">
+                </div>
+                <form method="GET" action="{% url 'ventas' %}" style="display: flex; gap: 10px;">
+                    <select name="filtro" class="filter-select" onchange="this.form.submit()">
+                        <option value="todos" {% if periodo == 'todos' %}selected{% endif %}>Todas las fechas</option>
+                        <option value="semana" {% if periodo == 'semana' %}selected{% endif %}>Última semana</option>
+                        <option value="mes" {% if periodo == 'mes' %}selected{% endif %}>Último mes</option>
+                        <option value="año" {% if periodo == 'año' %}selected{% endif %}>Este año</option>
+                    </select>
+                </form>
+            </div>
+
+            <!-- TABLA -->
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>N° Venta</th>
+                            <th>Caja</th>
+                            <th>Total</th>
+                            <th>Fecha / Hora</th>
+                            <th>Cliente</th>
+                            <th>Estado</th>
+                            <th style="text-align: right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for venta in ventas %}
+                        <tr class="main-row fila-venta" data-search="{{ venta.id_ventas }} {{ venta.cliente_info|lower }}">
+                            <td style="font-weight: 700;">#{{ venta.id_ventas }}</td>
+                            <td>Caja {{ venta.id_caja.id_caja }}</td>
+                            <td style="font-weight: 800; color: var(--text-main);">${{ venta.total|floatformat:2 }}</td>
+                            <td>{{ venta.fecha|date:"d/m/Y" }} <span style="color: var(--text-muted); font-size: 12px;">{{ venta.hora|time:"H:i" }}</span></td>
+                            <td>
+                                {% if not venta.id_clientes %}
+                                    <span style="color: var(--text-muted);">Consumidor Final</span>
+                                {% else %}
+                                    <span style="color: var(--primary); font-weight: 600;">{{ venta.cliente_info }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if venta.estado_de_pago|lower == 'pagado' %}
+                                    <span class="badge badge-pagado">Pagado</span>
+                                {% elif venta.estado_de_pago|lower == 'anulado' %}
+                                    <span class="badge badge-anulado">Anulado</span>
+                                {% else %}
+                                    <span class="badge badge-fiado">Fiado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="actions">
+                                    <a href="{% url 'generar_comprobante_pdf' venta.id_ventas %}" target="_blank" class="btn-icon" title="Imprimir PDF">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">print</span>
+                                    </a>
+                                    <button type="button" class="btn-icon btn-toggle" title="Ver Detalle">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">expand_more</span>
+                                    </button>
+                                    {% if venta.estado_de_pago|lower != 'anulado' %}
+                                    <form method="post" action="{% url 'anular_venta' venta.id_ventas %}" style="margin: 0;" onsubmit="return confirm('¿Anular Venta #{{ venta.id_ventas }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn-icon danger" title="Anular">
+                                            <span class="material-symbols-outlined" style="font-size: 20px;">cancel</span>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        <tr class="detail-row hidden">
+                            <td colspan="7">
+                                <div class="detail-content">
+                                    <table class="detail-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Producto</th>
+                                                <th>Lote</th>
+                                                <th>Cant.</th>
+                                                <th>Precio Unit.</th>
+                                                <th>Subtotal</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for detalle in venta.detalles.all %}
+                                            <tr>
+                                                <td style="font-weight: 600;">{{ detalle.producto.nombre }}</td>
+                                                <td>{{ detalle.lote.lote|default:"-" }}</td>
+                                                <td>{{ detalle.cantidad }}</td>
+                                                <td>${{ detalle.precio_unitario_venta|floatformat:2 }}</td>
+                                                <td style="font-weight: 700;">${{ detalle.subtotal|floatformat:2 }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">No hay ventas registradas.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Reloj
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        setInterval(updateClock, 1000); updateClock();
+
+        // Buscador
+        document.getElementById('search-venta').addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            document.querySelectorAll('.fila-venta').forEach(row => {
+                const data = row.dataset.search;
+                const nextRow = row.nextElementSibling; // Fila de detalle
+                if (data.includes(query)) {
+                    row.style.display = '';
+                    // No mostramos el detalle automáticamente al buscar
+                    if(nextRow) nextRow.classList.add('hidden');
+                } else {
+                    row.style.display = 'none';
+                    if(nextRow) nextRow.classList.add('hidden');
+                }
+            });
+        });
+
+        // Toggle Detalle
+        document.querySelectorAll('.btn-toggle').forEach(btn => {
+            btn.addEventListener('click', function() {
                 const mainRow = this.closest('tr');
                 const detailRow = mainRow.nextElementSibling;
-                if (detailRow && detailRow.classList.contains('detail-row')) {
-                    detailRow.classList.toggle('hidden');
+                const icon = this.querySelector('span');
+                
+                if (detailRow.classList.contains('hidden')) {
+                    detailRow.classList.remove('hidden');
+                    icon.textContent = 'expand_less';
+                } else {
+                    detailRow.classList.add('hidden');
+                    icon.textContent = 'expand_more';
                 }
-                mainRow.classList.toggle('expanded');
             });
         });
-
-        document.querySelectorAll('.btn-modificar').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                const id = btn.dataset.ventaId;
-                const estadoActual = btn.dataset.estadoActual;
-
-                document.getElementById('modalVentaId').textContent = '#' + id;
-                document.getElementById('formEstadoPago').action = '/ventas/cambiar-estado/' + id + '/';
-
-                document.getElementById('optPagado').checked = (estadoActual === 'pagado');
-                document.getElementById('optFiado').checked = (estadoActual === 'fiado');
-            });
-        });
-    });
-</script>
-{% endblock %}
+    </script>
+</body>
+</html>

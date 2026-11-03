@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+:root {
+    --primary: #1e40af;
+    --primary-light: #eff6ff;
+    --secondary: #059669;
+    --bg-body: #f8fafc;
+    --bg-surface: #ffffff;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: var(--text-main); display: flex; min-height: 100vh; }
+
+/* SIDEBAR Y HEADER */
+.sidebar { width: 260px; background-color: var(--bg-surface); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 10; }
+.sidebar-brand { padding: 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-color); }
+.brand-icon { width: 40px; height: 40px; background: var(--primary); color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.brand-text h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 18px; font-weight: 800; line-height: 1; }
+.brand-text span { font-size: 10px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+.sidebar-nav { padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; }
+.nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 8px; color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+.nav-item:hover { background: var(--bg-body); color: var(--text-main); }
+.nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+
+.main-content { margin-left: 260px; flex: 1; display: flex; flex-direction: column; }
+.top-header { height: 64px; background: var(--bg-surface); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 5; }
+.header-user { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 36px; height: 36px; background: var(--primary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+
+/* CONTENEDOR DEL FORMULARIO */
+.form-container { padding: 40px 24px; max-width: 700px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 20px; }
+.page-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 28px; font-weight: 800; text-align: center; }
+.subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 20px; }
+
+/* TARJETA DEL FORMULARIO */
+.form-card { background: var(--bg-surface); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); padding: 32px; }
+
+/* INPUTS */
+.input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.input-group label { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.form-control { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-body); outline: none; font-size: 14px; color: var(--text-main); transition: all 0.2s; }
+.form-control:focus { border-color: var(--primary); background: var(--bg-surface); box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1); }
+select.form-control { cursor: pointer; }
+select[multiple].form-control { height: auto; padding: 8px; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.help-text { font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+
+/* BOTONES */
+.form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border-color); }
+.btn { padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px; text-decoration: none; transition: all 0.2s; }
+.btn-cancel { background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); }
+.btn-cancel:hover { background: var(--border-color); }
+.btn-save { background: var(--primary); color: white; }
+.btn-save:hover { background: #1e3a8a; }

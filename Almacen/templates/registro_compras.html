@@ -1,284 +1,337 @@
-{% extends 'plantillas.html' %}
 {% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Registrar Compra</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/registro_compras.css' %}">
+</head>
+<body>
 
-{% block content %}
-<div class="container my-4">
-    {% if messages %}
-        {% for message in messages %}
-            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    <h2 class="mb-4"><i class="fa-solid fa-truck-ramp-box me-2"></i>Registrar Ingreso de Compra</h2>
-
-    <!-- INYECCIÓN SEGURA DE DATOS PARA JAVASCRIPT -->
-    {{ mapeo_proveedores|json_script:"mapeo-proveedores-data" }}
-    {{ productos_sin_proveedor|json_script:"productos-sin-proveedor-data" }}
-
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-primary text-white fw-semibold">
-                    1. Datos del Proveedor
-                </div>
-                <div class="card-body">
-                    <label class="form-label fw-semibold">Seleccionar Proveedor:</label>
-                    <select id="proveedor-select" class="form-select">
-                        <option value="" selected>Sin proveedor</option>
-                        {% for p in proveedores %}
-                            <option value="{{ p.id }}">{{ p.nombre }} ({{ p.tipo_productos }})</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div class="card shadow-sm">
-                <div class="card-header bg-secondary text-white fw-semibold">
-                    2. Carga de Producto y Lote
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Producto del Catálogo:</label>
-                        <select id="producto-select" class="form-select">
-                            <option value="" disabled selected>Seleccione producto...</option>
-                            {% for prod in productos %}
-                                <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-marca="{{ prod.marca }}" data-precio="{{ prod.precio }}">
-                                    {{ prod.nombre }} ({{ prod.marca }})
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">N° de Lote:</label>
-                            <input type="text" id="lote-input" class="form-control" placeholder="Ej: L3042">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Fecha Vencimiento:</label>
-                            <input type="date" id="fecha_vencimiento" class="form-control" 
-                                min="{% now 'Y-m-d' %}" 
-                                max="2036-12-31">
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Cantidad:</label>
-                            <input type="number" id="cantidad-input" min="1" class="form-control" value="1">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Precio de Costo ($):</label>
-                            <input type="number" id="costo-input" min="0.01" step="0.01" class="form-control" placeholder="0.00">
-                        </div>
-                    </div>
-
-                    <button type="button" id="btn-agregar-item" class="btn btn-success w-100">
-                        <i class="fa-solid fa-plus me-1"></i> Agregar a la Compra
-                    </button>
-                </div>
-            </div>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
         </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas / POS</a>
+            <a href="{% url 'consultar' %}" class="nav-item"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
+            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
+            <a href="{% url 'ventas' %}" class="nav-item"><span class="material-symbols-outlined">receipt_long</span> Historial Ventas</a>
+            <a href="{% url 'listar_compras' %}" class="nav-item active"><span class="material-symbols-outlined">shopping_bag</span> Historial Compras</a>
+        </nav>
+    </aside>
 
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-dark text-white fw-semibold d-flex justify-content-between align-items-center">
-                    <span>Detalle de la Compra</span>
-                    <span id="total-compra" class="badge bg-success fs-6">$0.00</span>
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <header class="top-header">
+            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime">Cargando...</span>
+            </div>
+            <div class="header-user">
+                <div style="display: flex; flex-direction: column; text-align: right;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Administrador" }}</span>
                 </div>
-                <div class="card-body d-flex flex-column justify-content-between">
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle text-center" id="tabla-compra">
-                            <thead>
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Lote</th>
-                                    <th>Cant.</th>
-                                    <th>Costo</th>
-                                    <th>Subtotal</th>
-                                    <th>Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody id="carrito-body">
-                                <tr>
-                                    <td colspan="6" class="text-muted py-4">No hay ítems agregados a la compra.</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+            </div>
+        </header>
+
+        <main class="inv-container">
+            {% if messages %}
+                {% for message in messages %}
+                    <div style="padding: 12px; border-radius: 8px; background: {% if message.tags == 'error' %}#fee2e2{% else %}#dcfce7{% endif %}; color: {% if message.tags == 'error' %}#991b1b{% else %}#166534{% endif %}; font-weight: 500; font-size: 14px;">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <!-- ENCABEZADO -->
+            <div>
+                <span class="subtitle-badge">Ingreso de Mercadería</span>
+                <h1 class="page-title">Registrar Nueva Compra</h1>
+                <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Carga de productos, asignación de lotes y actualización de stock.</p>
+            </div>
+
+            <!-- INYECCIÓN SEGURA DE DATOS PARA JAVASCRIPT -->
+            {{ mapeo_proveedores|json_script:"mapeo-proveedores-data" }}
+            {{ productos_sin_proveedor|json_script:"productos-sin-proveedor-data" }}
+
+            <div class="compras-grid">
+                <!-- COLUMNA IZQUIERDA: FORMULARIOS -->
+                <div>
+                    <!-- CARD PROVEEDOR -->
+                    <div class="card">
+                        <div class="card-header primary">
+                            <span class="material-symbols-outlined">local_shipping</span> 1. Datos del Proveedor
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <label>Seleccionar Proveedor</label>
+                                <select id="proveedor-select" class="form-control">
+                                    <option value="" selected>Sin proveedor (Compra informal)</option>
+                                    {% for p in proveedores %}
+                                        <option value="{{ p.id }}">{{ p.nombre }} ({{ p.tipo_productos }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
-                    <form method="post" action="{% url 'registrar_compra' %}" id="form-compra" class="mt-3">
-                        {% csrf_token %}
-                        <input type="hidden" name="id_proveedor" id="input-proveedor-id">
-                        <input type="hidden" name="cart_data" id="input-cart-data" value="[]">
+                    <!-- CARD PRODUCTO -->
+                    <div class="card">
+                        <div class="card-header secondary">
+                            <span class="material-symbols-outlined">inventory_2</span> 2. Carga de Producto y Lote
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <label>Producto del Catálogo</label>
+                                <select id="producto-select" class="form-control">
+                                    <option value="" disabled selected>Seleccione producto...</option>
+                                    {% for prod in productos %}
+                                        <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-marca="{{ prod.marca }}" data-precio="{{ prod.precio }}">
+                                            {{ prod.nombre }} ({{ prod.marca }}) - Venta: ${{ prod.precio }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
 
-                        <button type="submit" class="btn btn-primary w-100 btn-lg" id="btn-finalizar">
-                            <i class="fa-solid fa-floppy-disk me-1"></i> Finalizar Registro de Compra
-                        </button>
-                    </form>
+                            <div class="form-row">
+                                <div class="input-group">
+                                    <label>N° de Lote</label>
+                                    <input type="text" id="lote-input" class="form-control" placeholder="Ej: L3042">
+                                </div>
+                                <div class="input-group">
+                                    <label>Fecha Vencimiento</label>
+                                    <input type="date" id="fecha_vencimiento" class="form-control" min="{% now 'Y-m-d' %}">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="input-group">
+                                    <label>Cantidad</label>
+                                    <input type="number" id="cantidad-input" min="1" class="form-control" value="1">
+                                </div>
+                                <div class="input-group">
+                                    <label>Precio de Costo ($)</label>
+                                    <input type="number" id="costo-input" min="0.01" step="0.01" class="form-control" placeholder="0.00">
+                                </div>
+                            </div>
+
+                            <button type="button" id="btn-agregar-item" class="btn-primary" style="background: var(--secondary); margin-top: 8px;">
+                                <span class="material-symbols-outlined">add_shopping_cart</span> Agregar a la Compra
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUMNA DERECHA: CARRITO -->
+                <div>
+                    <div class="cart-card">
+                        <div class="cart-header">
+                            <h3><span class="material-symbols-outlined" style="vertical-align: middle;">shopping_basket</span> Detalle de la Compra</h3>
+                            <span class="cart-total" id="total-compra">$0.00</span>
+                        </div>
+                        
+                        <div class="cart-body">
+                            <table class="cart-table">
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th>Lote</th>
+                                        <th>Cant.</th>
+                                        <th>Costo</th>
+                                        <th>Subtotal</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="carrito-body">
+                                    <tr>
+                                        <td colspan="6" class="cart-empty">No hay ítems agregados a la compra.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="cart-footer">
+                            <form method="post" action="{% url 'registrar_compra' %}" id="form-compra">
+                                {% csrf_token %}
+                                <input type="hidden" name="id_proveedor" id="input-proveedor-id">
+                                <input type="hidden" name="cart_data" id="input-cart-data" value="[]">
+                                <button type="submit" class="btn-finalizar" id="btn-finalizar">
+                                    <span class="material-symbols-outlined">save</span> Finalizar Registro de Compra
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </main>
     </div>
-</div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const mapeoProveedores = JSON.parse(document.getElementById('mapeo-proveedores-data').textContent);
-        const productosSinProveedor = JSON.parse(document.getElementById('productos-sin-proveedor-data').textContent);
-        
-        const proveedorSelect = document.getElementById('proveedor-select');
-        const productoSelect = document.getElementById('producto-select');
-        const todasLasOpciones = Array.from(productoSelect.options);
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // 1. Reloj
+            function updateClock() {
+                const now = new Date();
+                document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+            }
+            setInterval(updateClock, 1000); updateClock();
 
-        proveedorSelect.addEventListener('change', function () {
-            const proveedorId = this.value;
-            productoSelect.innerHTML = '<option value="" disabled selected>Seleccione producto...</option>';
+            // 2. Lógica de Filtrado de Productos por Proveedor
+            const mapeoProveedores = JSON.parse(document.getElementById('mapeo-proveedores-data').textContent);
+            const productosSinProveedor = JSON.parse(document.getElementById('productos-sin-proveedor-data').textContent);
             
-            if (!proveedorId) {
-                todasLasOpciones.forEach(opt => {
-                    if (opt.value !== "") {
+            const proveedorSelect = document.getElementById('proveedor-select');
+            const productoSelect = document.getElementById('producto-select');
+            const todasLasOpciones = Array.from(productoSelect.options);
+
+            proveedorSelect.addEventListener('change', function () {
+                const proveedorId = this.value;
+                productoSelect.innerHTML = '<option value="" disabled selected>Seleccione producto...</option>';
+                
+                if (!proveedorId) {
+                    // Mostrar solo los SIN PROVEEDOR
+                    todasLasOpciones.forEach(opt => {
+                        if (opt.value !== "") {
+                            const prodId = parseInt(opt.value);
+                            if (productosSinProveedor.includes(prodId)) {
+                                productoSelect.appendChild(opt.cloneNode(true));
+                            }
+                        }
+                    });
+                } else {
+                    // Mostrar los del PROVEEDOR SELECCIONADO
+                    const productosPermitidos = mapeoProveedores[proveedorId] || [];
+                    todasLasOpciones.forEach(opt => {
+                        if (opt.value === "") return;
                         const prodId = parseInt(opt.value);
-                        if (productosSinProveedor.includes(prodId)) {
+                        if (productosPermitidos.includes(prodId)) {
                             productoSelect.appendChild(opt.cloneNode(true));
                         }
-                    }
-                });
-            } else {
-                const productosPermitidos = mapeoProveedores[proveedorId] || [];
-                todasLasOpciones.forEach(opt => {
-                    if (opt.value === "") return;
-                    const prodId = parseInt(opt.value);
-                    if (productosPermitidos.includes(prodId)) {
-                        productoSelect.appendChild(opt.cloneNode(true));
-                    }
-                });
-            }
-        });
-
-        const cart = [];
-        const btnAgregar = document.getElementById('btn-agregar-item');
-        const carritoBody = document.getElementById('carrito-body');
-        const totalCompraEl = document.getElementById('total-compra');
-        const formCompra = document.getElementById('form-compra');
-        const inputProveedor = document.getElementById('input-proveedor-id');
-        const inputCartData = document.getElementById('input-cart-data');
-
-        function renderCart() {
-            if (!cart.length) {
-                carritoBody.innerHTML = '<tr><td colspan="6" class="text-muted py-4">No hay ítems agregados a la compra.</td></tr>';
-                totalCompraEl.textContent = '$0.00';
-                return;
-            }
-
-            let total = 0;
-            carritoBody.innerHTML = cart.map((item, index) => {
-                const subtotal = item.cantidad * item.precio_costo;
-                total += subtotal;
-                return `
-                    <tr>
-                        <td class="text-start"><strong>${item.nombre}</strong></td>
-                        <td><small class="badge bg-secondary">${item.lote}</small></td>
-                        <td>${item.cantidad}</td>
-                        <td>$${item.precio_costo.toFixed(2)}</td>
-                        <td class="fw-bold">$${subtotal.toFixed(2)}</td>
-                        <td>
-                            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="eliminarItem(${index})">
-                                <i class="fa-solid fa-xmark"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-            totalCompraEl.textContent = '$' + total.toFixed(2);
-        }
-
-        window.eliminarItem = function (index) {
-            cart.splice(index, 1);
-            renderCart();
-        };
-
-        btnAgregar.addEventListener('click', function () {
-            const prodSelect = document.getElementById('producto-select');
-            
-            if (!prodSelect.value || prodSelect.selectedIndex === 0) {
-                alert('Debe seleccionar un producto.');
-                return;
-            }
-
-            const prodOption = prodSelect.options[prodSelect.selectedIndex];
-            const loteVal = document.getElementById('lote-input').value.trim() || 'Sin lote';
-            const vencInput = document.getElementById('fecha_vencimiento');
-            const vencVal = vencInput.value;
-            const cantVal = parseInt(document.getElementById('cantidad-input').value) || 0;
-            
-            const costoVal = parseFloat(document.getElementById('costo-input').value) || 0;
-            const precioVentaVal = parseFloat(prodOption.dataset.precio) || 0;
-
-            if (cantVal <= 0) {
-                alert('La cantidad debe ser mayor a 0.');
-                return;
-            }
-            if (costoVal <= 0) {
-                alert('El precio de costo debe ser mayor a 0.');
-                return;
-            }
-
-            if (costoVal > precioVentaVal) {
-                alert("¡Atención! El precio de costo ($" + costoVal.toFixed(2) + ") no puede ser mayor al precio de venta ($" + precioVentaVal.toFixed(2) + ").");
-                return; 
-            }
-
-            if (vencVal) {
-                const fechaSeleccionada = new Date(vencVal);
-                const hoy = new Date();
-                hoy.setHours(0, 0, 0, 0);
-
-                const limiteMax = new Date();
-                limiteMax.setFullYear(limiteMax.getFullYear() + 10);
-
-                if (fechaSeleccionada < hoy) {
-                    alert('La fecha de vencimiento no puede ser anterior a la fecha actual.');
-                    return;
+                    });
                 }
-                if (fechaSeleccionada > limiteMax) {
-                    alert('La fecha de vencimiento excede el límite permitido (máximo 10 años).');
-                    return;
-                }
-            }
-
-            cart.push({
-                id_producto: prodSelect.value,
-                nombre: prodOption.dataset.nombre,
-                lote: loteVal,
-                fecha_vencimiento: vencVal,
-                cantidad: cantVal,
-                precio_costo: costoVal
             });
 
-            renderCart();
+            // 3. Lógica del Carrito
+            const cart = [];
+            const btnAgregar = document.getElementById('btn-agregar-item');
+            const carritoBody = document.getElementById('carrito-body');
+            const totalCompraEl = document.getElementById('total-compra');
+            const formCompra = document.getElementById('form-compra');
+            const inputProveedor = document.getElementById('input-proveedor-id');
+            const inputCartData = document.getElementById('input-cart-data');
 
-            prodSelect.selectedIndex = 0;
-            document.getElementById('lote-input').value = '';
-            vencInput.value = '';
-            document.getElementById('cantidad-input').value = 1;
-            document.getElementById('costo-input').value = '';
-        });
+            function renderCart() {
+                if (!cart.length) {
+                    carritoBody.innerHTML = '<tr><td colspan="6" class="cart-empty">No hay ítems agregados a la compra.</td></tr>';
+                    totalCompraEl.textContent = '$0.00';
+                    return;
+                }
 
-        formCompra.addEventListener('submit', function (e) {
-            if (!cart.length) {
-                e.preventDefault();
-                alert('El detalle de la compra está vacío.');
-                return;
+                let total = 0;
+                carritoBody.innerHTML = cart.map((item, index) => {
+                    const subtotal = item.cantidad * item.precio_costo;
+                    total += subtotal;
+                    return `
+                        <tr>
+                            <td><strong>${item.nombre}</strong></td>
+                            <td><span style="background:var(--bg-body); padding:2px 6px; border-radius:4px; font-size:11px;">${item.lote}</span></td>
+                            <td>${item.cantidad}</td>
+                            <td>$${item.precio_costo.toFixed(2)}</td>
+                            <td style="font-weight:700;">$${subtotal.toFixed(2)}</td>
+                            <td>
+                                <button type="button" class="btn-delete" onclick="eliminarItem(${index})">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                totalCompraEl.textContent = '$' + total.toFixed(2);
             }
 
-            inputProveedor.value = proveedorSelect.value || '';
-            inputCartData.value = JSON.stringify(cart);
+            window.eliminarItem = function (index) {
+                cart.splice(index, 1);
+                renderCart();
+            };
+
+            btnAgregar.addEventListener('click', function () {
+                const prodSelect = document.getElementById('producto-select');
+                
+                if (!prodSelect.value || prodSelect.selectedIndex === 0) {
+                    alert('Debe seleccionar un producto.');
+                    return;
+                }
+
+                const prodOption = prodSelect.options[prodSelect.selectedIndex];
+                const loteVal = document.getElementById('lote-input').value.trim() || 'Sin lote';
+                const vencInput = document.getElementById('fecha_vencimiento');
+                const vencVal = vencInput.value;
+                const cantVal = parseInt(document.getElementById('cantidad-input').value) || 0;
+                
+                const costoVal = parseFloat(document.getElementById('costo-input').value) || 0;
+                const precioVentaVal = parseFloat(prodOption.dataset.precio) || 0;
+
+                if (cantVal <= 0) { alert('La cantidad debe ser mayor a 0.'); return; }
+                if (costoVal <= 0) { alert('El precio de costo debe ser mayor a 0.'); return; }
+
+                // VALIDACIÓN: Costo no puede superar al precio de venta
+                if (costoVal > precioVentaVal) {
+                    alert("¡Atención! El costo ($" + costoVal.toFixed(2) + ") no puede ser mayor al precio de venta ($" + precioVentaVal.toFixed(2) + ").");
+                    return; 
+                }
+
+                // Validación fecha
+                if (vencVal) {
+                    const fechaSeleccionada = new Date(vencVal);
+                    const hoy = new Date();
+                    hoy.setHours(0, 0, 0, 0);
+                    if (fechaSeleccionada < hoy) {
+                        alert('La fecha de vencimiento no puede ser anterior a la fecha actual.');
+                        return;
+                    }
+                }
+
+                cart.push({
+                    id_producto: prodSelect.value,
+                    nombre: prodOption.dataset.nombre,
+                    lote: loteVal,
+                    fecha_vencimiento: vencVal,
+                    cantidad: cantVal,
+                    precio_costo: costoVal
+                });
+
+                renderCart();
+
+                // Limpiar campos
+                prodSelect.selectedIndex = 0;
+                document.getElementById('lote-input').value = '';
+                vencInput.value = '';
+                document.getElementById('cantidad-input').value = 1;
+                document.getElementById('costo-input').value = '';
+            });
+
+            formCompra.addEventListener('submit', function (e) {
+                if (!cart.length) {
+                    e.preventDefault();
+                    alert('El detalle de la compra está vacío. Agregue productos antes de finalizar.');
+                    return;
+                }
+                inputProveedor.value = proveedorSelect.value || '';
+                inputCartData.value = JSON.stringify(cart);
+            });
         });
-    });
-</script>
-{% endblock %}
+    </script>
+</body>
+</html>

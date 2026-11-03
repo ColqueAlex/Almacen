@@ -1,61 +1,114 @@
-{% extends 'plantillas.html' %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Editar Producto</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/formularios.css' %}">
+</head>
+<body>
 
-{% block content %}
-
-    <h2 class="text-center my-4">Editar Producto</h2>
-
-    <form action="{% url 'editar' %}" class="w-50 shadow mx-auto p-4 m-3 rounded bg-white" method="post">
-        {% csrf_token %}
-
-        <input type="hidden" name="id" value="{{ producto.id }}">
-
-        <div class="mb-3">
-            <label class="form-label fw-semibold">Nombre:</label>
-            <input type="text" name="nombre" class="form-control" required value="{{ producto.nombre }}">
+    <!-- SIDEBAR  -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
         </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas / POS</a>
+            <a href="{% url 'consultar' %}" class="nav-item active"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
+            <!-- ... resto del menú ... -->
+        </nav>
+    </aside>
 
-        <div class="mb-3">
-            <label class="form-label fw-semibold">Categoría:</label>
-            <input type="text" name="categoria" class="form-control" required value="{{ producto.categoria }}" pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label fw-semibold">Marca:</label>
-            <input type="text" name="marca" class="form-control" value="{% if producto.marca %}{{ producto.marca }}{% else %}Sin marca{% endif %}">
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label fw-semibold">Precio de Venta ($):</label>
-            <input type="number" name="precio" min="0.01" step="0.01" class="form-control" required value="{{ producto.precio }}">
-        </div>
-
-        <!-- NUEVO: Selector de Proveedores para Edición -->
-        <div class="mb-3">
-            <label for="proveedores" class="form-label fw-semibold">Proveedores Habituales:</label>
-            <select name="proveedores" id="proveedores" class="form-select" multiple size="4">
-                {% for prov in proveedores %}
-                    <option value="{{ prov.id }}" {% if prov in producto.proveedores.all %}selected{% endif %}>
-                        {{ prov.nombre }}
-                    </option>
-                {% endfor %}
-            </select>
-            <div class="form-text text-muted small">
-                <i class="fa-solid fa-circle-info me-1"></i>Mantené apretada la tecla <strong>Ctrl</strong> para seleccionar más de uno.
+    <div class="main-content">
+        <header class="top-header">
+            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime">Cargando...</span>
             </div>
-        </div>
+            <div class="header-user">
+                <div style="display: flex; flex-direction: column; text-align: right;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Administrador" }}</span>
+                </div>
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+            </div>
+        </header>
 
-        <div class="mb-3">
-            <label class="form-label fw-semibold">Estado:</label>
-            <select name="estado" class="form-select" required>
-                <option value="activo" {% if producto.estado == 'activo' %}selected{% endif %}>Activo</option>
-                <option value="inactivo" {% if producto.estado == 'inactivo' %}selected{% endif %}>Inactivo</option>
-            </select>
-        </div>
+        <main class="form-container">
+            <div>
+                <h1 class="page-title">Editar Producto</h1>
+                <p class="subtitle">Actualizá los datos del catálogo y sus proveedores.</p>
+            </div>
 
-        <div class="d-flex justify-content-between align-items-center mt-4">
-            <a href="{% url 'consultar' %}" class="btn btn-secondary">Cancelar</a>
-            <input type="submit" value="Actualizar Producto" class="btn btn-primary">
-        </div>
-    </form>
+            <div class="form-card">
+                <form action="{% url 'editar' %}" method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="id" value="{{ producto.id }}">
 
-{% endblock %}
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Nombre del Producto</label>
+                            <input type="text" name="nombre" class="form-control" required value="{{ producto.nombre }}">
+                        </div>
+                        <div class="input-group">
+                            <label>Categoría</label>
+                            <input type="text" name="categoria" class="form-control" required value="{{ producto.categoria }}" pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Marca</label>
+                            <input type="text" name="marca" class="form-control" value="{% if producto.marca %}{{ producto.marca }}{% else %}Sin marca{% endif %}">
+                        </div>
+                        <div class="input-group">
+                            <label>Precio de Venta ($)</label>
+                            <input type="number" name="precio" min="0.01" step="0.01" class="form-control" required value="{{ producto.precio }}">
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Proveedores Habituales</label>
+                        <select name="proveedores" class="form-control" multiple size="4">
+                            {% for prov in proveedores %}
+                                <option value="{{ prov.id }}" {% if prov in producto.proveedores.all %}selected{% endif %}>
+                                    {{ prov.nombre }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <span class="help-text"><span class="material-symbols-outlined" style="font-size: 14px;">info</span> Mantené apretada la tecla Ctrl para seleccionar más de uno.</span>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Estado del Producto</label>
+                        <select name="estado" class="form-control" required>
+                            <option value="activo" {% if producto.estado == 'activo' %}selected{% endif %}>Activo (Visible en ventas)</option>
+                            <option value="inactivo" {% if producto.estado == 'inactivo' %}selected{% endif %}>Inactivo (Oculto en ventas)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-actions">
+                        <a href="{% url 'consultar' %}" class="btn btn-cancel">Cancelar</a>
+                        <button type="submit" class="btn btn-save">
+                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        setInterval(updateClock, 1000); updateClock();
+    </script>
+</body>
+</html>

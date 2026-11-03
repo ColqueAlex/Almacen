@@ -1,168 +1,233 @@
-{% extends 'plantillas.html' %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Historial de Compras</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/historiales.css' %}">
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas / POS</a>
+            <a href="{% url 'consultar' %}" class="nav-item"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
+            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
+            <a href="{% url 'ventas' %}" class="nav-item"><span class="material-symbols-outlined">receipt_long</span> Historial Ventas</a>
+            <a href="{% url 'listar_compras' %}" class="nav-item active"><span class="material-symbols-outlined">shopping_bag</span> Historial Compras</a>
+        </nav>
+    </aside>
 
-{% block content %}
-<div class="container my-4">
-
-    {% if messages %}
-        {% for message in messages %}
-            <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    <div class="main-content">
+        <header class="top-header">
+            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime"></span>
             </div>
-        {% endfor %}
-    {% endif %}
+            <div class="header-user">
+                <div style="display: flex; flex-direction: column; text-align: right;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Administrador" }}</span>
+                </div>
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+            </div>
+        </header>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Historial de Compras</h2>
-        <a href="{% url 'registrar_compra' %}" class="btn btn-primary">
-            <i class="fa-solid fa-plus me-1"></i> Nueva Compra
-        </a>
-    </div>
+        <main class="inv-container">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <span class="subtitle-badge">Registro de Operaciones</span>
+                    <h1 class="page-title">Historial de Compras</h1>
+                </div>
+                <a href="{% url 'registrar_compra' %}" class="btn-primary">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nueva Compra
+                </a>
+            </div>
 
-    <div class="table-responsive shadow-sm rounded">
-        <table class="table table-hover table-light align-middle text-center mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th>N° Compra</th>
-                    <th>Fecha / Hora</th>
-                    <th>Usuario</th>
-                    <th>Estado</th>
-                    <th>Total</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in compras %}
-                <tr class="main-row">
-                    <td class="fw-bold">#{{ c.id }}</td>
-                    <td>{{ c.fecha|date:"d/m/Y" }} {{ c.hora|time:"H:i" }}</td>
-                    
-                    
-                    <td><span class="badge bg-secondary">{{ c.id_usuario.username }}</span></td>
-                    
-                    <td>
-                        {% if c.estado == 'Anulado' %}
-                            <span class="badge bg-danger" title="Motivo: {{ c.motivo_anulacion }}">Anulado</span>
-                        {% else %}
-                            <span class="badge bg-success">{{ c.estado }}</span>
-                        {% endif %}
-                    </td>
-                    
-                    <td class="fw-bold text-success">${{ c.total }}</td>
-                    
-                    <td>
-                        <div class="d-flex justify-content-center gap-2">
-                            <button type="button" class="btn btn-secondary btn-sm btn-toggle" title="Ver detalle" aria-label="Ver detalle">
-                                <i class="fa-solid fa-chevron-down"></i>
-                            </button>
+            <!-- TOOLBAR -->
+            <div class="toolbar">
+                <div class="search-box">
+                    <span class="material-symbols-outlined">search</span>
+                    <input type="text" id="search-compra" placeholder="Buscar por N° Compra o Proveedor...">
+                </div>
+            </div>
 
-                            {% if c.estado == 'Anulado' %}
-                                <button class="btn btn-sm btn-outline-danger" disabled title="Anulada por {{ c.usuario_anulacion.username }} el {{ c.fecha_anulacion|date:'d/m/Y H:i' }}">
-                                    <i class="fa-solid fa-ban"></i> Anulada
-                                </button>
-                            {% else %}
-                                <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalAnular{{ c.id }}">
-                                    <i class="fa-solid fa-xmark"></i> Anular
-                                </button>
-
-                                <div class="modal fade" id="modalAnular{{ c.id }}" tabindex="-1" aria-hidden="true">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content text-start">
-                                            <form method="post" action="{% url 'anular_compra' c.id %}">
-                                                {% csrf_token %}
-                                                <div class="modal-header bg-danger text-white">
-                                                    <h5 class="modal-title">Anular Compra #{{ c.id }}</h5>
-                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <p>¿Está seguro de anular esta compra? <strong>El stock de los productos será revertido automáticamente.</strong></p>
-                                                    <div class="mb-3">
-                                                        <label class="form-label fw-semibold">Motivo de anulación:</label>
-                                                        <textarea name="motivo" class="form-control" rows="3" required placeholder="Ej: Mercadería vencida, error de carga, etc."></textarea>
-                                                    </div>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                    <button type="submit" class="btn btn-danger">Confirmar Anulación</button>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
+            <!-- TABLA -->
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>N° Compra</th>
+                            <th>Proveedor</th>
+                            <th>Fecha / Hora</th>
+                            <th>Usuario</th>
+                            <th>Estado</th>
+                            <th>Total</th>
+                            <th style="text-align: right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in compras %}
+                        <tr class="main-row fila-compra" data-search="{{ c.id }} {% if c.id_proveedor %}{{ c.id_proveedor.nombre|lower }}{% endif %}">
+                            <td style="font-weight: 700;">#{{ c.id }}</td>
+                            <td>
+                                {% if c.id_proveedor %}
+                                    {{ c.id_proveedor.nombre }}
+                                {% else %}
+                                    <span style="color: var(--text-muted); font-style: italic;">Sin proveedor</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ c.fecha|date:"d/m/Y" }} <span style="color: var(--text-muted); font-size: 12px;">{{ c.hora|time:"H:i" }}</span></td>
+                            <td><span class="badge badge-gray">{{ c.id_usuario.username }}</span></td>
+                            <td>
+                                {% if c.estado == 'Anulado' %}
+                                    <span class="badge badge-anulado">Anulado</span>
+                                {% else %}
+                                    <span class="badge badge-pagado">{{ c.estado }}</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-weight: 800; color: var(--secondary);">${{ c.total|floatformat:2 }}</td>
+                            <td>
+                                <div class="actions">
+                                    <button type="button" class="btn-icon btn-toggle" title="Ver Detalle">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">expand_more</span>
+                                    </button>
+                                    
+                                    {% if c.estado != 'Anulado' %}
+                                        <button type="button" class="btn-icon danger btn-anular" 
+                                                data-id="{{ c.id }}" 
+                                                data-bs-toggle="modal" data-bs-target="#modalAnular">
+                                            <span class="material-symbols-outlined" style="font-size: 20px;">cancel</span>
+                                        </button>
+                                    {% endif %}
                                 </div>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-
-                <tr class="detail-row hidden" style="display: none;">
-                    <!-- CAMBIAMOS COLSPAN DE 7 A 6 -->
-                    <td colspan="6" class="p-3 bg-light">
-                        <div class="table-responsive bg-white rounded border shadow-sm p-2">
-                            <table class="table table-sm table-hover align-middle text-center mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="text-start ps-3">Producto</th>
-                                        <th>Lote</th>
-                                        <th>Vencimiento</th>
-                                        <th>Cantidad</th>
-                                        <th>Precio Costo</th>
-                                        <th class="text-end pe-3">Subtotal</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for detalle in c.detalles.all %}
-                                    <tr>
-                                        <td class="text-start ps-3 fw-semibold">{{ detalle.id_producto.nombre }}</td>
-                                        <td><span class="badge bg-secondary">{{ detalle.lote }}</span></td>
-                                        <td>
-                                            {% if detalle.fecha_vencimiento %}
-                                                {{ detalle.fecha_vencimiento|date:"d/m/Y" }}
-                                            {% else %}
-                                                <span class="text-muted">-</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>{{ detalle.cantidad }}</td>
-                                        <td>${{ detalle.precio_unitario_compra|floatformat:2 }}</td>
-                                        <td class="text-end pe-3 fw-bold">${{ detalle.subtotal|floatformat:2 }}</td>
-                                    </tr>
-                                    {% empty %}
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-2">No hay productos registrados en esta compra.</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" class="text-center text-muted py-3">No hay compras registradas en el sistema.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                            </td>
+                        </tr>
+                        <tr class="detail-row hidden">
+                            <td colspan="7">
+                                <div class="detail-content">
+                                    <table class="detail-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Producto</th>
+                                                <th>Lote</th>
+                                                <th>Vencimiento</th>
+                                                <th>Cant.</th>
+                                                <th>Precio Costo</th>
+                                                <th>Subtotal</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for detalle in c.detalles.all %}
+                                            <tr>
+                                                <td style="font-weight: 600;">{{ detalle.id_producto.nombre }}</td>
+                                                <td><span class="badge badge-gray">{{ detalle.lote }}</span></td>
+                                                <td>{{ detalle.fecha_vencimiento|date:"d/m/Y"|default:"-" }}</td>
+                                                <td>{{ detalle.cantidad }}</td>
+                                                <td>${{ detalle.precio_unitario_compra|floatformat:2 }}</td>
+                                                <td style="font-weight: 700;">${{ detalle.subtotal|floatformat:2 }}</td>
+                                            </tr>
+                                            {% empty %}
+                                            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No hay detalles.</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">No hay compras registradas.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
     </div>
 
-</div>
+    <!-- MODAL ANULAR COMPRA -->
+    <div class="modal-overlay" id="modalAnular">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="color: var(--danger);"><span class="material-symbols-outlined" style="vertical-align: middle;">warning</span> Anular Compra</h3>
+                <button class="btn-icon" onclick="document.getElementById('modalAnular').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <form method="POST" id="formAnular" action="">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p style="font-size: 14px; color: var(--text-main);">¿Estás seguro de anular esta compra? <br><strong style="color: var(--danger);">El stock será revertido automáticamente.</strong></p>
+                    <div class="input-group">
+                        <label style="font-size: 13px; font-weight: 600;">Motivo de anulación</label>
+                        <textarea name="motivo" class="form-control" rows="3" required placeholder="Ej: Mercadería vencida, error de carga, etc."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-action btn-cancelar" onclick="document.getElementById('modalAnular').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn-action btn-confirmar">Confirmar Anulación</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.btn-toggle').forEach(function (button) {
-            button.addEventListener('click', function () {
-                const mainRow = this.closest('tr');
-                const detailRow = mainRow.nextElementSibling;
-                if (detailRow && detailRow.classList.contains('detail-row')) {
-                    if (detailRow.style.display === 'none') {
-                        detailRow.style.display = 'table-row';
-                        this.querySelector('i').classList.replace('fa-chevron-down', 'fa-chevron-up');
-                    } else {
-                        detailRow.style.display = 'none';
-                        this.querySelector('i').classList.replace('fa-chevron-up', 'fa-chevron-down');
-                    }
+    <script>
+        // Reloj
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        setInterval(updateClock, 1000); updateClock();
+
+        // Buscador
+        document.getElementById('search-compra').addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            document.querySelectorAll('.fila-compra').forEach(row => {
+                const data = row.dataset.search;
+                const nextRow = row.nextElementSibling;
+                if (data.includes(query)) {
+                    row.style.display = '';
+                    if(nextRow) nextRow.classList.add('hidden');
+                } else {
+                    row.style.display = 'none';
+                    if(nextRow) nextRow.classList.add('hidden');
                 }
             });
         });
-    });
-</script>
-{% endblock %}
+
+        // Toggle Detalle
+        document.querySelectorAll('.btn-toggle').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const mainRow = this.closest('tr');
+                const detailRow = mainRow.nextElementSibling;
+                const icon = this.querySelector('span');
+                
+                if (detailRow.classList.contains('hidden')) {
+                    detailRow.classList.remove('hidden');
+                    icon.textContent = 'expand_less';
+                } else {
+                    detailRow.classList.add('hidden');
+                    icon.textContent = 'expand_more';
+                }
+            });
+        });
+
+        // Lógica del Modal de Anulación
+        document.querySelectorAll('.btn-anular').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                document.getElementById('formAnular').action = '/compras/anular/' + id + '/';
+                document.getElementById('modalAnular').style.display = 'flex';
+            });
+        });
+    </script>
+</body>
+</html>

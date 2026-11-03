@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+:root {
+    --primary: #1e40af;
+    --primary-light: #eff6ff;
+    --secondary: #059669;
+    --danger: #ba1a1a;
+    --danger-light: #ffdad6;
+    --bg-body: #f8fafc;
+    --bg-surface: #ffffff;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: var(--text-main); display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+
+/* ENVOLTORIO CENTRAL */
+.auth-wrapper { width: 100%; max-width: 450px; padding: 24px; }
+
+/* LOGO */
+.auth-brand { display: flex; flex-direction: column; align-items: center; margin-bottom: 24px; text-align: center; }
+.auth-brand-icon { width: 56px; height: 56px; background: var(--primary); color: white; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; box-shadow: 0 4px 6px -1px rgba(30, 64, 175, 0.2); }
+.auth-brand h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 24px; font-weight: 800; color: var(--text-main); letter-spacing: -0.5px; }
+.auth-brand span { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+/* TARJETA */
+.auth-card { background: var(--bg-surface); border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01); padding: 32px; border: 1px solid var(--border-color); }
+.auth-header { text-align: center; margin-bottom: 24px; }
+.auth-header h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.auth-header p { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+
+/* ALERTAS DE ERROR / MENSAJES */
+.alert-error { background: var(--danger-light); color: var(--danger); padding: 12px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(186, 26, 26, 0.2); }
+.alert-success { background: #dcfce7; color: #166534; padding: 12px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+
+/* INPUTS */
+.input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.input-group label { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.form-control { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-body); outline: none; font-size: 14px; color: var(--text-main); transition: all 0.2s; }
+.form-control:focus { border-color: var(--primary); background: var(--bg-surface); box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1); }
+
+/* BOTÓN */
+.btn-submit { width: 100%; padding: 12px; border-radius: 8px; background: var(--primary); color: white; font-weight: 700; font-size: 14px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; margin-top: 8px; }
+.btn-submit:hover { background: #1e3a8a; transform: translateY(-1px); }
+
+/* FOOTER */
+.auth-footer { text-align: center; margin-top: 24px; font-size: 12px; color: var(--text-muted); }
+.auth-footer a { color: var(--primary); text-decoration: none; font-weight: 600; }
+.auth-footer a:hover { text-decoration: underline; }
+
+/* Estilo para la imagen del Logo en el Login */
+.auth-logo-img {
+    max-width: 320px; /* Ajustá este tamaño si lo ves muy grande o chico */
+    width: 100%;
+    height: auto;
+    margin-bottom: 24px;
+    object-fit: contain;
+}
