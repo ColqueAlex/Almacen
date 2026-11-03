@@ -6,7 +6,6 @@ from .middleware import get_current_user
 
 def registrar_auditoria(accion, modelo_nombre, objeto_id, descripcion):
     usuario = get_current_user()
-    # Si el usuario no existe (ej. script automático), guardamos None
     if usuario and not usuario.is_authenticated:
         usuario = None
         

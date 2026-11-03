@@ -64,6 +64,8 @@ def requiere_perfil(*perfiles_permitidos):
 #  VISTAS GENERALES Y HOME
 # =======================================================
 
+from datetime import timedelta
+
 @login_required
 def home(request):
     if not request.user.activo:
@@ -74,12 +76,26 @@ def home(request):
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
         
-    return render(request, "principal.html")
+    hoy = timezone.now().date()
+    limite = hoy + timedelta(days=30)
+    
+    alertas = LotesProducto.objects.filter(
+        activo=True, 
+        stock_actual__gt=0, 
+        fecha_vencimiento__isnull=False,
+        fecha_vencimiento__lte=limite
+    ).order_by('fecha_vencimiento')[:3]
+
+    return render(request, "principal.html", {
+        'alertas_vencimiento': alertas
+    })
 
 
 # =======================================================
 # GESTIÓN DE PRODUCTOS
 # =======================================================
+
+from django.db.models import Sum, Q
 
 @login_required
 @requiere_perfil('Administrador')
@@ -87,22 +103,46 @@ def consultar(request):
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
         
-    productos = Productos.objects.all().order_by('nombre')
+    productos_qs = Productos.objects.all().order_by('nombre')
+    
     busqueda = request.GET.get('busqueda', '').strip()
-    proveedores = Proveedor.objects.filter(activo=True).order_by('nombre')
+    cat_filtro = request.GET.get('categoria', '')
+    estado_filtro = request.GET.get('estado_stock', '')
 
     if busqueda:
-        productos = productos.filter(nombre__icontains=busqueda)
+        productos_qs = productos_qs.filter(Q(nombre__icontains=busqueda) | Q(marca__icontains=busqueda))
+    if cat_filtro:
+        productos_qs = productos_qs.filter(categoria__iexact=cat_filtro)
 
-    has_inactive_products = productos.filter(estado='inactivo').exists()
-    page_obj = Paginator(productos, 7).get_page(request.GET.get('page'))
+    todos_los_productos = list(productos_qs)
+    
+    total_productos = len(todos_los_productos)
+    stock_bajo = sum(1 for p in todos_los_productos if 0 < p.stock <= 10)
+    sin_stock = sum(1 for p in todos_los_productos if p.stock == 0)
+
+    if estado_filtro == 'bajo':
+        todos_los_productos = [p for p in todos_los_productos if 0 < p.stock <= 10]
+    elif estado_filtro == 'agotado':
+        todos_los_productos = [p for p in todos_los_productos if p.stock == 0]
+
+    paginator = Paginator(todos_los_productos, 10) # Mostramos 10 por página
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    categorias = Productos.objects.values_list('categoria', flat=True).distinct()
 
     return render(request, "productos.html", {
         'productos': page_obj,
         'page_obj': page_obj,
         'busqueda': busqueda,
-        'has_inactive_products': has_inactive_products,
-        'proveedores': proveedores,
+        'categoria_actual': cat_filtro,
+        'estado_actual': estado_filtro,
+        'categorias': categorias,
+        'total_productos': total_productos,
+        'stock_bajo': stock_bajo,
+        'sin_stock': sin_stock,
+        'has_inactive_products': productos_qs.filter(estado='inactivo').exists(),
+        'proveedores': Proveedor.objects.filter(activo=True).order_by('nombre'),
     })
 
 
@@ -476,14 +516,22 @@ def anular_venta(request, id_venta):
 
 @login_required
 def cuentas_clientes(request):
-
-    clientes = Clientes.objects.all().order_by('-saldo', 'nombre')
+    clientes_qs = Clientes.objects.all().order_by('-saldo', 'nombre')
     
-    pagos_recientes = Pago.objects.all().order_by('-fecha')[:20]
+    pagos_recientes = Pago.objects.all().order_by('-fecha')[:10]
+
+    deuda_total = sum(c.saldo for c in clientes_qs if c.saldo > 0)
+    con_deuda = sum(1 for c in clientes_qs if c.saldo > 0)
+    al_dia = sum(1 for c in clientes_qs if c.saldo == 0)
+    total_clientes = clientes_qs.count()
 
     return render(request, 'cuentas_clientes.html', {
-        'clientes': clientes,
-        'pagos_recientes': pagos_recientes
+        'clientes': clientes_qs,
+        'pagos_recientes': pagos_recientes,
+        'deuda_total': deuda_total,
+        'con_deuda': con_deuda,
+        'al_dia': al_dia,
+        'total_clientes': total_clientes,
     })
 
 
@@ -840,8 +888,27 @@ def anular_compra(request, id_compra):
 @login_required
 @requiere_perfil('Administrador')
 def listar_proveedores(request):
-    proveedores = Proveedor.objects.all().order_by('nombre')
-    return render(request, 'proveedores_list.html', {'proveedores': proveedores})
+    busqueda = request.GET.get('busqueda', '').strip()
+    proveedores_qs = Proveedor.objects.all().order_by('nombre')
+
+    if busqueda:
+        proveedores_qs = proveedores_qs.filter(nombre__icontains=busqueda)
+
+    total_proveedores = Proveedor.objects.count()
+    activos = Proveedor.objects.filter(activo=True).count()
+    inactivos = Proveedor.objects.filter(activo=False).count()
+
+    paginator = Paginator(proveedores_qs, 10) # 10 por página
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    return render(request, 'proveedores_list.html', {
+        'proveedores': page_obj,
+        'page_obj': page_obj,
+        'busqueda': busqueda,
+        'total_proveedores': total_proveedores,
+        'activos': activos,
+        'inactivos': inactivos,
+    })
 
 
 @login_required
@@ -940,8 +1007,18 @@ def login_usuario(request):
 @login_required
 @requiere_perfil('Administrador')
 def listar_usuarios(request):
-    usuarios = Usuario.objects.all()
-    return render(request, 'usuarios_list.html', {'usuarios': usuarios})
+    usuarios = Usuario.objects.all().order_by('nombre')
+    
+    total_usuarios = usuarios.count()
+    usuarios_activos = usuarios.filter(activo=True).count()
+    usuarios_inactivos = usuarios.filter(activo=False).count()
+
+    return render(request, 'usuarios_list.html', {
+        'usuarios': usuarios,
+        'total_usuarios': total_usuarios,
+        'usuarios_activos': usuarios_activos,
+        'usuarios_inactivos': usuarios_inactivos,
+    })
 
 
 @login_required
@@ -1165,3 +1242,4 @@ def listar_auditoria(request):
         'registros': page_obj,
         'page_obj': page_obj,
     })
+

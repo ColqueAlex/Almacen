@@ -1,65 +1,228 @@
-{% extends 'plantillas.html' %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Auditoría</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/auditoria.css' %}">
+</head>
+<body>
 
-{% block content %}
-<div class="container my-4">
-    <h2 class="mb-4"><i class="fa-solid fa-shield-halved me-2"></i>Registro de Actividades</h2>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas / POS</a>
+            <a href="{% url 'consultar' %}" class="nav-item"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
+            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item active"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
+        </nav>
+    </aside>
 
-    <div class="table-responsive shadow-sm rounded">
-        <table class="table table-hover table-light align-middle text-center mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th>Fecha y Hora</th>
-                    <th>Usuario</th>
-                    <th>Acción</th>
-                    <th>Módulo</th>
-                    <th>Descripción</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for reg in registros %}
-                <tr>
-                    <td>{{ reg.fecha_hora|date:"d/m/Y H:i" }}</td>
-                    <td>
-                        {% if reg.usuario %}
-                            <span class="badge bg-primary">{{ reg.usuario.username }}</span>
-                        {% else %}
-                            <span class="badge bg-secondary">Sistema</span>
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <header class="top-header">
+            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime">Cargando...</span>
+            </div>
+            <div class="header-user">
+                <div style="display: flex; flex-direction: column; text-align: right;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Administrador" }}</span>
+                </div>
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+            </div>
+        </header>
+
+        <main class="inv-container">
+            <!-- ENCABEZADO -->
+            <div>
+                <span class="subtitle-badge"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--primary);"></span> Seguridad y Control • Logs del Sistema</span>
+                <h1 class="page-title">Registro de Actividades</h1>
+                <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Auditoría y Trazabilidad del Sistema — Historial cronológico de operaciones.</p>
+            </div>
+
+            <!-- BARRA DE FILTROS -->
+            <div class="toolbar">
+                <div class="search-box">
+                    <span class="material-symbols-outlined">search</span>
+                    <input type="text" id="search-audit" placeholder="Buscar por usuario, módulo o descripción...">
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <select class="filter-select">
+                        <option>Todas las acciones</option>
+                        <option>Creación</option>
+                        <option>Modificación</option>
+                        <option>Eliminación</option>
+                    </select>
+                    <select class="filter-select">
+                        <option>Todos los módulos</option>
+                        <option>Productos</option>
+                        <option>Ventas</option>
+                        <option>Caja</option>
+                        <option>Clientes</option>
+                        <option>Proveedores</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- TABLA DE AUDITORÍA -->
+            <div class="table-card">
+                <table id="tabla-auditoria">
+                    <thead>
+                        <tr>
+                            <th>Fecha y Hora</th>
+                            <th>Usuario</th>
+                            <th>Módulo</th>
+                            <th>Acción</th>
+                            <th style="text-align: right;">Detalles</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reg in registros %}
+                        <tr class="fila-auditoria" data-search="{{ reg.usuario.username|default:'sistema'|lower }} {{ reg.modelo|lower }} {{ reg.descripcion|lower }}">
+                            <!-- Fecha -->
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 13px;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; color: var(--text-muted);">schedule</span>
+                                    {{ reg.fecha_hora|date:"d M • H:i" }} hs
+                                </div>
+                            </td>
+                            
+                            <!-- Usuario -->
+                            <td>
+                                <div class="user-info">
+                                    <div class="user-avatar" style="{% if not reg.usuario %}background: var(--text-muted);{% endif %}">
+                                        {% if reg.usuario %}{{ reg.usuario.username|first|upper }}{% else %}S{% endif %}
+                                    </div>
+                                    <div class="user-details">
+                                        <h4>{% if reg.usuario %}{{ reg.usuario.username }}{% else %}Sistema{% endif %}</h4>
+                                        <span>{% if reg.usuario %}{{ reg.usuario.id_perfil.nombre|default:"Usuario" }}{% else %}Automático{% endif %}</span>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- Módulo -->
+                            <td>
+                                <span class="badge badge-gray">{{ reg.modelo }}</span>
+                            </td>
+
+                            <!-- Acción -->
+                            <td>
+                                {% if reg.accion == 'creacion' %}
+                                    <span class="badge badge-creacion"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--secondary);"></span> Creación</span>
+                                {% elif reg.accion == 'modificacion' %}
+                                    <span class="badge badge-modificacion"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--tertiary);"></span> Modificación</span>
+                                {% else %}
+                                    <span class="badge badge-eliminacion"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--danger);"></span> Eliminación</span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Detalles -->
+                            <td style="text-align: right;">
+                                <button class="btn-action btn-detalle btn-ver-detalle" 
+                                        data-fecha="{{ reg.fecha_hora|date:'d/m/Y H:i' }}"
+                                        data-usuario="{{ reg.usuario.username|default:'Sistema' }}"
+                                        data-modulo="{{ reg.modelo }}"
+                                        data-accion="{{ reg.get_accion_display }}"
+                                        data-descripcion="{{ reg.descripcion }}">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span> Ver detalle
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                No hay registros de auditoría todavía.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                
+                <!-- Paginación -->
+                <div class="pagination">
+                    <span class="page-info">
+                        Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                    </span>
+                    <div class="page-buttons">
+                        {% if page_obj.has_previous %}
+                            <a href="?page={{ page_obj.previous_page_number }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span></a>
                         {% endif %}
-                    </td>
-                    <td>
-                        {% if reg.accion == 'creacion' %}
-                            <span class="badge bg-success">Creación</span>
-                        {% elif reg.accion == 'modificacion' %}
-                            <span class="badge bg-warning text-dark">Modificación</span>
-                        {% else %}
-                            <span class="badge bg-danger">Eliminación</span>
+                        
+                        <a href="#" class="page-btn active">{{ page_obj.number }}</a>
+                        
+                        {% if page_obj.has_next %}
+                            <a href="?page={{ page_obj.next_page_number }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span></a>
                         {% endif %}
-                    </td>
-                    <td><strong>{{ reg.modelo }}</strong></td>
-                    <td class="text-start">{{ reg.descripcion }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="5" class="text-muted py-3">No hay registros de auditoría.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <!-- Paginación -->
-    {% if page_obj.paginator.num_pages > 1 %}
-    <nav class="mt-3">
-        <ul class="pagination justify-content-center">
-            {% if page_obj.has_previous %}
-                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a></li>
-            {% endif %}
-            <li class="page-item active"><span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
-            {% if page_obj.has_next %}
-                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a></li>
-            {% endif %}
-        </ul>
-    </nav>
-    {% endif %}
-</div>
-{% endblock %}
+    <!-- MODAL DE DETALLE -->
+    <div class="modal-overlay" id="modalDetalle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><span class="material-symbols-outlined" style="vertical-align: middle; color: var(--primary);">info</span> Detalle de la Actividad</h3>
+                <button class="btn-cerrar-modal" onclick="document.getElementById('modalDetalle').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px;">
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Usuario</div>
+                        <div id="modal-usuario" style="font-weight: 700; font-size: 14px;"></div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Fecha</div>
+                        <div id="modal-fecha" style="font-weight: 700; font-size: 14px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Descripción del Cambio</div>
+                    <div class="detail-box" id="modal-descripcion"></div>
+                </div>
+            </div>
+            <div style="padding: 16px 20px; border-top: 1px solid var(--border-color); text-align: right;">
+                <button type="button" class="btn-action btn-detalle" onclick="document.getElementById('modalDetalle').style.display='none'">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        setInterval(updateClock, 1000); updateClock();
+
+        document.getElementById('search-audit').addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            document.querySelectorAll('.fila-auditoria').forEach(row => {
+                const searchData = row.dataset.search;
+                row.style.display = searchData.includes(query) ? '' : 'none';
+            });
+        });
+
+        document.querySelectorAll('.btn-ver-detalle').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.getElementById('modal-usuario').textContent = this.dataset.usuario;
+                document.getElementById('modal-fecha').textContent = this.dataset.fecha;
+                document.getElementById('modal-descripcion').textContent = this.dataset.descripcion;
+                document.getElementById('modalDetalle').style.display = 'flex';
+            });
+        });
+    </script>
+</body>
+</html>

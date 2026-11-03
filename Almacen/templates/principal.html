@@ -1,84 +1,268 @@
-{% extends 'plantillas.html' %}
 {% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Inicio</title>
+    
+    <!-- Fuentes e Iconos -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tu CSS Puro -->
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+</head>
+<body>
 
-{% block content %}
-    <div class="container py-4">
-        <div class="menu-container">
-            {% if not user.is_superuser and user.id_perfil.nombre_perfil|lower == 'vendedor' or not user.is_superuser and user.id_perfil.nombre|lower == 'vendedor' %}
-                <!-- Menú restringido para Perfil Vendedor -->
-                <a href="{% url 'registrar_venta' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-cart-arrow-down"></i>
-                    </div>
-                    <div class="text-box">Procesar Venta</div>
-                </a>
-
-                <a href="{% url 'cuentas_clientes' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-users"></i>
-                    </div>
-                    <div class="text-box">Cuentas de clientes</div>
-                </a>
-
-                <a href="{% url 'gestion_caja' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-sharp fa-solid fa-cash-register"></i>
-                    </div>
-                    <div class="text-box">Caja</div>
-                </a>
-            {% else %}
-                <!-- Menú completo para Administrador / Superusuario -->
-                <a href="{% url 'registrar_compra' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-box-open"></i>
-                    </div>
-                    <div class="text-box">Registrar Compra</div>
-                </a>
-
-                <a href="{% url 'consultar' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-boxes-stacked"></i>
-                    </div>
-                    <div class="text-box">Productos del almacén</div>
-                </a>
-
-                <a href="{% url 'registrar_venta' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-cart-arrow-down"></i>
-                    </div>
-                    <div class="text-box">Procesar Venta</div>
-                </a>
-
-                <a href="#" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-tags"></i>
-                    </div>
-                    <div class="text-box">Registrar descuento</div>
-                </a>
-
-                <a href="#" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-bullhorn"></i>
-                    </div>
-                    <div class="text-box">Registrar Promociones</div>
-                </a>
-
-                <a href="{% url 'cuentas_clientes' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-solid fa-users"></i>
-                    </div>
-                    <div class="text-box">Cuentas de clientes</div>
-                </a>
-
-                <a href="{% url 'gestion_caja' %}" class="menu-btn">
-                    <div class="icon-box">
-                        <i class="fa-sharp fa-solid fa-cash-register"></i>
-                    </div>
-                    <div class="text-box">Caja</div>
-                </a>
-            {% endif %}
+    <!-- SIDEBAR IZQUIERDA -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon">
+                <span class="material-symbols-outlined">storefront</span>
+            </div>
+            <div class="brand-text">
+                <h1>El Refugio</h1>
+                <span>ALMACÉN CENTRAL</span>
+            </div>
         </div>
+
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item active">
+                <span class="material-symbols-outlined">home</span> Inicio
+            </a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item">
+                <span class="material-symbols-outlined">point_of_sale</span> Ventas / POS
+            </a>
+            <a href="{% url 'consultar' %}" class="nav-item">
+                <span class="material-symbols-outlined">inventory_2</span> Productos & Stock
+            </a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item">
+                <span class="material-symbols-outlined">local_shipping</span> Proveedores
+            </a>
+            <a href="{% url 'gestion_caja' %}" class="nav-item">
+                <span class="material-symbols-outlined">payments</span> Caja & Arqueo
+            </a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item">
+                <span class="material-symbols-outlined">group</span> Clientes (Cuentas)
+            </a>
+            
+            <!-- Estas opciones podrían ocultarse según el perfil si lo deseas -->
+            <a href="#" class="nav-item">
+                <span class="material-symbols-outlined">loyalty</span> Descuentos & Promos
+            </a>
+            
+            {% if request.user.id_perfil.nombre == 'Administrador' or request.user.is_superuser %}
+            <a href="{% url 'listar_auditoria' %}" class="nav-item">
+                <span class="material-symbols-outlined">history</span> Registro de Actividades
+            </a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item">
+                <span class="material-symbols-outlined">manage_accounts</span> Usuarios
+            </a>
+            {% endif %}
+        </nav>
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="main-content">
+        
+        <!-- HEADER SUPERIOR -->
+        <header class="top-header">
+            <div class="header-time">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime">Cargando...</span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <div class="header-user">
+                    <div class="avatar">
+                        {{ request.user.username|first|upper }}
+                    </div>
+                    <div class="user-info">
+                        <strong>{{ request.user.username }}</strong>
+                        <span>{{ request.user.id_perfil.nombre|default:"Cajero" }}</span>
+                    </div>
+                </div>
+                <a href="{% url 'logout' %}" style="color: #e11d48; text-decoration: none; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 5px;">
+                    <i class="fa-solid fa-right-from-bracket"></i> Salir
+                </a>
+            </div>
+        </header>
+
+        <!-- AREA DE TARJETAS -->
+        <main class="content-area">
+            
+            <!-- Fila 1: Bienvenida y Alertas -->
+            <div class="dashboard-top">
+                <div class="welcome-card">
+                    <h1>Hola, {{ request.user.username }} <span style="font-size: 24px;">👋</span></h1>
+                </div>
+
+                <div class="alerts-card">
+                    <div class="alerts-header">
+                        <div class="alerts-title">
+                            <span class="material-symbols-outlined" style="color: #b45309;">warning</span>
+                            Alertas de Vencimientos
+                        </div>
+                        <a href="#" style="font-size: 12px; color: var(--primary); text-decoration: none; font-weight: 600;">Ver todas las alertas ></a>
+                    </div>
+
+                    <div class="alerts-grid">
+                        {% for alerta in alertas_vencimiento %}
+                        <div class="alert-item">
+                            <div>
+                                <span class="alert-lote">LOTE: {{ alerta.lote }}</span>
+                                <span class="alert-badge">{{ alerta.fecha_vencimiento|timeuntil }}</span>
+                            </div>
+                            <div class="alert-product">{{ alerta.id_producto.nombre }}</div>
+                            <div class="alert-date">Vence: {{ alerta.fecha_vencimiento|date:"d M Y" }}</div>
+                        </div>
+                        {% empty %}
+                        <div style="grid-column: span 3; text-align: center; color: var(--text-muted); font-size: 13px; padding: 10px;">
+                            No hay productos próximos a vencer en los siguientes 30 días.
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila 2: Botón Gigante de Ventas -->
+            <section class="hero-sale">
+                <div class="hero-content">
+                    <div class="hero-icon">
+                        <span class="material-symbols-outlined" style="font-size: 40px;">point_of_sale</span>
+                    </div>
+                    <div class="hero-text">
+                        <h2>Procesar Venta</h2>
+                        <p>Cobro rápido, lector de código de barras, medios de pago y emisión de comprobantes.</p>
+                    </div>
+                </div>
+                <a href="{% url 'registrar_venta' %}" class="hero-btn">
+                    <span class="material-symbols-outlined">shopping_cart_checkout</span>
+                    Iniciar Nueva Venta (F2)
+                </a>
+            </section>
+
+            <!-- Fila 3: Grillas de Módulos -->
+            <div class="modules-wrapper">
+                
+                <!-- OPERACIONES DIARIAS -->
+                <section>
+                    <div class="section-header">
+                        <div class="section-title">
+                            <span class="material-symbols-outlined" style="color: var(--primary);">store</span>
+                            <div>
+                                <h3>Operaciones Diarias</h3>
+                                <p>Movimientos de flujo constante en tienda</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="module-grid">
+                        <a href="{% url 'registrar_compra' %}" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-blue"><span class="material-symbols-outlined">shopping_bag</span></div>
+                                <div class="module-title">Registrar Compra</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+                        
+                        <a href="{% url 'gestion_caja' %}" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-green"><span class="material-symbols-outlined">account_balance_wallet</span></div>
+                                <div class="module-title">Caja</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+
+                        <a href="#" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-amber"><span class="material-symbols-outlined">sell</span></div>
+                                <div class="module-title">Registrar Descuento</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+
+                        <a href="#" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-purple"><span class="material-symbols-outlined">campaign</span></div>
+                                <div class="module-title">Registrar Promociones</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+                    </div>
+                </section>
+
+                <!-- ADMINISTRACIÓN -->
+                <section>
+                    <div class="section-header">
+                        <div class="section-title">
+                            <span class="material-symbols-outlined" style="color: #4f46e5;">corporate_fare</span>
+                            <div>
+                                <h3>Administración</h3>
+                                <p>Gestión de catálogo, cuentas y auditoría</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="module-grid">
+                        <a href="{% url 'consultar' %}" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-cyan"><span class="material-symbols-outlined">all_inbox</span></div>
+                                <div class="module-title">Productos del Almacén</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+
+                        <a href="{% url 'cuentas_clientes' %}" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-teal"><span class="material-symbols-outlined">groups</span></div>
+                                <div class="module-title">Cuentas de Clientes</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+
+                        <a href="{% url 'listar_proveedores' %}" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-orange"><span class="material-symbols-outlined">local_shipping</span></div>
+                                <div class="module-title">Proveedores</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+
+                        {% if request.user.id_perfil.nombre == 'Administrador' or request.user.is_superuser %}
+                        <a href="{% url 'listar_auditoria' %}" class="module-card">
+                            <div class="module-info">
+                                <div class="module-icon icon-slate"><span class="material-symbols-outlined">manage_history</span></div>
+                                <div class="module-title">Registro de Actividades</div>
+                            </div>
+                            <span class="material-symbols-outlined arrow-icon">arrow_forward</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </section>
+            </div>
+        </main>
     </div>
 
-    <link rel="stylesheet" href="{% static 'css/principal.css' %}">
-{% endblock %}
+    <!-- Script para el reloj y el atajo F2 -->
+    <script>
+        // Reloj en vivo
+        function updateClock() {
+            const now = new Date();
+            const options = { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' };
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', options).replace(',', ' -');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Atajo F2 para ir a ventas
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'F2') {
+                event.preventDefault();
+                window.location.href = "{% url 'registrar_venta' %}";
+            }
+        });
+    </script>
+</body>
+</html>

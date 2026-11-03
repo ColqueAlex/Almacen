@@ -1,232 +1,268 @@
-{% extends 'plantillas.html' %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Inventario</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/inventario.css' %}">
+</head>
+<body>
 
-{% block content %}
-<div class="container my-4">
-
-    {% if messages %}
-        {% for message in messages %}
-            <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags %}{{ message.tags }}{% else %}info{% endif %} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-        <h2>Catálogo de Productos</h2>
-        <div class="d-flex align-items-center gap-2">
-            <form method="get" class="d-flex align-items-center gap-2 m-0">
-                <input type="search" id="busqueda" name="busqueda" class="form-control" placeholder="Buscar Producto..." value="{{ busqueda }}">
-                <button type="submit" class="btn btn-outline-secondary"><i class="fa-solid fa-magnifying-glass"></i></button>
-            </form>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalGuardar">
-                <i class="fa-solid fa-plus me-1"></i> Nuevo Producto
-            </button>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
         </div>
-    </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas / POS</a>
+            <a href="{% url 'consultar' %}" class="nav-item active"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
+            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
+        </nav>
+    </aside>
 
-    <!--  Agregar Producto -->
-    <div class="modal fade" id="modalGuardar" tabindex="-1" aria-labelledby="modalGuardarLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="modalGuardarLabel">Añadir Producto al Catálogo</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <header class="top-header">
+            <div class="header-time">
+                <span class="material-symbols-outlined" style="font-size: 18px; color: var(--primary);">schedule</span>
+                <span id="current-datetime">Cargando...</span>
+            </div>
+            <div class="header-user">
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+                <div style="display: flex; flex-direction: column;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Administrador" }}</span>
                 </div>
-                <form action="{% url 'guardar' %}" method="post">
-                    {% csrf_token %}
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nombre:</label>
-                            <input type="text" name="nombre" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Categoría:</label>
-                            <input type="text" name="categoria" class="form-control" required pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$" title="La categoría no puede contener números.">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Marca:</label>
-                            <input type="text" name="marca" class="form-control" placeholder="Sin marca">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Precio Venta ($):</label>
-                            <input type="number" min="0.01" step="0.01" name="precio" class="form-control" required>
-                        </div>
-                        
-                        <!-- Selector de Proveedores -->
-                        <div class="mb-3">
-                            <label for="proveedores" class="form-label fw-semibold">Proveedores Habituales:</label>
-                            <select name="proveedores" id="proveedores" class="form-select" multiple size="4">
-                                {% for prov in proveedores %}
-                                    <option value="{{ prov.id }}">{{ prov.nombre }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text text-muted small">
-                                <i class="fa-solid fa-circle-info me-1"></i>Mantené apretada la tecla <strong>Ctrl</strong> para seleccionar más de uno.
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Estado:</label>
-                            <select name="estado" class="form-select" required>
-                                <option value="activo" selected>Activo</option>
-                                <option value="inactivo">Inactivo</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Guardar en Catálogo</button>
-                    </div>
-                </form>
             </div>
+        </header>
+
+        <main class="inv-container">
+            <!-- HEADER -->
+            <div>
+                <span class="subtitle-badge">Catálogo General y Control de Existencias</span>
+                <h1 class="page-title">Inventario y Productos</h1>
+            </div>
+
+            <!-- MENSAJES DE DJANGO -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div style="padding: 12px; border-radius: 8px; background: {% if message.tags == 'error' %}#fee2e2{% else %}#dcfce7{% endif %}; color: {% if message.tags == 'error' %}#991b1b{% else %}#166534{% endif %}; font-weight: 500; font-size: 14px;">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <!-- KPI CARDS -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Total Productos</h3>
+                        <div class="value">{{ total_productos }}</div>
+                        <div class="sub"><span class="material-symbols-outlined" style="font-size: 16px;">trending_up</span> En catálogo</div>
+                    </div>
+                    <div class="kpi-icon blue"><span class="material-symbols-outlined">inventory_2</span></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Stock Bajo</h3>
+                        <div class="value" style="color: var(--tertiary);">{{ stock_bajo }}</div>
+                        <div class="sub" style="color: var(--tertiary);"><span class="material-symbols-outlined" style="font-size: 16px;">warning</span> Requieren reposición</div>
+                    </div>
+                    <div class="kpi-icon orange"><span class="material-symbols-outlined">warning</span></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Sin Stock</h3>
+                        <div class="value" style="color: var(--danger);">{{ sin_stock }}</div>
+                        <div class="sub" style="color: var(--danger);"><span class="material-symbols-outlined" style="font-size: 16px;">production_quantity_limits</span> Agotados</div>
+                    </div>
+                    <div class="kpi-icon red"><span class="material-symbols-outlined">production_quantity_limits</span></div>
+                </div>
+            </div>
+
+            <!-- TOOLBAR -->
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <form method="GET" action="{% url 'consultar' %}" style="display: flex; gap: 12px; flex: 1; flex-wrap: wrap;">
+                        <div class="search-box">
+                            <span class="material-symbols-outlined">search</span>
+                            <input type="text" name="busqueda" value="{{ busqueda }}" placeholder="Buscar producto por nombre o marca...">
+                        </div>
+                        <select name="categoria" class="filter-select" onchange="this.form.submit()">
+                            <option value="">Todas las Categorías</option>
+                            {% for cat in categorias %}
+                                <option value="{{ cat }}" {% if categoria_actual == cat %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="estado_stock" class="filter-select" onchange="this.form.submit()">
+                            <option value="">Todos los Estados</option>
+                            <option value="normal" {% if estado_actual == 'normal' %}selected{% endif %}>Stock Normal</option>
+                            <option value="bajo" {% if estado_actual == 'bajo' %}selected{% endif %}>Stock Bajo</option>
+                            <option value="agotado" {% if estado_actual == 'agotado' %}selected{% endif %}>Agotado</option>
+                        </select>
+                    </form>
+                </div>
+                <button type="button" class="btn-primary" data-bs-toggle="modal" data-bs-target="#modalGuardar">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nuevo Producto
+                </button>
+            </div>
+
+            <!-- TABLA DE PRODUCTOS -->
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nombre & SKU</th>
+                            <th>Categoría</th>
+                            <th>Proveedor</th>
+                            <th>Precio de Venta</th>
+                            <th>Nivel de Stock</th>
+                            <th style="text-align: right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for producto in productos %}
+                        <tr>
+                            <td>
+                                <div class="prod-info">
+                                    <div class="prod-avatar">{{ producto.nombre|first|upper }}</div>
+                                    <div class="prod-details">
+                                        <h4>{{ producto.nombre }}</h4>
+                                        <span>#ART-{{ producto.id|stringformat:"05d" }}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><span class="badge badge-gray">{{ producto.categoria }}</span></td>
+                            <td>
+                                {% for prov in producto.proveedores.all %}
+                                    <span class="badge badge-gray" style="margin-bottom: 2px;">{{ prov.nombre }}</span>
+                                {% empty %}
+                                    <span style="font-size: 12px; color: var(--text-muted); font-style: italic;">Sin asignar</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <div class="price-info">
+                                    <strong>${{ producto.precio }}</strong>
+                                </div>
+                            </td>
+                            <td>
+                                {% if producto.stock > 10 %}
+                                    <div class="stock-info">
+                                        <div class="stock-header normal"><span>{{ producto.stock }} un</span><span>Normal</span></div>
+                                        <div class="stock-bar-bg"><div class="stock-bar normal" style="width: 100%;"></div></div>
+                                    </div>
+                                {% elif producto.stock > 0 %}
+                                    <div class="stock-info">
+                                        <div class="stock-header low"><span>{{ producto.stock }} un</span><span>Bajo (Mín: 10)</span></div>
+                                        <div class="stock-bar-bg"><div class="stock-bar low" style="width: 30%;"></div></div>
+                                    </div>
+                                {% else %}
+                                    <div class="stock-info">
+                                        <div class="stock-header out"><span>0 un</span><span>Agotado</span></div>
+                                        <div class="stock-bar-bg"><div class="stock-bar out"></div></div>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="actions">
+                                    <!-- Botón para activar/desactivar -->
+                                    <form action="{% url 'cambiar_estado' producto.id %}" method="post" style="margin: 0;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn-icon" title="{% if producto.estado == 'activo' %}Desactivar{% else %}Activar{% endif %}">
+                                            <span class="material-symbols-outlined" style="font-size: 20px; color: {% if producto.estado == 'activo' %}var(--secondary){% else %}var(--danger){% endif %};">
+                                                {% if producto.estado == 'activo' %}toggle_on{% else %}toggle_off{% endif %}
+                                            </span>
+                                        </button>
+                                    </form>
+                                    
+                                    <!-- Botón Editar -->
+                                    <a href="{% url 'detalle' producto.id %}" class="btn-icon" title="Editar">
+                                        <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                No se encontraron productos que coincidan con la búsqueda.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                
+                <!-- PAGINACIÓN -->
+                <div class="pagination">
+                    <span class="page-info">
+                        Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                    </span>
+                    <div class="page-buttons">
+                        {% if page_obj.has_previous %}
+                            <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda }}&categoria={{ categoria_actual }}&estado_stock={{ estado_actual }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span></a>
+                        {% endif %}
+                        
+                        <a href="#" class="page-btn active">{{ page_obj.number }}</a>
+                        
+                        {% if page_obj.has_next %}
+                            <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda }}&categoria={{ categoria_actual }}&estado_stock={{ estado_actual }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span></a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL PARA CREAR PRODUCTO (Adaptado a tu lógica) -->
+    <div id="modalGuardar" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center;">
+        <div style="background: white; width: 500px; border-radius: 12px; padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="font-size: 20px; font-weight: 700;">Añadir Producto</h2>
+                <button onclick="document.getElementById('modalGuardar').style.display='none'" style="border:none; background:none; cursor:pointer;"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <form action="{% url 'guardar' %}" method="post">
+                {% csrf_token %}
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="text" name="nombre" placeholder="Nombre del producto" required style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+                    <input type="text" name="categoria" placeholder="Categoría" required style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+                    <input type="text" name="marca" placeholder="Marca (Opcional)" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+                    <input type="number" name="precio" step="0.01" placeholder="Precio de venta ($)" required style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+                    
+                    <label style="font-size: 13px; font-weight: 600;">Proveedores:</label>
+                    <select name="proveedores" multiple size="3" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+                        {% for prov in proveedores %}
+                            <option value="{{ prov.id }}">{{ prov.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                    <span style="font-size: 11px; color: #666;">Mantené Ctrl para seleccionar varios.</span>
+
+                    <input type="hidden" name="estado" value="activo">
+                    <button type="submit" style="background: var(--primary); color: white; padding: 12px; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; margin-top: 10px;">Guardar en Catálogo</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <!-- Tabla Catálogo -->
-    <div class="table-responsive shadow-sm rounded">
-        <table class="table table-hover table-light align-middle text-center mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th>Nombre</th>
-                    <th>Categoría</th>
-                    <th>Proveedores</th> <!-- NUEVA COLUMNA -->
-                    <th>Precio Venta</th>
-                    <th>Stock Disponible</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for producto in productos %}
-                <tr>
-                    <td>{{ producto.nombre }}</td>
-                    <td>{{ producto.categoria }}</td>
-                    <!-- NUEVA COLUMNA: Muestra los proveedores del producto -->
-                    <td>
-                        {% for prov in producto.proveedores.all %}
-                            <span class="badge bg-secondary mb-1">{{ prov.nombre }}</span>
-                        {% empty %}
-                            <span class="text-muted small fst-italic">Sin asignar</span>
-                        {% endfor %}
-                    </td>
-                    <td>${{ producto.precio }}</td>
-                    <td>
-                        {% if producto.stock > 10 %}
-                            <span class="badge bg-success fs-6">{{ producto.stock }} unidades</span>
-                        {% elif producto.stock > 0 %}
-                            <span class="badge bg-warning text-dark fs-6">{{ producto.stock }} unidades (Bajo)</span>
-                        {% else %}
-                            <span class="badge bg-danger fs-6">Sin Stock</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <span class="badge {% if producto.estado == 'activo' %}bg-success{% else %}bg-secondary{% endif %}">
-                            {{ producto.get_estado_display }}
-                        </span>
-                    </td>
-                    
-                    <td>
-                        <div class="d-flex justify-content-center gap-2">
-                            <form action="{% url 'cambiar_estado' producto.id %}" method="post" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm {% if producto.estado == 'activo' %}btn-outline-secondary{% else %}btn-success{% endif %}" title="{% if producto.estado == 'activo' %}Desactivar{% else %}Activar{% endif %}">
-                                    <i class="fa-solid {% if producto.estado == 'activo' %}fa-toggle-off{% else %}fa-toggle-on{% endif %}"></i>
-                                </button>
-                            </form>
-                            <a href="{% url 'detalle' producto.id %}" class="btn btn-warning btn-sm text-white" title="Editar">
-                                <i class="fa-sharp fa-solid fa-pen-to-square"></i>
-                            </a>
-                            {% if producto.estado == 'inactivo' %}
-                            <button type="button" class="btn btn-sm btn-light border rounded-circle p-2" data-circle-toggle data-selected="false" style="width: 38px; height: 38px; line-height: 1;">
-                                <i class="fa-regular fa-circle"></i>
-                            </button>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="7" class="text-center text-muted">No hay productos en el catálogo.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    {% if page_obj.paginator.num_pages > 1 %}
-    <nav class="mt-3" aria-label="Paginación de productos">
-        <ul class="pagination justify-content-center flex-wrap mb-0">
-            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
-                {% if page_obj.has_previous %}
-                    <a class="page-link" href="?busqueda={{ busqueda|urlencode }}&page={{ page_obj.previous_page_number }}">Anterior</a>
-                {% else %}
-                    <span class="page-link">Anterior</span>
-                {% endif %}
-            </li>
-            {% for page_number in page_obj.paginator.page_range %}
-                <li class="page-item {% if page_obj.number == page_number %}active{% endif %}">
-                    <a class="page-link" href="?busqueda={{ busqueda|urlencode }}&page={{ page_number }}" {% if page_obj.number == page_number %}aria-current="page"{% endif %}>{{ page_number }}</a>
-                </li>
-            {% endfor %}
-            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
-                {% if page_obj.has_next %}
-                    <a class="page-link" href="?busqueda={{ busqueda|urlencode }}&page={{ page_obj.next_page_number }}">Siguiente</a>
-                {% else %}
-                    <span class="page-link">Siguiente</span>
-                {% endif %}
-            </li>
-        </ul>
-    </nav>
-    {% endif %}
-
-    {% if has_inactive_products %}
-    <div class="d-flex justify-content-end mt-3">
-        <form id="formEliminarSeleccionados" method="post" action="{% url 'eliminar_seleccionados' %}">
-            {% csrf_token %}
-            <input type="hidden" name="selected_ids" id="selectedIdsInput">
-            <button type="submit" class="btn btn-danger btn-sm opacity-50" id="btnEliminarMarcados" disabled title="Eliminar seleccionados">
-                <i class="fa-solid fa-trash me-1"></i> Eliminar Selección
-            </button>
-        </form>
-    </div>
-    {% endif %}
-
-</div>
-
-<script>
-    const selectedIds = new Set();
-    document.addEventListener('click', function (event) {
-        const btn = event.target.closest('[data-circle-toggle]');
-        if (!btn) return;
-
-        const icon = btn.querySelector('i');
-        const row = btn.closest('tr');
-        const editLink = row?.querySelector('a[href*="detalle"]')?.href;
-        const productId = editLink ? editLink.split('/').filter(Boolean).pop() : null;
-
-        if (!productId) return;
-
-        const wasSelected = btn.dataset.selected === 'true';
-        const nextSelected = !wasSelected;
-
-        btn.dataset.selected = String(nextSelected);
-        icon.classList.remove('fa-regular', 'fa-solid');
-        icon.classList.add(nextSelected ? 'fa-solid' : 'fa-regular', 'fa-circle');
-
-        if (nextSelected) {
-            selectedIds.add(productId);
-        } else {
-            selectedIds.delete(productId);
+    <script>
+        // Reloj
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
         }
+        setInterval(updateClock, 1000); updateClock();
 
-        const input = document.getElementById('selectedIdsInput');
-        const borrarBtn = document.getElementById('btnEliminarMarcados');
-        if (input) input.value = Array.from(selectedIds).join(',');
-        if (borrarBtn) {
-            borrarBtn.disabled = selectedIds.size === 0;
-            borrarBtn.classList.toggle('opacity-50', selectedIds.size === 0);
-        }
-    });
-</script>
-{% endblock %}
+        // Control del Modal (Como no uso Bootstrap, lo hago con JS simple)
+        document.querySelector('[data-bs-target="#modalGuardar"]').addEventListener('click', function() {
+            document.getElementById('modalGuardar').style.display = 'flex';
+        });
+    </script>
+</body>
+</html>

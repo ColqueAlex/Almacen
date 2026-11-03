@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+:root {
+    --primary: #1e40af;
+    --primary-light: #eff6ff;
+    --secondary: #059669;
+    --secondary-light: #ecfdf5;
+    --tertiary: #d97706;
+    --tertiary-light: #fffbeb;
+    --danger: #ba1a1a;
+    --danger-light: #ffdad6;
+    --bg-body: #f8fafc;
+    --bg-surface: #ffffff;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: var(--text-main); display: flex; min-height: 100vh; }
+
+/* SIDEBAR (Consistente con el resto) */
+.sidebar { width: 260px; background-color: var(--bg-surface); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 10; }
+.sidebar-brand { padding: 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-color); }
+.brand-icon { width: 40px; height: 40px; background: var(--primary); color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.brand-text h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 18px; font-weight: 800; line-height: 1; }
+.brand-text span { font-size: 10px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+.sidebar-nav { padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; }
+.nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 8px; color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+.nav-item:hover { background: var(--bg-body); color: var(--text-main); }
+.nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+
+/* MAIN LAYOUT */
+.main-content { margin-left: 260px; flex: 1; display: flex; flex-direction: column; }
+.top-header { height: 64px; background: var(--bg-surface); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 5; }
+.header-user { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 36px; height: 36px; background: var(--primary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+
+/* CONTENT */
+.inv-container { padding: 24px; max-width: 1400px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 20px; }
+.page-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 28px; font-weight: 800; }
+.subtitle-badge { background: var(--primary-light); color: var(--primary); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; margin-bottom: 8px; }
+
+/* ENCABEZADO CAJA ABIERTA/CERRADA */
+.header-status { display: flex; align-items: center; gap: 12px; background: var(--secondary-light); padding: 8px 16px; border-radius: 12px; border: 1px solid var(--secondary); }
+.header-status.cerrada { background: var(--danger-light); border-color: var(--danger); }
+.header-status .icon-box { width: 32px; height: 32px; border-radius: 8px; background: var(--secondary); color: white; display: flex; align-items: center; justify-content: center; }
+.header-status.cerrada .icon-box { background: var(--danger); }
+
+/* KPI CARDS (5 tarjetas) */
+.kpi-grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.kpi-card { background: var(--bg-surface); padding: 16px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; }
+.kpi-card.highlight { background: var(--primary); color: white; }
+.kpi-card.highlight h3, .kpi-card.highlight .value, .kpi-card.highlight .sub { color: white; }
+.kpi-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.kpi-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
+.kpi-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--bg-body); }
+.kpi-card.highlight .kpi-icon { background: rgba(255,255,255,0.2); }
+.kpi-value { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 24px; font-weight: 800; }
+.kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+
+/* FORMULARIO ARQUEO (CIERRE) */
+.arqueo-card { background: var(--bg-surface); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-top: 4px solid var(--danger); padding: 20px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; align-items: stretch; }
+.input-group { display: flex; flex-direction: column; gap: 6px; }
+.input-group label { font-size: 13px; font-weight: 600; }
+.form-control { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-body); font-size: 18px; font-weight: 700; outline: none; }
+.form-control:focus { border-color: var(--primary); background: var(--bg-surface); }
+textarea.form-control { font-size: 14px; font-weight: 400; resize: none; height: 100%; min-height: 80px; }
+.btn-cerrar { background: var(--danger); color: white; border: none; border-radius: 8px; padding: 12px; font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; transition: all 0.2s; margin-top: 8px; }
+.btn-cerrar:hover { background: #991b1b; }
+
+/* BANNER DE DIFERENCIA */
+.diff-banner { padding: 16px; border-radius: 12px; display: flex; flex-direction: column; justify-content: center; gap: 4px; background: var(--bg-body); transition: all 0.3s; }
+.diff-banner.ok { background: var(--secondary-light); color: var(--secondary); }
+.diff-banner.sobrante { background: var(--primary-light); color: var(--primary); }
+.diff-banner.faltante { background: var(--danger-light); color: var(--danger); }
+.diff-title { font-size: 18px; font-weight: 800; }
+.diff-sub { font-size: 12px; font-weight: 500; opacity: 0.8; }
+
+/* APERTURA DE CAJA (Si está cerrada) */
+.apertura-card { background: var(--bg-surface); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-top: 4px solid var(--primary); padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; max-width: 600px; margin: 40px auto; gap: 16px; }
+.btn-abrir { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 12px 32px; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; }
+.btn-abrir:hover { background: #1e3a8a; }
+
+/* TABLA HISTORIAL */
+.table-card { background: var(--bg-surface); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; min-width: 900px; }
+th { background: var(--bg-body); padding: 14px 20px; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+td { padding: 16px 20px; border-bottom: 1px solid var(--border-color); vertical-align: middle; font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+tr:hover { background: var(--bg-body); }
+
+/* BADGES */
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.badge-ok { background: var(--secondary-light); color: var(--secondary); }
+.badge-sobrante { background: var(--primary-light); color: var(--primary); }
+.badge-faltante { background: var(--danger-light); color: var(--danger); }
+
+/* PAGINACION */
+.pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--bg-surface); border-top: 1px solid var(--border-color); }
+.page-info { font-size: 13px; color: var(--text-muted); }
+.page-buttons { display: flex; gap: 4px; }
+.page-btn { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; }
+.page-btn:hover { background: var(--bg-body); }
+.page-btn.active { background: var(--primary); color: white; }

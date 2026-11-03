@@ -1,151 +1,309 @@
-{% extends 'plantillas.html' %}
 {% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - Cuentas Corrientes</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="{% static 'css/cuentas.css' %}">
+</head>
+<body>
 
-{% block content %}
-<div class="container my-4">
-    {% if messages %}
-        <div class="my-3">
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'success' }}{% endif %} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            {% endfor %}
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
         </div>
-    {% endif %}
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas / POS</a>
+            <a href="{% url 'consultar' %}" class="nav-item"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
+            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item active"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
+        </nav>
+    </aside>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fa-solid fa-users-rectangle me-2"></i>Cuentas Corrientes - Clientes Fiados</h2>
-    </div>
-
-    <div class="table-responsive rounded shadow-sm border bg-white mb-5">
-        <table class="table table-hover align-middle text-center mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th>Cliente</th>
-                    <th>Contacto</th>
-                    <th>Saldo Deudor Total</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for cliente in clientes %}
-                <tr>
-                    <td class="fw-bold">{{ cliente.nombre }} {{ cliente.apellido|default:'' }}</td>
-                    <td>{{ cliente.telefono|default:'Sin teléfono' }}</td>
-                    <td class="fw-bold text-danger fs-5">
-                        ${{ cliente.saldo|floatformat:2 }}
-                    </td>
-                    <td>
-                        {% if cliente.saldo > 0 %}
-                            <span class="badge bg-danger">Con Deuda</span>
-                        {% else %}
-                            <span class="badge bg-success">Al Día</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div class="d-flex justify-content-center gap-2">
-                            {% if cliente.saldo > 0 %}
-                                <button type="button" 
-                                        class="btn btn-success btn-sm btn-pagar"
-                                        data-cliente-id="{{ cliente.id_clientes }}"
-                                        data-cliente-nombre="{{ cliente.nombre }} {{ cliente.apellido|default:'' }}"
-                                        data-saldo="{{ cliente.saldo|floatformat:2 }}"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#modalRegistrarPago">
-                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Registrar Pago
-                                </button>
-                            {% else %}
-                                <button class="btn btn-outline-secondary btn-sm" disabled>Sin Deuda</button>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="5" class="text-center text-muted py-4">No hay clientes registrados.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <h4 class="mt-4 mb-3 text-secondary"><i class="fa-solid fa-clock-rotate-left me-2"></i>Últimos pagos recibidos</h4>
-    <div class="table-responsive rounded shadow-sm border bg-white">
-        <table class="table table-sm table-hover align-middle text-center mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>Fecha y Hora</th>
-                    <th>Cliente</th>
-                    <th>Monto Abonado</th>
-                    <th>Cobrado por</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for pago in pagos_recientes %}
-                <tr>
-                    <td>{{ pago.fecha|date:"d/m/Y H:i" }}</td>
-                    <td class="fw-semibold">{{ pago.cliente.nombre }} {{ pago.cliente.apellido|default:'' }}</td>
-                    <td class="text-success fw-bold">${{ pago.monto|floatformat:2 }}</td>
-                    <td>{{ pago.usuario.username }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="4" class="text-center text-muted py-3">No hay pagos registrados aún.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- Modal: Registrar Pago-->
-<div class="modal fade" id="modalRegistrarPago" tabindex="-1" aria-labelledby="modalRegistrarPagoLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title" id="modalRegistrarPagoLabel">
-                    <i class="fa-solid fa-money-bill-wave me-2"></i>Registrar Entrega de Dinero
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <header class="top-header">
+            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime">Cargando...</span>
             </div>
-            <form method="post" id="formRegistrarPago" action="">
+            <div class="header-user">
+                <div style="display: flex; flex-direction: column; text-align: right;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Cajero" }}</span>
+                </div>
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+            </div>
+        </header>
+
+        <main class="inv-container">
+            {% if messages %}
+                {% for message in messages %}
+                    <div style="padding: 12px; border-radius: 8px; background: {% if message.tags == 'error' %}#fee2e2{% else %}#dcfce7{% endif %}; color: {% if message.tags == 'error' %}#991b1b{% else %}#166534{% endif %}; font-weight: 500; font-size: 14px;">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <!-- ENCABEZADO -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <span class="subtitle-badge">Gestión de Crédito y Cuentas</span>
+                    <h1 class="page-title">Cuentas Corrientes</h1>
+                    <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Control de saldos pendientes y liquidación de deudas de clientes.</p>
+                </div>
+                <!-- Botón para Nuevo Cliente -->
+                <button class="btn-primary" onclick="document.getElementById('modalNuevoCliente').style.display='flex'">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span> Nuevo Cliente
+                </button>
+            </div>
+
+            <!--  CARDS -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Deuda Total en Calle</h3>
+                        <div class="value" style="color: var(--danger);">${{ deuda_total|floatformat:2 }}</div>
+                        <div class="sub" style="color: var(--danger);"><span class="material-symbols-outlined" style="font-size: 16px;">trending_up</span> {{ con_deuda }} clientes con saldo pendiente</div>
+                    </div>
+                    <div class="kpi-icon red"><span class="material-symbols-outlined">payments</span></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Clientes con Deuda</h3>
+                        <div class="value" style="color: var(--tertiary);">{{ con_deuda }}</div>
+                        <div class="sub" style="color: var(--text-muted);"><span class="material-symbols-outlined" style="font-size: 16px;">pie_chart</span> De un total de {{ total_clientes }} clientes</div>
+                    </div>
+                    <div class="kpi-icon orange"><span class="material-symbols-outlined">pending_actions</span></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-info">
+                        <h3>Clientes al Día</h3>
+                        <div class="value" style="color: var(--secondary);">{{ al_dia }}</div>
+                        <div class="sub" style="color: var(--secondary);"><span class="material-symbols-outlined" style="font-size: 16px;">verified</span> Cuentas saldadas</div>
+                    </div>
+                    <div class="kpi-icon green"><span class="material-symbols-outlined">task_alt</span></div>
+                </div>
+            </div>
+
+            <!-- TOOLBAR -->
+            <div class="toolbar">
+                <div class="search-box">
+                    <span class="material-symbols-outlined">search</span>
+                    <input type="text" id="search-client" placeholder="Buscar cliente por nombre o teléfono...">
+                </div>
+            </div>
+
+            <!-- TABLA PRINCIPAL DE CLIENTES -->
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Contacto</th>
+                            <th style="text-align: right;">Saldo Deudor</th>
+                            <th style="text-align: center;">Estado</th>
+                            <th style="text-align: right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-clientes">
+                        {% for cliente in clientes %}
+                        <tr class="fila-cliente" data-nombre="{{ cliente.nombre|lower }} {{ cliente.apellido|lower }}">
+                            <td>
+                                <div class="prod-info">
+                                    <div class="prod-avatar {% if cliente.saldo == 0 %}badge-success{% endif %}" style="{% if cliente.saldo == 0 %}background: var(--secondary-light); color: var(--secondary);{% endif %}">
+                                        {{ cliente.nombre|first|upper }}{{ cliente.apellido|first|upper }}
+                                    </div>
+                                    <div class="prod-details">
+                                        <h4>{{ cliente.nombre }} {{ cliente.apellido|default:"" }}</h4>
+                                        <span>Cuenta #{{ cliente.id_clientes|stringformat:"04d" }}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-main);">
+                                    <span class="material-symbols-outlined" style="font-size: 16px; color: var(--primary);">phone</span>
+                                    {{ cliente.telefono|default:"Sin teléfono" }}
+                                </div>
+                            </td>
+                            <td style="text-align: right;">
+                                <span style="font-weight: 800; font-size: 16px; font-family: 'Plus Jakarta Sans'; color: {% if cliente.saldo > 0 %}var(--danger){% else %}var(--text-muted){% endif %};">
+                                    ${{ cliente.saldo|floatformat:2 }}
+                                </span>
+                            </td>
+                            <td style="text-align: center;">
+                                {% if cliente.saldo > 0 %}
+                                    <span class="badge badge-danger"><span class="w-1.5 h-1.5 rounded-full bg-error"></span> Con Deuda</span>
+                                {% else %}
+                                    <span class="badge badge-success"><span class="material-symbols-outlined" style="font-size: 14px;">check</span> Al Día</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: right;">
+                                {% if cliente.saldo > 0 %}
+                                    <button class="btn-action btn-cobrar btn-pagar" 
+                                            data-id="{{ cliente.id_clientes }}" 
+                                            data-nombre="{{ cliente.nombre }} {{ cliente.apellido|default:'' }}"
+                                            data-saldo="{{ cliente.saldo }}">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">payments</span> Registrar Pago
+                                    </button>
+                                {% else %}
+                                    <a href="{% url 'registrar_venta' %}" class="btn-action btn-fiado">
+                                        <span class="material-symbols-outlined" style="font-size: 16px; color: var(--primary);">add_shopping_cart</span> Nuevo Fiado
+                                    </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">No hay clientes registrados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- HISTORIAL DE PAGOS RECIENTES -->
+            <div class="table-card">
+                <div style="padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3 style="font-size: 18px; font-weight: 800;">Últimos Pagos y Cobros</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Movimientos de acreditación de cuenta corriente.</p>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha y Hora</th>
+                            <th>Cliente</th>
+                            <th>Método</th>
+                            <th>Cobrado por</th>
+                            <th style="text-align: right;">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pago in pagos_recientes %}
+                        <tr>
+                            <td style="font-weight: 600;">{{ pago.fecha|date:"d M • H:i" }}</td>
+                            <td>{{ pago.cliente.nombre }} {{ pago.cliente.apellido|default:"" }}</td>
+                            <td>
+                                {% if pago.metodo_pago == 'efectivo' %}
+                                    <span style="color: var(--secondary); font-weight: 600; display: flex; align-items: center; gap: 4px;"><span class="material-symbols-outlined" style="font-size: 16px;">point_of_sale</span> Efectivo</span>
+                                {% else %}
+                                    <span style="color: var(--primary); font-weight: 600; display: flex; align-items: center; gap: 4px;"><span class="material-symbols-outlined" style="font-size: 16px;">account_balance</span> Transferencia</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ pago.usuario.username }}</td>
+                            <td style="text-align: right; font-weight: 700; color: var(--secondary);">${{ pago.monto|floatformat:2 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">No hay pagos registrados aún.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- REGISTRAR PAGO -->
+    <div class="modal-overlay" id="modalPago">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><span class="material-symbols-outlined" style="vertical-align: middle; color: var(--secondary);">payments</span> Registrar Pago</h3>
+                <button class="btn-cerrar-modal" onclick="document.getElementById('modalPago').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <form method="POST" id="formPago" action="">
                 {% csrf_token %}
                 <div class="modal-body">
-                    <p class="mb-1">Cliente: <strong id="modalClienteNombre"></strong></p>
-                    <p class="text-danger mb-3">Deuda Actual: <strong>$<span id="modalClienteSaldo"></span></strong></p>
-
-                    <div class="mb-3">
-                        <label for="monto" class="form-label fw-semibold">Monto que entrega ($):</label>
-                        <input type="number" step="0.01" min="0.01" class="form-control" id="monto" name="monto" required placeholder="0.00">
+                    <p style="font-size: 14px; color: var(--text-muted);">Cliente: <strong id="modalNombre" style="color: var(--text-main);"></strong></p>
+                    <p style="font-size: 14px; color: var(--danger);">Deuda Actual: <strong>$<span id="modalSaldo"></span></strong></p>
+                    
+                    <div class="input-group">
+                        <label>Monto a cobrar ($)</label>
+                        <input type="number" step="0.01" name="monto" id="inputMonto" class="form-control" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Método de Pago</label>
+                        <select name="metodo_pago" class="form-control">
+                            <option value="efectivo">💵 Efectivo</option>
+                            <option value="transferencia">🏦 Transferencia</option>
+                        </select>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success">Confirmar Cobro</button>
+                    <button type="button" class="btn-action btn-fiado" onclick="document.getElementById('modalPago').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn-action btn-cobrar" style="padding: 10px 20px; font-size: 14px;">Confirmar Cobro</button>
                 </div>
             </form>
         </div>
     </div>
-</div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.btn-pagar').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                const id = btn.dataset.clienteId;
-                const nombre = btn.dataset.clienteNombre;
-                const saldo = btn.dataset.saldo;
+    <div class="modal-overlay" id="modalNuevoCliente">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><span class="material-symbols-outlined" style="vertical-align: middle; color: var(--primary);">person_add</span> Nuevo Cliente</h3>
+                <button class="btn-cerrar-modal" onclick="document.getElementById('modalNuevoCliente').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <form method="POST" action="{% url 'crear_cliente' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="input-group">
+                        <label>Nombre *</label>
+                        <input type="text" name="nombre" class="form-control" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Apellido</label>
+                        <input type="text" name="apellido" class="form-control">
+                    </div>
+                    <div class="input-group">
+                        <label>Teléfono</label>
+                        <input type="text" name="telefono" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-action btn-fiado" onclick="document.getElementById('modalNuevoCliente').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn-primary" style="padding: 10px 20px; font-size: 14px;">Guardar Cliente</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-                document.getElementById('modalClienteNombre').textContent = nombre;
-                document.getElementById('modalClienteSaldo').textContent = saldo;
-                document.getElementById('monto').value = saldo; 
-                document.getElementById('monto').max = saldo; 
-                
-                document.getElementById('formRegistrarPago').action = '/cuentas-clientes/pago/' + id + '/';
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        setInterval(updateClock, 1000); updateClock();
+
+        document.getElementById('search-client').addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            document.querySelectorAll('.fila-cliente').forEach(row => {
+                const nombre = row.dataset.nombre;
+                row.style.display = nombre.includes(query) ? '' : 'none';
             });
         });
-    });
-</script>
-{% endblock %}
+
+        document.querySelectorAll('.btn-pagar').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                const nombre = this.dataset.nombre;
+                const saldo = this.dataset.saldo;
+
+                document.getElementById('modalNombre').textContent = nombre;
+                document.getElementById('modalSaldo').textContent = parseFloat(saldo).toFixed(2);
+                document.getElementById('inputMonto').value = parseFloat(saldo).toFixed(2);
+                document.getElementById('inputMonto').max = saldo;
+                
+                document.getElementById('formPago').action = '/cuentas-clientes/pago/' + id + '/';
+                
+                document.getElementById('modalPago').style.display = 'flex';
+            });
+        });
+    </script>
+</body>
+</html>
