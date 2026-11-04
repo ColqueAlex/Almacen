@@ -20,10 +20,9 @@
 
     <!-- SIDEBAR -->
     <aside class="sidebar">
-        <div class="sidebar-brand">
-            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
-            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
-        </div>
+    <div class="sidebar-brand" style="justify-content: center; padding: 20px 10px;">
+        <img src="{% static 'img/logo.png' %}" alt="Logo El Refugio" style="max-width: 100%; height: auto; max-height: 55px; object-fit: contain;">
+    </div>
         
         {% with url_name=request.resolver_match.url_name %}
         <nav class="sidebar-nav">
