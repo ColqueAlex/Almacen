@@ -33,6 +33,9 @@
             <a href="{% url 'registrar_venta' %}" class="nav-item {% if url_name in 'registrar_venta,ventas' %}active{% endif %}">
                 <span class="material-symbols-outlined">point_of_sale</span> Ventas
             </a>
+            <a href="{% url 'ventas' %}" class="nav-item {% if url_name == 'ventas' %}active{% endif %}">
+                <span class="material-symbols-outlined">receipt_long</span> Historial de Ventas
+            </a>
             
             {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
             <a href="{% url 'consultar' %}" class="nav-item {% if url_name == 'consultar' %}active{% endif %}">
