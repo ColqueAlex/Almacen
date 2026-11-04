@@ -339,17 +339,6 @@ def registrar_venta(request):
                 estado_pago = 'fiado' if fiado else 'pagado'
                 metodo_final = None if fiado else metodo_pago
                 ahora = datetime.now()
-
-                venta = Ventas.objects.create(
-                    id_caja=caja_activa,
-                    total=Decimal('0.00'),
-                    fecha=date.today(),
-                    hora=ahora.time(),
-                    id_clientes=cliente,
-                    estado_de_pago=estado_pago,
-                    metodo_pago=metodo_final
-                )
-
                 total_venta = Decimal('0.00')
 
                 for item in items:
@@ -361,11 +350,26 @@ def registrar_venta(request):
                         raise ValueError(f'Stock insuficiente para "{producto.nombre}". Disponible: {producto.stock}')
 
                     subtotal = cantidad_necesaria * precio_unitario
+                    total_venta += subtotal
+
+                venta = Ventas.objects.create(
+                    id_caja=caja_activa,
+                    total=total_venta,
+                    fecha=date.today(),
+                    hora=ahora.time(),
+                    id_clientes=cliente,
+                    estado_de_pago=estado_pago,
+                    metodo_pago=metodo_final
+                )
+
+                for item in items:
+                    producto = get_object_or_404(Productos, pk=item['id'])
+                    cantidad_necesaria = int(item['cantidad'])
+                    precio_unitario = Decimal(str(item['precio']))
+                    subtotal = cantidad_necesaria * precio_unitario
 
                     lotes = LotesProducto.objects.filter(
-                        id_producto=producto,
-                        activo=True,
-                        stock_actual__gt=0
+                        id_producto=producto, activo=True, stock_actual__gt=0
                     ).order_by('fecha_vencimiento', 'id')
 
                     pendiente = cantidad_necesaria
@@ -395,11 +399,6 @@ def registrar_venta(request):
                         precio_unitario_venta=precio_unitario,
                         subtotal=subtotal
                     )
-
-                    total_venta += subtotal
-
-                venta.total = total_venta
-                venta.save()
 
                 if fiado and cliente:
                     cliente.saldo += total_venta
@@ -753,13 +752,18 @@ def registro_compras(request):
             limite_maximo = hoy.replace(year=hoy.year + 10)
 
             with transaction.atomic():
+                total_compra = Decimal('0.00')
+
+                for item in items:
+                    cantidad = int(item['cantidad'])
+                    precio_costo = Decimal(str(item['precio_costo']))
+                    total_compra += (cantidad * precio_costo)
+
                 compra = Compras.objects.create(
                     id_proveedor=proveedor,
                     id_usuario=request.user,
-                    total=Decimal('0.00')
+                    total=total_compra
                 )
-
-                total_compra = Decimal('0.00')
 
                 for item in items:
                     producto = get_object_or_404(Productos, pk=item['id_producto'])
@@ -767,19 +771,15 @@ def registro_compras(request):
                     precio_costo = Decimal(str(item['precio_costo']))
                     lote_str = item.get('lote', 'Sin lote').strip()
                     
-                    if precio_costo > producto.precio:
-                        raise ValueError(f'El costo de "{producto.nombre}" (${precio_costo}) no puede ser mayor a su precio de venta (${producto.precio}).')
-
                     fecha_venc_str = item.get('fecha_vencimiento')
                     fecha_venc = None
 
                     if fecha_venc_str:
                         fecha_venc = datetime.strptime(fecha_venc_str, '%Y-%m-%d').date()
-                        
                         if fecha_venc < hoy:
                             raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" no puede ser anterior a hoy.')
                         if fecha_venc > limite_maximo:
-                            raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" excede el límite máximo permitido (hasta {limite_maximo.year}).')
+                            raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" excede el límite.')
 
                     subtotal = cantidad * precio_costo
 
@@ -801,8 +801,6 @@ def registro_compras(request):
                     )
                     lote_obj.stock_actual += cantidad
                     lote_obj.save()
-
-                    total_compra += subtotal
 
                 compra.total = total_compra
                 compra.save()

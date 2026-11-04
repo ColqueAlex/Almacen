@@ -1,89 +1,75 @@
+{% extends 'base.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>El Refugio - {% if es_edicion %}Editar{% else %}Nuevo{% endif %} Usuario</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+{% block title %}{% if es_edicion %}Editar{% else %}Nuevo{% endif %} Usuario{% endblock %}
+
+{% block extra_css %}
     <link rel="stylesheet" href="{% static 'css/formularios.css' %}">
-</head>
-<body>
+{% endblock %}
 
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-        <!-- ... copia tu sidebar ... -->
-    </aside>
+{% block content %}
+    <div class="form-container" style="margin: 0 auto; max-width: 700px; padding-top: 10px;">
+        <div style="margin-bottom: 20px;">
+            <h1 class="page-title">{% if es_edicion %}Editar Usuario{% else %}Nuevo Usuario{% endif %}</h1>
+            <p style="color: var(--text-muted); font-size: 14px;">Gestión de credenciales y perfiles de acceso al sistema.</p>
+        </div>
 
-    <div class="main-content">
-        <header class="top-header">
-             <!-- ... copia tu header ... -->
-        </header>
+        <div class="form-card">
+            <form method="POST" action="{% if es_edicion %}{% url 'editar_usuario' usuario.dni %}{% else %}{% url 'crear_usuario' %}{% endif %}">
+                {% csrf_token %}
 
-        <main class="form-container">
-            <div>
-                <h1 class="page-title">{% if es_edicion %}Editar Usuario{% else %}Nuevo Usuario{% endif %}</h1>
-                <p class="subtitle">Gestión de credenciales y perfiles de acceso al sistema.</p>
-            </div>
-
-            <div class="form-card">
-                <form method="POST" action="{% if es_edicion %}{% url 'editar_usuario' usuario.dni %}{% else %}{% url 'crear_usuario' %}{% endif %}">
-                    {% csrf_token %}
-
-                    <div class="form-row">
-                         <div class="input-group">
-                            <label>DNI (Documento)</label>
-                            <input type="number" name="dni" class="form-control" required value="{% if usuario %}{{ usuario.dni }}{% else %}{{ dni|default:'' }}{% endif %}" {% if es_edicion %}readonly style="background:#e2e8f0; cursor:not-allowed;"{% endif %}>
-                            {% if es_edicion %}<span class="help-text">El DNI no se puede modificar.</span>{% endif %}
-                        </div>
-                        <div class="input-group">
-                            <label>Correo Electrónico</label>
-                            <input type="email" name="correo" class="form-control" required value="{% if usuario %}{{ usuario.correo }}{% else %}{{ correo|default:'' }}{% endif %}">
-                        </div>
-                    </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label>Apellido</label>
-                            <input type="text" name="apellido" class="form-control" required value="{% if usuario %}{{ usuario.apellido }}{% else %}{{ apellido|default:'' }}{% endif %}">
-                        </div>
-                        <div class="input-group">
-                            <label>Nombre</label>
-                            <input type="text" name="nombre" class="form-control" required value="{% if usuario %}{{ usuario.nombre }}{% else %}{{ nombre|default:'' }}{% endif %}">
-                        </div>
-                    </div>
-
+                <div class="form-row">
                     <div class="input-group">
-                        <label>Perfil de Acceso</label>
-                        <select name="perfil" class="form-control" required>
-                            <option value="" disabled {% if not es_edicion %}selected{% endif %}>Seleccione un perfil...</option>
-                            {% for p in perfiles %}
-                                <option value="{{ p.id }}" {% if es_edicion and usuario.id_perfil.id == p.id %}selected{% endif %}>
-                                    {{ p.nombre }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                        <span class="help-text"><span class="material-symbols-outlined" style="font-size: 14px;">info</span> El perfil define a qué módulos puede acceder el usuario.</span>
+                        <label>DNI (Documento)</label>
+                        <input type="number" name="dni" class="form-control" required value="{% if usuario %}{{ usuario.dni }}{% else %}{{ dni|default:'' }}{% endif %}" {% if es_edicion %}readonly style="background:#e2e8f0; cursor:not-allowed;"{% endif %}>
+                        {% if es_edicion %}<span class="help-text">El DNI no se puede modificar.</span>{% endif %}
                     </div>
+                    <div class="input-group">
+                        <label>Correo Electrónico</label>
+                        <input type="email" name="correo" class="form-control" required value="{% if usuario %}{{ usuario.correo }}{% else %}{{ correo|default:'' }}{% endif %}">
+                    </div>
+                </div>
 
-                    {% if not es_edicion %}
-                    <div class="input-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border-color);">
-                        <label>Contraseña Inicial</label>
-                        <input type="password" name="password" class="form-control" placeholder="Dejar en blanco para usar el DNI por defecto">
-                        <span class="help-text">Si no se ingresa nada, la clave será el DNI del usuario y se le pedirá cambiarla al ingresar.</span>
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Apellido</label>
+                        <input type="text" name="apellido" class="form-control" required value="{% if usuario %}{{ usuario.apellido }}{% else %}{{ apellido|default:'' }}{% endif %}">
                     </div>
-                    {% endif %}
+                    <div class="input-group">
+                        <label>Nombre</label>
+                        <input type="text" name="nombre" class="form-control" required value="{% if usuario %}{{ usuario.nombre }}{% else %}{{ nombre|default:'' }}{% endif %}">
+                    </div>
+                </div>
 
-                    <div class="form-actions">
-                        <a href="{% url 'listar_usuarios' %}" class="btn btn-cancel">Cancelar</a>
-                        <button type="submit" class="btn btn-save">
-                            <span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar Usuario
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </main>
+                <div class="input-group">
+                    <label>Perfil de Acceso</label>
+                    <select name="perfil" class="form-control" required>
+                        <option value="" disabled {% if not es_edicion %}selected{% endif %}>Seleccione un perfil...</option>
+                        {% for p in perfiles %}
+                            <option value="{{ p.id }}" {% if es_edicion and usuario.id_perfil.id == p.id %}selected{% endif %}>{{ p.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="help-text">El perfil define a qué módulos puede acceder el usuario.</span>
+                </div>
+
+                {% if not es_edicion %}
+                <div class="input-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border-color);">
+                    <label>Contraseña Inicial</label>
+                    <input type="password" name="password" class="form-control" placeholder="Dejar en blanco para usar el DNI por defecto">
+                    <span class="help-text">Si no se ingresa nada, la clave será el DNI del usuario.</span>
+                </div>
+                {% endif %}
+
+                <div class="form-actions">
+                    <a href="{% url 'listar_usuarios' %}" class="btn btn-cancel">Cancelar</a>
+                    <button type="submit" class="btn btn-save"><span class="material-symbols-outlined" style="font-size: 18px;">save</span> Guardar Usuario</button>
+                </div>
+            </form>
+        </div>
     </div>
-</body>
-</html>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+</script>
+{% endblock %}

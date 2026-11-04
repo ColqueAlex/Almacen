@@ -1,206 +1,79 @@
+{% extends 'base.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>El Refugio - Gestión de Usuarios</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+{% block title %}Usuarios{% endblock %}
+
+{% block extra_css %}
     <link rel="stylesheet" href="{% static 'css/usuarios.css' %}">
-</head>
-<body>
+{% endblock %}
 
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
-            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
-            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas</a>
-            <a href="{% url 'consultar' %}" class="nav-item"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
-            <a href="{% url 'listar_proveedores' %}" class="nav-item"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
-            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
-            <a href="{% url 'cuentas_clientes' %}" class="nav-item"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
-            <a href="{% url 'listar_auditoria' %}" class="nav-item"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
-            <a href="{% url 'listar_usuarios' %}" class="nav-item active"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
-        </nav>
-    </aside>
-
-    <!-- MAIN CONTENT -->
-    <div class="main-content">
-        <header class="top-header">
-            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
-                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
-                <span id="current-datetime">Cargando...</span>
-            </div>
-            <div class="header-user">
-                <div style="display: flex; flex-direction: column; text-align: right;">
-                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
-                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Administrador" }}</span>
-                </div>
-                <div class="avatar">{{ request.user.username|first|upper }}</div>
-            </div>
-        </header>
-
-        <main class="inv-container">
-            {% if messages %}
-                {% for message in messages %}
-                    <div style="padding: 12px; border-radius: 8px; background: {% if message.tags == 'error' %}#fee2e2{% else %}#dcfce7{% endif %}; color: {% if message.tags == 'error' %}#991b1b{% else %}#166534{% endif %}; font-weight: 500; font-size: 14px;">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
-
-            <!-- ENCABEZADO -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
-                <div>
-                    <span class="subtitle-badge">ERP Core</span>
-                    <h1 class="page-title">Gestión de Usuarios</h1>
-                    <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Control de acceso, perfiles operativos y credenciales de terminal.</p>
-                </div>
-                <!-- Botón para Nuevo Usuario -->
-                <a href="{% url 'crear_usuario' %}" class="btn-primary">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span> Nuevo Usuario
-                </a>
-            </div>
-
-            <!-- CARDS -->
-            <div class="kpi-grid">
-                <div class="kpi-card">
-                    <div class="kpi-info">
-                        <h3>Total Usuarios</h3>
-                        <div class="value" style="color: var(--primary);">{{ total_usuarios }}</div>
-                        <div class="sub" style="color: var(--primary);"><span class="material-symbols-outlined" style="font-size: 16px;">badge</span> Registrados en el sistema</div>
-                    </div>
-                    <div class="kpi-icon blue"><span class="material-symbols-outlined">manage_accounts</span></div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-info">
-                        <h3>Usuarios Activos</h3>
-                        <div class="value" style="color: var(--secondary);">{{ usuarios_activos }}</div>
-                        <div class="sub" style="color: var(--secondary);"><span class="material-symbols-outlined" style="font-size: 16px;">check_circle</span> Habilitados para iniciar sesión</div>
-                    </div>
-                    <div class="kpi-icon green"><span class="material-symbols-outlined">how_to_reg</span></div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-info">
-                        <h3>Inactivos / Baja</h3>
-                        <div class="value" style="color: var(--danger);">{{ usuarios_inactivos }}</div>
-                        <div class="sub" style="color: var(--danger);"><span class="material-symbols-outlined" style="font-size: 16px;">block</span> Acceso bloqueado</div>
-                    </div>
-                    <div class="kpi-icon red"><span class="material-symbols-outlined">person_off</span></div>
-                </div>
-            </div>
-
-            <!-- TOOLBAR -->
-            <div class="toolbar">
-                <div class="search-box">
-                    <span class="material-symbols-outlined">search</span>
-                    <input type="text" id="search-user" placeholder="Buscar por nombre, DNI o correo...">
-                </div>
-            </div>
-
-            <!-- TABLA DE USUARIOS -->
-            <div class="table-card">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Usuario / DNI</th>
-                            <th>Contacto</th>
-                            <th>Perfil / Rol</th>
-                            <th style="text-align: center;">Estado</th>
-                            <th style="text-align: right;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabla-usuarios">
-                        {% for u in usuarios %}
-                        <tr class="fila-usuario" data-search="{{ u.nombre|lower }} {{ u.apellido|lower }} {{ u.username|lower }} {{ u.dni }} {{ u.correo|lower }}">
-                            <td>
-                                <div class="user-info">
-                                    <div class="user-avatar" style="{% if not u.activo %}background: var(--bg-body); color: var(--text-muted);{% endif %}">
-                                        {{ u.nombre|first|upper }}{{ u.apellido|first|upper }}
-                                    </div>
-                                    <div class="user-details">
-                                        <h4>{{ u.nombre }} {{ u.apellido }}</h4>
-                                        <span>@{{ u.username }} • DNI: {{ u.dni }}</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-main);">
-                                    <span class="material-symbols-outlined" style="font-size: 16px; color: var(--text-muted);">mail</span>
-                                    {{ u.correo }}
-                                </div>
-                            </td>
-                            <td>
-                                {% if u.id_perfil.nombre == 'Administrador' %}
-                                    <span class="badge badge-admin"><span class="material-symbols-outlined" style="font-size: 14px;">key</span> Administrador</span>
-                                {% else %}
-                                    <span class="badge badge-vendedor"><span class="material-symbols-outlined" style="font-size: 14px;">point_of_sale</span> Vendedor</span>
-                                {% endif %}
-                            </td>
-                            <td style="text-align: center;">
-                                {% if u.activo %}
-                                    <span class="badge badge-activo"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--secondary);"></span> Activo</span>
-                                {% else %}
-                                    <span class="badge badge-inactivo"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--danger);"></span> Inactivo / Baja</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div class="actions">
-                                    <!-- Botón Editar -->
-                                    <a href="{% url 'editar_usuario' u.dni %}" class="btn-icon" title="Editar Usuario">
-                                        <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
-                                    </a>
-
-                                    <!-- Botón Restablecer Clave -->
-                                    <form action="{% url 'restablecer_clave' u.dni %}" method="POST" style="margin: 0;" onsubmit="return confirm('¿Restablecer la clave de {{ u.username }} a su DNI?');">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn-icon" title="Restablecer Clave">
-                                            <span class="material-symbols-outlined" style="font-size: 20px;">lock_reset</span>
-                                        </button>
-                                    </form>
-                                    
-                                    <!-- Switch Activar/Desactivar -->
-                                    <form action="{% if u.activo %}{% url 'baja_usuario' u.dni %}{% else %}{% url 'alta_usuario' u.dni %}{% endif %}" method="POST" style="margin: 0;">
-                                        {% csrf_token %}
-                                        <label class="switch" title="{% if u.activo %}Dar de baja{% else %}Reactivar{% endif %}">
-                                            <input type="checkbox" {% if u.activo %}checked{% endif %} onchange="this.form.submit()">
-                                            <span class="slider"></span>
-                                        </label>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                                No hay usuarios registrados en el sistema.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </main>
+{% block content %}
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+        <div><span class="subtitle-badge">ERP Core</span><h1 class="page-title">Gestión de Usuarios</h1></div>
+        <a href="{% url 'crear_usuario' %}" class="btn-primary"><span class="material-symbols-outlined" style="font-size: 18px;">person_add</span> Nuevo Usuario</a>
     </div>
 
-    <script>
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('current-datetime').textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
-        }
-        setInterval(updateClock, 1000); updateClock();
+    <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-info"><h3>Total Usuarios</h3><div class="value" style="color: var(--primary);">{{ total_usuarios }}</div></div><div class="kpi-icon blue"><span class="material-symbols-outlined">manage_accounts</span></div></div>
+        <div class="kpi-card"><div class="kpi-info"><h3>Activos</h3><div class="value" style="color: var(--secondary);">{{ usuarios_activos }}</div></div><div class="kpi-icon green"><span class="material-symbols-outlined">how_to_reg</span></div></div>
+        <div class="kpi-card"><div class="kpi-info"><h3>Inactivos</h3><div class="value" style="color: var(--danger);">{{ usuarios_inactivos }}</div></div><div class="kpi-icon red"><span class="material-symbols-outlined">person_off</span></div></div>
+    </div>
 
-        document.getElementById('search-user').addEventListener('input', function() {
-            const query = this.value.toLowerCase();
-            document.querySelectorAll('.fila-usuario').forEach(row => {
-                const searchData = row.dataset.search;
-                row.style.display = searchData.includes(query) ? '' : 'none';
-            });
+    <div class="toolbar">
+        <div class="search-box"><span class="material-symbols-outlined">search</span><input type="text" id="search-user" placeholder="Buscar por nombre, DNI o correo..."></div>
+    </div>
+
+    <div class="table-card">
+        <table>
+            <thead><tr><th>Usuario / DNI</th><th>Contacto</th><th>Perfil / Rol</th><th style="text-align: center;">Estado</th><th style="text-align: right;">Acciones</th></tr></thead>
+            <tbody id="tabla-usuarios">
+                {% for u in usuarios %}
+                <tr class="fila-usuario" data-search="{{ u.nombre|lower }} {{ u.apellido|lower }} {{ u.username|lower }} {{ u.dni }} {{ u.correo|lower }}">
+                    <td>
+                        <div class="user-info">
+                            <div class="user-avatar" style="{% if not u.activo %}background: var(--bg-body); color: var(--text-muted);{% endif %}">{{ u.nombre|first|upper }}{{ u.apellido|first|upper }}</div>
+                            <div class="user-details"><h4>{{ u.nombre }} {{ u.apellido }}</h4><span>@{{ u.username }} • DNI: {{ u.dni }}</span></div>
+                        </div>
+                    </td>
+                    <td><div style="display: flex; align-items: center; gap: 6px; font-size: 13px;"><span class="material-symbols-outlined" style="font-size: 16px; color: var(--text-muted);">mail</span>{{ u.correo }}</div></td>
+                    <td>
+                        {% if u.id_perfil.nombre == 'Administrador' %}<span class="badge badge-admin"><span class="material-symbols-outlined" style="font-size: 14px;">key</span> Administrador</span>
+                        {% else %}<span class="badge badge-vendedor"><span class="material-symbols-outlined" style="font-size: 14px;">point_of_sale</span> Vendedor</span>{% endif %}
+                    </td>
+                    <td style="text-align: center;">
+                        {% if u.activo %}<span class="badge badge-activo">Activo</span>{% else %}<span class="badge badge-inactivo">Inactivo</span>{% endif %}
+                    </td>
+                    <td>
+                        <div class="actions">
+                            <a href="{% url 'editar_usuario' u.dni %}" class="btn-icon" title="Editar"><span class="material-symbols-outlined" style="font-size: 20px;">edit</span></a>
+                            <form action="{% url 'restablecer_clave' u.dni %}" method="POST" style="margin: 0;" onsubmit="return confirm('¿Restablecer clave a DNI?');">
+                                {% csrf_token %}<button type="submit" class="btn-icon" title="Restablecer"><span class="material-symbols-outlined" style="font-size: 20px;">lock_reset</span></button>
+                            </form>
+                            <form action="{% if u.activo %}{% url 'baja_usuario' u.dni %}{% else %}{% url 'alta_usuario' u.dni %}{% endif %}" method="POST" style="margin: 0;">
+                                {% csrf_token %}
+                                <label class="switch" title="Cambiar estado">
+                                    <input type="checkbox" {% if u.activo %}checked{% endif %} onchange="this.form.submit()"><span class="slider"></span>
+                                </label>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">No hay usuarios registrados.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Buscador en vivo
+    document.getElementById('search-user').addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        document.querySelectorAll('.fila-usuario').forEach(row => {
+            row.style.display = row.dataset.search.includes(query) ? '' : 'none';
         });
-    </script>
-</body>
-</html>
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,119 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Refugio - {% block title %}Sistema{% endblock %}</title>
+    
+    <!-- Fuentes e Iconos -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap">
+    
+    <!-- CSS Base (Layout, Sidebar, Header) -->
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    
+    <!-- Bloque para CSS específico de cada página -->
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
+            <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
+        </div>
+        
+        {% with url_name=request.resolver_match.url_name %}
+        <nav class="sidebar-nav">
+            <a href="{% url 'inicio' %}" class="nav-item {% if url_name == 'inicio' %}active{% endif %}">
+                <span class="material-symbols-outlined">home</span> Inicio
+            </a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item {% if url_name in 'registrar_venta,ventas' %}active{% endif %}">
+                <span class="material-symbols-outlined">point_of_sale</span> Ventas
+            </a>
+            
+            {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
+            <a href="{% url 'consultar' %}" class="nav-item {% if url_name == 'consultar' %}active{% endif %}">
+                <span class="material-symbols-outlined">inventory_2</span> Productos & Stock
+            </a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item {% if url_name in 'listar_proveedores,crear_proveedor,editar_proveedor' %}active{% endif %}">
+                <span class="material-symbols-outlined">local_shipping</span> Proveedores
+            </a>
+            <a href="{% url 'listar_compras' %}" class="nav-item {% if url_name in 'registrar_compra,listar_compras' %}active{% endif %}">
+                <span class="material-symbols-outlined">shopping_bag</span> Compras
+            </a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item {% if url_name == 'auditoria' %}active{% endif %}">
+                <span class="material-symbols-outlined">history</span> Auditoría
+            </a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item {% if url_name in 'listar_usuarios,crear_usuario,editar_usuario' %}active{% endif %}">
+                <span class="material-symbols-outlined">manage_accounts</span> Usuarios
+            </a>
+            {% endif %}
+
+            <a href="{% url 'gestion_caja' %}" class="nav-item {% if url_name == 'gestion_caja' %}active{% endif %}">
+                <span class="material-symbols-outlined">payments</span> Caja & Arqueo
+            </a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item {% if url_name == 'cuentas_clientes' %}active{% endif %}">
+                <span class="material-symbols-outlined">group</span> Clientes (Cuentas)
+            </a>
+        </nav>
+        {% endwith %}
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <!-- HEADER -->
+        <header class="top-header">
+            <div class="header-time">
+                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                <span id="current-datetime">Cargando...</span>
+            </div>
+            <div class="header-user">
+                <div style="display: flex; flex-direction: column; text-align: right;">
+                    <strong style="font-size: 13px;">{{ request.user.username }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Usuario" }}</span>
+                </div>
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+                
+                <!-- Botón Salir -->
+                <form action="{% url 'logout' %}" method="post" style="margin-left: 10px;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-logout" title="Cerrar Sesión">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">logout</span>
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <!-- AQUÍ VA EL CONTENIDO DE CADA PÁGINA -->
+        <main class="inv-container">
+            <!-- Mensajes de Django (Éxito / Error) -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert-msg {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            {% block content %}
+            {% endblock %}
+        </main>
+    </div>
+
+    <!-- Script global para el reloj -->
+    <script>
+        function updateClock() {
+            const now = new Date();
+            const el = document.getElementById('current-datetime');
+            if (el) el.textContent = now.toLocaleDateString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        setInterval(updateClock, 1000); updateClock();
+    </script>
+    
+    <!-- Bloque para JS específico de cada página -->
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
