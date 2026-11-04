@@ -10,8 +10,7 @@
 {% block content %}
     <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
         <div>
-            <span class="subtitle-badge">Módulo Financiero</span>
-            <h1 class="page-title">Cuentas Corrientes</h1>
+            <h1 class="page-title">Cuentas Clientes</h1>
         </div>
         <button class="btn-primary" onclick="document.getElementById('modalNuevoCliente').style.display='flex'">
             <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span> Nuevo Cliente
@@ -20,7 +19,7 @@
 
     <div class="kpi-grid">
         <div class="kpi-card">
-            <div class="kpi-info"><h3>Deuda Total en Calle</h3><div class="value" style="color: var(--danger);">${{ deuda_total|floatformat:2 }}</div><div class="sub" style="color: var(--danger);">{{ con_deuda }} clientes</div></div>
+            <div class="kpi-info"><h3>Deuda Total</h3><div class="value" style="color: var(--danger);">${{ deuda_total|floatformat:2 }}</div><div class="sub" style="color: var(--danger);">{{ con_deuda }} clientes</div></div>
             <div class="kpi-icon red"><span class="material-symbols-outlined">payments</span></div>
         </div>
         <div class="kpi-card">
