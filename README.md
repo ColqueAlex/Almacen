@@ -15,6 +15,9 @@ docker compose ps
 
 http://localhost:8000/
 
-Para crear un usuario admin
-python manage.py createsuperuser
+Para crear el primer superusuario de Django, ejecutar desde la carpeta del proyecto:
+docker compose exec web python manage.py createsuperuser 
 
+El comando solicitará username, DNI, apellido, nombre, correo y contraseña. La contraseña
+`mypassword` de `docker-compose.yml` es para la conexión de la aplicación con MySQL; no es
+la contraseña del administrador. Luego se puede ingresar al panel en http://localhost:8000/admin/.

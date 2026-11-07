@@ -38,7 +38,8 @@
                     <td><div style="display: flex; align-items: center; gap: 6px; font-size: 13px;"><span class="material-symbols-outlined" style="font-size: 16px; color: var(--text-muted);">mail</span>{{ u.correo }}</div></td>
                     <td>
                         {% if u.id_perfil.nombre == 'Administrador' %}<span class="badge badge-admin"><span class="material-symbols-outlined" style="font-size: 14px;">key</span> Administrador</span>
-                        {% else %}<span class="badge badge-vendedor"><span class="material-symbols-outlined" style="font-size: 14px;">point_of_sale</span> Vendedor</span>{% endif %}
+                        {% elif u.id_perfil.nombre == 'Vendedor' %}<span class="badge badge-vendedor"><span class="material-symbols-outlined" style="font-size: 14px;">point_of_sale</span> Vendedor</span>
+                        {% else %}<span class="badge">{{ u.id_perfil.nombre|default:"Sin perfil" }}</span>{% endif %}
                     </td>
                     <td style="text-align: center;">
                         {% if u.activo %}<span class="badge badge-activo">Activo</span>{% else %}<span class="badge badge-inactivo">Inactivo</span>{% endif %}

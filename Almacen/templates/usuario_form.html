@@ -21,7 +21,7 @@
                 <div class="form-row">
                     <div class="input-group">
                         <label>DNI (Documento)</label>
-                        <input type="number" name="dni" class="form-control" required value="{% if usuario %}{{ usuario.dni }}{% else %}{{ dni|default:'' }}{% endif %}" {% if es_edicion %}readonly style="background:#e2e8f0; cursor:not-allowed;"{% endif %}>
+                        <input type="number" name="dni" class="form-control" min="1" step="1" required value="{% if usuario %}{{ usuario.dni }}{% else %}{{ dni|default:'' }}{% endif %}" {% if es_edicion %}readonly style="background:#e2e8f0; cursor:not-allowed;"{% endif %}>
                         {% if es_edicion %}<span class="help-text">El DNI no se puede modificar.</span>{% endif %}
                     </div>
                     <div class="input-group">
@@ -33,11 +33,11 @@
                 <div class="form-row">
                     <div class="input-group">
                         <label>Apellido</label>
-                        <input type="text" name="apellido" class="form-control" required value="{% if usuario %}{{ usuario.apellido }}{% else %}{{ apellido|default:'' }}{% endif %}">
+                        <input type="text" name="apellido" class="form-control" pattern="[\p{L} ]+" title="Use solo letras y espacios." required value="{% if usuario %}{{ usuario.apellido }}{% else %}{{ apellido|default:'' }}{% endif %}">
                     </div>
                     <div class="input-group">
                         <label>Nombre</label>
-                        <input type="text" name="nombre" class="form-control" required value="{% if usuario %}{{ usuario.nombre }}{% else %}{{ nombre|default:'' }}{% endif %}">
+                        <input type="text" name="nombre" class="form-control" pattern="[\p{L} ]+" title="Use solo letras y espacios." required value="{% if usuario %}{{ usuario.nombre }}{% else %}{{ nombre|default:'' }}{% endif %}">
                     </div>
                 </div>
 

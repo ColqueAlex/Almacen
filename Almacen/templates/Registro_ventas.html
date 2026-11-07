@@ -97,7 +97,7 @@
                     <div class="cash-calc">
                         <div>
                             <label style="font-size: 12px; font-weight: 600;">Paga con ($)</label>
-                            <input type="number" id="paga-con" class="cash-input" placeholder="0.00">
+                            <input type="number" id="paga-con" name="paga_con" class="cash-input" min="0" step="0.01" placeholder="0.00">
                         </div>
                         <div>
                             <label style="font-size: 12px; font-weight: 600;">Vuelto</label>
@@ -261,7 +261,10 @@
         });
 
         // Vuelto
-        document.getElementById('paga-con').addEventListener('input', updateVuelto);
+        document.getElementById('paga-con').addEventListener('input', function() {
+            if (this.value < 0) this.value = '';
+            updateVuelto();
+        });
         
         function updateVuelto() {
             const totalStr = cartTotalElement.textContent.replace('$', '');
@@ -274,6 +277,13 @@
 
         // Validación final
         document.getElementById('sale-form').addEventListener('submit', function(e) {
+            const pagaCon = document.getElementById('paga-con');
+            if (pagaCon.value < 0) {
+                e.preventDefault();
+                alert('El importe de pago no puede ser negativo.');
+                pagaCon.focus();
+                return;
+            }
             if (Object.keys(cart).length === 0) {
                 e.preventDefault();
                 alert('El carrito está vacío. Agregue productos antes de cobrar.');

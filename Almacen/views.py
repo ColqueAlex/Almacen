@@ -6,7 +6,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import json
 from django.db.models import ProtectedError
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import timedelta, date, datetime
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
@@ -58,6 +58,20 @@ def requiere_perfil(*perfiles_permitidos):
                 return redirect('inicio')
         return _wrapped_view
     return decorator
+
+
+def _solo_letras_y_espacios(valor):
+    return bool(valor) and any(caracter.isalpha() for caracter in valor) and all(
+        caracter.isalpha() or caracter == ' ' for caracter in valor
+    )
+
+
+def _contiene_letras(valor):
+    return any(caracter.isalpha() for caracter in valor)
+
+
+def _es_telefono_numerico(valor):
+    return not valor or (valor.isascii() and valor.isdigit())
 
 
 # =======================================================
@@ -267,7 +281,15 @@ def editar(request):
                 messages.error(request, 'La categoría no puede contener números.')
             else:
                 messages.error(request, 'Error al actualizar: Verifique que el precio sea válido.')
-            return redirect('detalle', id=id_prod)
+            return render(request, 'productoEditar.html', {
+                'producto': producto,
+                'proveedores': Proveedor.objects.filter(activo=True).order_by('nombre'),
+                'datos_enviados': True,
+                'nombre': request.POST.get('nombre', ''),
+                'categoria': request.POST.get('categoria', ''),
+                'marca': request.POST.get('marca', ''),
+                'precio': request.POST.get('precio', ''),
+            })
 
     return redirect('consultar')
 
@@ -321,7 +343,19 @@ def registrar_venta(request):
             cart_data = request.POST.get('cart_data', '[]')
             fiado = request.POST.get('fiado') == 'true'
             metodo_pago = request.POST.get('metodo_pago', 'efectivo')
+            paga_con = request.POST.get('paga_con', '').strip()
             id_cliente_post = request.POST.get('id_cliente')
+
+            if paga_con:
+                try:
+                    importe_recibido = Decimal(paga_con)
+                except InvalidOperation:
+                    messages.error(request, 'El importe de pago no es válido.')
+                    return redirect('registrar_venta')
+                if not importe_recibido.is_finite() or importe_recibido < 0:
+                    messages.error(request, 'El importe de pago no puede ser negativo.')
+                    return redirect('registrar_venta')
+
             items = json.loads(cart_data)
 
             if not items:
@@ -590,7 +624,15 @@ def crear_cliente(request):
         if not nombre:
             messages.error(request, 'El nombre del cliente es obligatorio.')
             return redirect('cuentas_clientes')
-
+        if not _solo_letras_y_espacios(nombre):
+            messages.error(request, 'El nombre del cliente solo puede contener letras y espacios.')
+            return redirect('cuentas_clientes')
+        if apellido and not _solo_letras_y_espacios(apellido):
+            messages.error(request, 'El apellido del cliente solo puede contener letras y espacios.')
+            return redirect('cuentas_clientes')
+        if telefono and not _es_telefono_numerico(telefono):
+            messages.error(request, 'El teléfono solo puede contener números.')
+            return redirect('cuentas_clientes')
         cliente = Clientes.objects.create(
             nombre=nombre,
             apellido=apellido,
@@ -655,7 +697,15 @@ def abrir_caja(request):
             messages.warning(request, 'Ya existe una caja abierta en el sistema.')
             return redirect('gestion_caja')
 
-        monto_inicial = Decimal(request.POST.get('monto_inicial', '0.00'))
+        try:
+            monto_inicial = Decimal(request.POST.get('monto_inicial', '0.00'))
+        except (InvalidOperation, TypeError, ValueError):
+            messages.error(request, 'El monto inicial debe ser un número válido igual o mayor que cero.')
+            return redirect('gestion_caja')
+
+        if not monto_inicial.is_finite() or monto_inicial < 0:
+            messages.error(request, 'El monto inicial no puede ser negativo.')
+            return redirect('gestion_caja')
 
         Caja.objects.create(
             usuario=request.user,
@@ -678,7 +728,16 @@ def cerrar_caja(request):
             messages.error(request, 'No hay ninguna caja abierta para cerrar.')
             return redirect('gestion_caja')
 
-        monto_real = Decimal(request.POST.get('monto_real', '0.00'))
+        try:
+            monto_real = Decimal(request.POST.get('monto_real', '0.00'))
+        except (InvalidOperation, TypeError, ValueError):
+            messages.error(request, 'El efectivo contado debe ser un número válido igual o mayor que cero.')
+            return redirect('gestion_caja')
+
+        if not monto_real.is_finite() or monto_real < 0:
+            messages.error(request, 'El efectivo contado no puede ser negativo.')
+            return redirect('gestion_caja')
+
         observaciones = request.POST.get('observaciones', '').strip()
 
         v_efectivo = Ventas.objects.filter(id_caja=caja_activa, estado_de_pago='pagado', metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or Decimal('0.00')
@@ -776,8 +835,8 @@ def registro_compras(request):
 
                     if fecha_venc_str:
                         fecha_venc = datetime.strptime(fecha_venc_str, '%Y-%m-%d').date()
-                        if fecha_venc < hoy:
-                            raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" no puede ser anterior a hoy.')
+                        if fecha_venc <= hoy:
+                            raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" debe ser posterior a hoy.')
                         if fecha_venc > limite_maximo:
                             raise ValueError(f'La fecha de vencimiento para "{producto.nombre}" excede el límite.')
 
@@ -917,9 +976,33 @@ def crear_proveedor(request):
         telefono = request.POST.get('telefono', '').strip()
         tipo_productos = request.POST.get('tipo_productos', '').strip()
 
+        error = None
+        if not _contiene_letras(nombre):
+            error = 'El nombre del proveedor debe contener letras y no puede ser solo números.'
+        elif not _es_telefono_numerico(telefono):
+            error = 'El número de teléfono solo puede contener números.'
+        elif not _contiene_letras(tipo_productos):
+            error = 'El rubro debe contener letras y no puede ser solo números.'
+
+        if error:
+            messages.error(request, error)
+            return render(request, 'proveedor_form.html', {
+                'es_edicion': False,
+                'datos_enviados': True,
+                'nombre': nombre,
+                'telefono': telefono,
+                'tipo_productos': tipo_productos,
+            })
+
         if Proveedor.objects.filter(nombre__iexact=nombre).exists():
             messages.error(request, f'Ya existe un proveedor registrado con el nombre "{nombre}".')
-            return render(request, 'proveedor_form.html', {'es_edicion': False})
+            return render(request, 'proveedor_form.html', {
+                'es_edicion': False,
+                'datos_enviados': True,
+                'nombre': nombre,
+                'telefono': telefono,
+                'tipo_productos': tipo_productos,
+            })
 
         Proveedor.objects.create(
             nombre=nombre,
@@ -938,9 +1021,32 @@ def crear_proveedor(request):
 def editar_proveedor(request, id):
     proveedor = get_object_or_404(Proveedor, pk=id)
     if request.method == 'POST':
-        proveedor.nombre = request.POST.get('nombre', '').strip()
-        proveedor.numero_telefono = request.POST.get('telefono', '').strip()
-        proveedor.tipo_productos = request.POST.get('tipo_productos', '').strip()
+        nombre = request.POST.get('nombre', '').strip()
+        telefono = request.POST.get('telefono', '').strip()
+        tipo_productos = request.POST.get('tipo_productos', '').strip()
+
+        error = None
+        if not _contiene_letras(nombre):
+            error = 'El nombre del proveedor debe contener letras y no puede ser solo números.'
+        elif not _es_telefono_numerico(telefono):
+            error = 'El número de teléfono solo puede contener números.'
+        elif not _contiene_letras(tipo_productos):
+            error = 'El rubro debe contener letras y no puede ser solo números.'
+
+        if error:
+            messages.error(request, error)
+            return render(request, 'proveedor_form.html', {
+                'proveedor': proveedor,
+                'es_edicion': True,
+                'datos_enviados': True,
+                'nombre': nombre,
+                'telefono': telefono,
+                'tipo_productos': tipo_productos,
+            })
+
+        proveedor.nombre = nombre
+        proveedor.numero_telefono = telefono
+        proveedor.tipo_productos = tipo_productos
         proveedor.save()
         messages.success(request, f'Proveedor "{proveedor.nombre}" actualizado correctamente.')
         return redirect('listar_proveedores')
@@ -1023,11 +1129,36 @@ def listar_usuarios(request):
 @requiere_perfil('Administrador')
 def crear_usuario(request):
     if request.method == 'POST':
-        dni = request.POST.get('dni')
+        dni_texto = request.POST.get('dni', '').strip()
         apellido = (request.POST.get('apellido') or '').strip()
         nombre = (request.POST.get('nombre') or '').strip()
         correo = (request.POST.get('correo') or '').strip()
         perfil_id = request.POST.get('perfil')
+
+        try:
+            dni = int(dni_texto)
+        except ValueError:
+            dni = None
+
+        error = None
+        if dni is None or dni <= 0:
+            error = 'El DNI debe ser un número entero mayor que cero.'
+        elif not _solo_letras_y_espacios(apellido):
+            error = 'El apellido solo puede contener letras y espacios.'
+        elif not _solo_letras_y_espacios(nombre):
+            error = 'El nombre solo puede contener letras y espacios.'
+
+        if error:
+            messages.error(request, error)
+            return render(request, 'usuario_form.html', {
+                'perfiles': Perfil.objects.all(),
+                'es_edicion': False,
+                'dni': dni_texto,
+                'apellido': apellido,
+                'nombre': nombre,
+                'correo': correo,
+                'perfil_id': perfil_id,
+            })
 
         if Usuario.objects.filter(dni=dni).exists():
             messages.error(request, f'Ya existe un usuario registrado con el DNI {dni}.')
@@ -1240,4 +1371,3 @@ def listar_auditoria(request):
         'registros': page_obj,
         'page_obj': page_obj,
     })
-

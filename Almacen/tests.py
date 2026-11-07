@@ -1,13 +1,60 @@
 import json
+from datetime import date, timedelta
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
-from Almacen.models import Productos, Usuario, Ventas, DetallesVentas, LotesProducto
+from Almacen.models import (
+    Caja, Clientes, Compras, DetallesCompra, DetallesVentas, LotesProducto,
+    Productos, Proveedor, Usuario, Ventas,
+)
 
 
 class ProductosEstadoTests(TestCase):
+    def test_editar_producto_muestra_precio_actual_y_conserva_el_enviado_si_hay_error(self):
+        usuario = Usuario(
+            dni=99999994,
+            apellido='Admin',
+            nombre='Sistema',
+            correo='admin-productos@example.com',
+            username='adminproductos',
+            is_superuser=True,
+            is_staff=True,
+            debe_cambiar_clave=False,
+        )
+        usuario.set_password('123456')
+        Usuario.objects.bulk_create([usuario])
+        self.client.force_login(usuario)
+        producto = Productos.objects.create(
+            nombre='Arroz',
+            categoria='Alimentos',
+            marca='Marca',
+            precio='10.00',
+        )
+
+        response = self.client.get(reverse('detalle', args=[producto.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            response.content.decode(),
+            r'name="precio"[^>]*value="[0-9.]+"',
+        )
+
+        response = self.client.post(reverse('editar'), {
+            'id': producto.pk,
+            'nombre': 'Arroz',
+            'categoria': 'Alimentos2',
+            'marca': 'Marca',
+            'precio': '12.50',
+            'estado': 'activo',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'value="12.50"')
+        producto.refresh_from_db()
+        self.assertEqual(str(producto.precio), '10.00')
+
     def test_catalogo_muestra_siete_productos_por_pagina(self):
         usuario = Usuario.objects.create_user(
             dni=99999998,
@@ -143,6 +190,83 @@ class VentasViewTests(TestCase):
         self.usuario.save()
         self.client.force_login(self.usuario)
 
+    def test_abrir_caja_rechaza_monto_inicial_negativo(self):
+        response = self.client.post(
+            reverse('abrir_caja'),
+            {'monto_inicial': '-1.00'},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'El monto inicial no puede ser negativo.')
+        self.assertFalse(Caja.objects.exists())
+
+    def test_cerrar_caja_rechaza_efectivo_negativo_y_deja_caja_abierta(self):
+        caja = Caja.objects.create(usuario=self.usuario, monto_inicial=50)
+
+        response = self.client.post(
+            reverse('cerrar_caja'),
+            {'monto_real': '-1.00'},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'El efectivo contado no puede ser negativo.')
+        caja.refresh_from_db()
+        self.assertEqual(caja.estado, 'abierta')
+        self.assertEqual(caja.monto_final_real, 0)
+
+    def test_registrar_compra_rechaza_vencimiento_hoy_y_anterior(self):
+        producto = Productos.objects.create(
+            nombre='Leche',
+            categoria='Lacteos',
+            precio='2.00',
+        )
+
+        for vencimiento in (date.today(), date.today() - timedelta(days=1)):
+            with self.subTest(vencimiento=vencimiento):
+                response = self.client.post(
+                    reverse('registrar_compra'),
+                    {
+                        'cart_data': json.dumps([{
+                            'id_producto': producto.id,
+                            'cantidad': 1,
+                            'precio_costo': '1.00',
+                            'fecha_vencimiento': vencimiento.isoformat(),
+                        }]),
+                    },
+                    follow=True,
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'debe ser posterior a hoy.')
+                self.assertFalse(Compras.objects.exists())
+
+    def test_registrar_compra_acepta_vencimiento_desde_manana(self):
+        producto = Productos.objects.create(
+            nombre='Leche',
+            categoria='Lacteos',
+            precio='2.00',
+        )
+        vencimiento = date.today() + timedelta(days=1)
+
+        response = self.client.post(
+            reverse('registrar_compra'),
+            {
+                'cart_data': json.dumps([{
+                    'id_producto': producto.id,
+                    'cantidad': 1,
+                    'precio_costo': '1.00',
+                    'fecha_vencimiento': vencimiento.isoformat(),
+                }]),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Compras.objects.exists())
+        self.assertEqual(DetallesCompra.objects.get().fecha_vencimiento, vencimiento)
+
     def test_pagina_de_ventas_muestra_venta_y_detalle(self):
         producto = Productos.objects.create(
             nombre='Manzana',
@@ -224,6 +348,38 @@ class VentasViewTests(TestCase):
         self.assertContains(response, 'data-page-size="7"')
         self.assertContains(response, 'id="previous-products"')
         self.assertContains(response, 'id="next-products"')
+
+    def test_paga_con_no_acepta_importes_negativos(self):
+        Caja.objects.create(usuario=self.usuario, monto_inicial=0)
+        producto = Productos.objects.create(
+            nombre='Café',
+            categoria='Bebidas',
+            marca='Natural',
+            precio=5.0,
+        )
+        LotesProducto.objects.create(
+            id_producto=producto,
+            lote='CAF-1',
+            stock_actual=10,
+            precio_costo=4.0,
+        )
+
+        response = self.client.post(
+            reverse('registrar_venta'),
+            {
+                'cart_data': json.dumps([
+                    {'id': producto.id, 'cantidad': 1, 'precio': '5.00'}
+                ]),
+                'fiado': 'false',
+                'paga_con': '-1.00',
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'El importe de pago no puede ser negativo.')
+        self.assertFalse(Ventas.objects.exists())
+        self.assertContains(response, 'min="0" step="0.01"')
 
     def test_catalogo_calcula_unidades_vendidas_y_excluye_ventas_anuladas(self):
         producto = Productos.objects.create(
@@ -642,9 +798,217 @@ class VentasViewTests(TestCase):
         self.assertEqual(lote2.stock, 3)
 
 
+class ProveedoresValidationTests(TestCase):
+    def setUp(self):
+        admin = Usuario(
+            dni=99999996,
+            apellido='Admin',
+            nombre='Sistema',
+            correo='admin-proveedores@example.com',
+            username='adminproveedores',
+            is_superuser=True,
+            is_staff=True,
+            debe_cambiar_clave=False,
+        )
+        admin.set_password('123456')
+        Usuario.objects.bulk_create([admin])
+        self.client.force_login(admin)
+
+    def test_crear_proveedor_rechaza_nombre_y_rubro_solo_numericos(self):
+        for campo, valor, error in (
+            ('nombre', '12345', 'El nombre del proveedor debe contener letras'),
+            ('tipo_productos', '9876', 'El rubro debe contener letras'),
+        ):
+            with self.subTest(campo=campo):
+                datos = {
+                    'nombre': 'Proveedor Norte',
+                    'telefono': '1123456789',
+                    'tipo_productos': 'Bebidas',
+                }
+                datos[campo] = valor
+                response = self.client.post(reverse('crear_proveedor'), datos)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, error)
+
+        self.assertFalse(Proveedor.objects.exists())
+
+    def test_crear_proveedor_rechaza_telefono_con_caracteres_no_numericos(self):
+        response = self.client.post(reverse('crear_proveedor'), {
+            'nombre': 'Proveedor Norte',
+            'telefono': '+541123456789',
+            'tipo_productos': 'Bebidas',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'El número de teléfono solo puede contener números.')
+        self.assertFalse(Proveedor.objects.exists())
+
+    def test_editar_proveedor_aplica_validaciones_y_permite_numeros_en_nombre_y_rubro(self):
+        proveedor = Proveedor.objects.create(
+            nombre='Proveedor Norte',
+            numero_telefono='1123456789',
+            tipo_productos='Bebidas',
+        )
+
+        response = self.client.post(reverse('editar_proveedor', args=[proveedor.pk]), {
+            'nombre': '12345',
+            'telefono': '1123456789',
+            'tipo_productos': '9876',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'El nombre del proveedor debe contener letras')
+        proveedor.refresh_from_db()
+        self.assertEqual(proveedor.nombre, 'Proveedor Norte')
+
+        response = self.client.post(reverse('editar_proveedor', args=[proveedor.pk]), {
+            'nombre': 'Proveedor 2 Norte',
+            'telefono': '1123456789',
+            'tipo_productos': 'Bebidas 2',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        proveedor.refresh_from_db()
+        self.assertEqual(proveedor.nombre, 'Proveedor 2 Norte')
+        self.assertEqual(proveedor.tipo_productos, 'Bebidas 2')
+
+
+class ClientesValidationTests(TestCase):
+    def setUp(self):
+        usuario = Usuario(
+            dni=99999995,
+            apellido='Admin',
+            nombre='Sistema',
+            correo='admin-clientes@example.com',
+            username='adminclientes',
+            is_superuser=True,
+            is_staff=True,
+            debe_cambiar_clave=False,
+        )
+        usuario.set_password('123456')
+        Usuario.objects.bulk_create([usuario])
+        self.client.force_login(usuario)
+
+    def test_crear_cliente_rechaza_nombre_y_apellido_con_caracteres_no_letras(self):
+        for campo, valor, error in (
+            ('nombre', 'Ana2', 'El nombre del cliente solo puede contener letras'),
+            ('apellido', 'Pérez!', 'El apellido del cliente solo puede contener letras'),
+        ):
+            with self.subTest(campo=campo):
+                datos = {
+                    'nombre': 'Ana',
+                    'apellido': 'Pérez',
+                    'telefono': '1123456789',
+                }
+                datos[campo] = valor
+                response = self.client.post(reverse('crear_cliente'), datos, follow=True)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, error)
+
+        self.assertFalse(Clientes.objects.exists())
+
+    def test_crear_cliente_rechaza_telefono_no_numerico(self):
+        response = self.client.post(
+            reverse('crear_cliente'),
+            {
+                'nombre': 'Ana',
+                'apellido': 'Pérez',
+                'telefono': '+541123456789',
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'El teléfono solo puede contener números.')
+        self.assertFalse(Clientes.objects.exists())
+
+    def test_crear_cliente_acepta_letras_acentuadas_y_telefono_numerico(self):
+        response = self.client.post(
+            reverse('crear_cliente'),
+            {
+                'nombre': 'María José',
+                'apellido': 'Peña',
+                'telefono': '1123456789',
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        cliente = Clientes.objects.get()
+        self.assertEqual(cliente.nombre, 'María José')
+        self.assertEqual(cliente.apellido, 'Peña')
+        self.assertEqual(cliente.telefono, '1123456789')
 
 
 class UsuariosRegresionTests(TestCase):
+    def _iniciar_sesion_como_admin(self):
+        admin = Usuario(
+            dni=99999997,
+            apellido='Admin',
+            nombre='Sistema',
+            correo='admin-usuarios@example.com',
+            username='adminusuarios',
+            is_superuser=True,
+            is_staff=True,
+            debe_cambiar_clave=False,
+        )
+        admin.set_password('123456')
+        Usuario.objects.bulk_create([admin])
+        self.client.force_login(admin)
+
+    def test_crear_usuario_rechaza_dni_negativo_o_no_entero(self):
+        self._iniciar_sesion_como_admin()
+
+        for dni in ('-1', '1.5', 'abc'):
+            with self.subTest(dni=dni):
+                response = self.client.post(reverse('crear_usuario'), {
+                    'dni': dni,
+                    'apellido': 'Pérez',
+                    'nombre': 'Ana',
+                    'correo': 'ana@example.com',
+                })
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'El DNI debe ser un número entero mayor que cero.')
+
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_crear_usuario_rechaza_numeros_y_simbolos_en_nombres(self):
+        self._iniciar_sesion_como_admin()
+
+        for campo, valor in (('apellido', 'Pérez2'), ('nombre', 'Ana!')):
+            with self.subTest(campo=campo, valor=valor):
+                datos = {
+                    'dni': '44444444',
+                    'apellido': 'Pérez',
+                    'nombre': 'Ana',
+                    'correo': 'ana@example.com',
+                }
+                datos[campo] = valor
+                response = self.client.post(reverse('crear_usuario'), datos)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, f'El {campo} solo puede contener letras y espacios.')
+
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_crear_usuario_acepta_letras_acentuadas(self):
+        self._iniciar_sesion_como_admin()
+
+        response = self.client.post(reverse('crear_usuario'), {
+            'dni': '44444444',
+            'apellido': 'De la Cruz',
+            'nombre': 'María José',
+            'correo': 'maria@example.com',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        usuario = Usuario.objects.get(dni=44444444)
+        self.assertEqual(usuario.apellido, 'De la Cruz')
+        self.assertEqual(usuario.nombre, 'María José')
+
     def test_cambiar_clave_rechaza_entrada_vacia(self):
         usuario = Usuario.objects.create_user(
             dni=22222222,

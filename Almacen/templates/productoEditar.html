@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load l10n %}
 
 {% block title %}Editar Producto{% endblock %}
 
@@ -22,22 +23,22 @@
                 <div class="form-row">
                     <div class="input-group">
                         <label>Nombre del Producto</label>
-                        <input type="text" name="nombre" class="form-control" required value="{{ producto.nombre }}">
+                        <input type="text" name="nombre" class="form-control" required value="{% if datos_enviados %}{{ nombre }}{% else %}{{ producto.nombre }}{% endif %}">
                     </div>
                     <div class="input-group">
                         <label>Categoría</label>
-                        <input type="text" name="categoria" class="form-control" required value="{{ producto.categoria }}" pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$">
+                        <input type="text" name="categoria" class="form-control" required value="{% if datos_enviados %}{{ categoria }}{% else %}{{ producto.categoria }}{% endif %}" pattern="^(?!.*\d)[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$">
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="input-group">
                         <label>Marca</label>
-                        <input type="text" name="marca" class="form-control" value="{% if producto.marca %}{{ producto.marca }}{% else %}Sin marca{% endif %}">
+                        <input type="text" name="marca" class="form-control" value="{% if datos_enviados %}{{ marca }}{% elif producto.marca %}{{ producto.marca }}{% else %}Sin marca{% endif %}">
                     </div>
                     <div class="input-group">
                         <label>Precio de Venta ($)</label>
-                        <input type="number" name="precio" min="0.01" step="0.01" class="form-control" required value="{{ producto.precio }}">
+                        <input type="number" name="precio" min="0.01" step="0.01" class="form-control" required value="{% if datos_enviados %}{{ precio }}{% else %}{{ producto.precio|unlocalize }}{% endif %}">
                     </div>
                 </div>
 

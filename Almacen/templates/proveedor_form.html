@@ -20,17 +20,17 @@
 
                 <div class="input-group">
                     <label>Nombre o Razón Social</label>
-                    <input type="text" name="nombre" class="form-control" required value="{{ proveedor.nombre|default:'' }}" placeholder="Ej: Distribuidora Norte S.R.L.">
+                    <input type="text" name="nombre" class="form-control" required value="{% if datos_enviados %}{{ nombre }}{% elif es_edicion %}{{ proveedor.nombre }}{% endif %}" placeholder="Ej: Distribuidora Norte S.R.L.">
                 </div>
 
                 <div class="input-group">
                     <label>Número de Teléfono</label>
-                    <input type="text" name="telefono" class="form-control" value="{{ proveedor.numero_telefono|default:'' }}" placeholder="Ej: +54 9 11 1234-5678">
+                    <input type="tel" name="telefono" class="form-control" pattern="[0-9]*" inputmode="numeric" title="Ingrese solo números." value="{% if datos_enviados %}{{ telefono }}{% elif es_edicion %}{{ proveedor.numero_telefono }}{% endif %}" placeholder="Ej: 1123456789">
                 </div>
 
                 <div class="input-group">
                     <label>Rubro / Tipo de Productos</label>
-                    <input type="text" name="tipo_productos" class="form-control" value="{{ proveedor.tipo_productos|default:'' }}" placeholder="Ej: Bebidas, Lácteos, Limpieza...">
+                    <input type="text" name="tipo_productos" class="form-control" required value="{% if datos_enviados %}{{ tipo_productos }}{% elif es_edicion %}{{ proveedor.tipo_productos }}{% endif %}" placeholder="Ej: Bebidas, Lácteos, Limpieza...">
                 </div>
 
                 <div class="form-actions">

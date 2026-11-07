@@ -112,7 +112,7 @@
                                 </div>
                                 <div class="input-group">
                                     <label>Fecha Vencimiento</label>
-                                    <input type="date" id="fecha_vencimiento" class="form-control" min="{% now 'Y-m-d' %}">
+                                    <input type="date" id="fecha_vencimiento" class="form-control">
                                 </div>
                             </div>
 
@@ -194,6 +194,15 @@
             const proveedorSelect = document.getElementById('proveedor-select');
             const productoSelect = document.getElementById('producto-select');
             const todasLasOpciones = Array.from(productoSelect.options);
+            const vencInput = document.getElementById('fecha_vencimiento');
+            const manana = new Date();
+            manana.setHours(0, 0, 0, 0);
+            manana.setDate(manana.getDate() + 1);
+            vencInput.min = [
+                manana.getFullYear(),
+                String(manana.getMonth() + 1).padStart(2, '0'),
+                String(manana.getDate()).padStart(2, '0')
+            ].join('-');
 
             proveedorSelect.addEventListener('change', function () {
                 const proveedorId = this.value;
@@ -276,7 +285,6 @@
 
                 const prodOption = prodSelect.options[prodSelect.selectedIndex];
                 const loteVal = document.getElementById('lote-input').value.trim() || 'Sin lote';
-                const vencInput = document.getElementById('fecha_vencimiento');
                 const vencVal = vencInput.value;
                 const cantVal = parseInt(document.getElementById('cantidad-input').value) || 0;
                 
@@ -297,8 +305,8 @@
                     const fechaSeleccionada = new Date(vencVal);
                     const hoy = new Date();
                     hoy.setHours(0, 0, 0, 0);
-                    if (fechaSeleccionada < hoy) {
-                        alert('La fecha de vencimiento no puede ser anterior a la fecha actual.');
+                    if (fechaSeleccionada <= hoy) {
+                        alert('La fecha de vencimiento debe ser posterior a la fecha actual.');
                         return;
                     }
                 }

@@ -125,9 +125,9 @@
             <form method="POST" action="{% url 'crear_cliente' %}">
                 {% csrf_token %}
                 <div class="modal-body">
-                    <div class="input-group"><label>Nombre *</label><input type="text" name="nombre" class="form-control" required></div>
-                    <div class="input-group"><label>Apellido</label><input type="text" name="apellido" class="form-control"></div>
-                    <div class="input-group"><label>Teléfono</label><input type="text" name="telefono" class="form-control"></div>
+                    <div class="input-group"><label>Nombre *</label><input type="text" name="nombre" class="form-control" pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+" title="Use solo letras y espacios." required></div>
+                    <div class="input-group"><label>Apellido</label><input type="text" name="apellido" class="form-control" pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]*" title="Use solo letras y espacios."></div>
+                    <div class="input-group"><label>Teléfono</label><input type="tel" name="telefono" class="form-control" pattern="[0-9]*" inputmode="numeric" title="Ingrese solo números."></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn-action btn-fiado" onclick="document.getElementById('modalNuevoCliente').style.display='none'">Cancelar</button>
