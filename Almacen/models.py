@@ -116,6 +116,9 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
 
+    intentos_fallidos = models.IntegerField(default=0)
+    bloqueo_hasta = models.DateTimeField(null=True, blank=True)
+
     objects = UsuarioManager()
 
     USERNAME_FIELD = 'username'

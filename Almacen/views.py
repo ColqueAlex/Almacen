@@ -1090,20 +1090,54 @@ def login_usuario(request):
 
         user_exists = Usuario.objects.filter(username=username).first()
 
-        if user_exists and not user_exists.activo:
-            messages.error(request, 'Cuenta inactiva.')
-            return render(request, 'login.html')
+        if user_exists:
+            if not user_exists.activo:
+                messages.error(request, 'Cuenta inactiva o bloqueada permanentemente. Contacte al administrador.')
+                return redirect('login')
+
+            if user_exists.bloqueo_hasta and user_exists.bloqueo_hasta > timezone.now():
+                tiempo_restante = user_exists.bloqueo_hasta - timezone.now()
+                minutos = int(tiempo_restante.total_seconds() // 60)
+                segundos = int(tiempo_restante.total_seconds() % 60)
+                messages.error(request, f'Cuenta bloqueada temporalmente por seguridad. Intente de nuevo en {minutos}m {segundos}s.')
+                return redirect('login')
 
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
+            user.intentos_fallidos = 0
+            user.bloqueo_hasta = None
+            user.save()
+            
             login(request, user)
             if user.debe_cambiar_clave:
                 return redirect('cambiar_clave')
             return redirect('inicio')
         else:
-            messages.error(request, 'Usuario o contraseña incorrectos.')
-            return render(request, 'login.html')
+            if user_exists:
+                user_exists.intentos_fallidos += 1
+                
+                if user_exists.intentos_fallidos >= 10:
+                    user_exists.activo = False
+                    messages.error(request, 'Ha excedido el límite máximo de intentos. Su cuenta ha sido bloqueada permanentemente. Contacte al administrador.')
+                
+                elif user_exists.intentos_fallidos == 5:
+                    user_exists.bloqueo_hasta = timezone.now() + timedelta(minutes=1)
+                    messages.error(request, 'Demasiados intentos fallidos. Su cuenta ha sido bloqueada temporalmente por 1 minutos.')
+                
+                elif user_exists.intentos_fallidos > 5:
+                    intentos_restantes = 10 - user_exists.intentos_fallidos
+                    messages.error(request, f'Usuario o contraseña incorrectos. ATENCIÓN: Le quedan {intentos_restantes} intentos antes del bloqueo PERMANENTE de la cuenta.')
+                
+                else:
+                    intentos_restantes = 5 - user_exists.intentos_fallidos
+                    messages.error(request, f'Usuario o contraseña incorrectos. Le quedan {intentos_restantes} intentos antes del bloqueo temporal.')
+                
+                user_exists.save()
+            else:
+                messages.error(request, 'Usuario o contraseña incorrectos.')
+
+            return redirect('login')
 
     return render(request, 'login.html')
 
@@ -1254,6 +1288,8 @@ def alta_usuario(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
     usuario.activo = True
     usuario.fecha_baja = None
+    usuario.intentos_fallidos = 0
+    usuario.bloqueo_hasta = None
     usuario.save()
     messages.success(request, f'Usuario {usuario.username} reactivado correctamente.')
     return redirect('listar_usuarios')
