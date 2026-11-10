@@ -17,6 +17,8 @@ from django.db import transaction
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django_email_validators import validate_email_mx
 from functools import wraps
 
 from .models import (
@@ -39,11 +41,9 @@ def requiere_perfil(*perfiles_permitidos):
             if not request.user.is_authenticated:
                 return redirect('login')
             
-            # Superusuario de Django siempre pasa
             if request.user.is_superuser:
                 return view_func(request, *args, **kwargs)
 
-            # Obtener el nombre del perfil de forma segura
             perfil_obj = getattr(request.user, 'id_perfil', None)
             perfil_nombre = ''
             if perfil_obj:
@@ -1129,31 +1129,38 @@ def listar_usuarios(request):
 @requiere_perfil('Administrador')
 def crear_usuario(request):
     if request.method == 'POST':
-        dni_texto = request.POST.get('dni', '').strip()
+        dni = request.POST.get('dni', '').strip()
         apellido = (request.POST.get('apellido') or '').strip()
         nombre = (request.POST.get('nombre') or '').strip()
         correo = (request.POST.get('correo') or '').strip()
         perfil_id = request.POST.get('perfil')
 
-        try:
-            dni = int(dni_texto)
-        except ValueError:
-            dni = None
-
         error = None
-        if dni is None or dni <= 0:
-            error = 'El DNI debe ser un número entero mayor que cero.'
+        
+        if not dni.isdigit() or len(dni) != 8:
+            error = 'El DNI debe contener exactamente 8 números, sin puntos ni espacios.'
         elif not _solo_letras_y_espacios(apellido):
             error = 'El apellido solo puede contener letras y espacios.'
         elif not _solo_letras_y_espacios(nombre):
             error = 'El nombre solo puede contener letras y espacios.'
+        elif not correo:
+            error = 'El correo electrónico es obligatorio.'
+            
+        elif not error:
+            try:
+                validate_email(correo)
+                validate_email_mx(correo)
+            except ValidationError:
+                error = 'El correo electrónico no es válido o el dominio no existe (ej: gmail.com, hotmail.com).'
+            except Exception:
+                error = 'No se pudo verificar el correo por un problema de conexión. Intentá de nuevo.'
 
         if error:
             messages.error(request, error)
             return render(request, 'usuario_form.html', {
                 'perfiles': Perfil.objects.all(),
                 'es_edicion': False,
-                'dni': dni_texto,
+                'dni': dni,
                 'apellido': apellido,
                 'nombre': nombre,
                 'correo': correo,
@@ -1162,9 +1169,8 @@ def crear_usuario(request):
 
         if Usuario.objects.filter(dni=dni).exists():
             messages.error(request, f'Ya existe un usuario registrado con el DNI {dni}.')
-            perfiles = Perfil.objects.all()
             return render(request, 'usuario_form.html', {
-                'perfiles': perfiles,
+                'perfiles': Perfil.objects.all(),
                 'es_edicion': False,
                 'dni': dni,
                 'apellido': apellido,

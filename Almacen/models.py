@@ -15,9 +15,9 @@ class Productos(models.Model):
         ('inactivo', 'Inactivo'),
     ]
 
-    nombre = models.CharField(max_length=100)
-    categoria = models.CharField(max_length=100, validators=[validar_categoria])
-    marca = models.CharField(max_length=100, default='Sin marca')
+    nombre = models.CharField(max_length=40)
+    categoria = models.CharField(max_length=40, validators=[validar_categoria])
+    marca = models.CharField(max_length=400, default='Sin marca')
     precio = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='activo')
     proveedores = models.ManyToManyField('Proveedor', blank=True, related_name='productos_que_suministra')
@@ -31,9 +31,9 @@ class Productos(models.Model):
         return res['total'] if res['total'] is not None else 0
 
 class Proveedor(models.Model):
-    nombre = models.CharField(max_length=100)
+    nombre = models.CharField(max_length=30)
     numero_telefono = models.CharField(max_length=20)
-    tipo_productos = models.CharField(max_length=100)
+    tipo_productos = models.CharField(max_length=30)
     activo = models.BooleanField(default=True)
 
     def __str__(self):
@@ -100,11 +100,11 @@ class UsuarioManager(BaseUserManager):
         return user
 
 class Usuario(AbstractBaseUser, PermissionsMixin):
-    dni = models.IntegerField(primary_key=True)
+    dni = models.CharField(max_length=8, primary_key=True)
     apellido = models.CharField(max_length=30)
     nombre = models.CharField(max_length=30)
     correo = models.EmailField(unique=True)
-    username = models.CharField(max_length=100, unique=True)
+    username = models.CharField(max_length=30, unique=True)
 
     activo = models.BooleanField(default=True)
     debe_cambiar_clave = models.BooleanField(default=True)
@@ -151,10 +151,10 @@ class Caja(models.Model):
 
 class Clientes(models.Model):
     id_clientes = models.AutoField(primary_key=True, db_column='ID_Clientes')
-    nombre = models.CharField(max_length=100)
-    apellido = models.CharField(max_length=100, blank=True, null=True)
+    nombre = models.CharField(max_length=30)
+    apellido = models.CharField(max_length=30, blank=True, null=True)
     telefono = models.CharField(max_length=20, blank=True, null=True)
-    saldo = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # NUEVO CAMPO
+    saldo = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     def __str__(self):
         return f"{self.nombre} {self.apellido or ''} - Deuda: ${self.saldo}"
@@ -231,12 +231,12 @@ class Ventas(models.Model):
         return f"{self.id_clientes.nombre} {self.id_clientes.apellido or ''}".strip()
 
 class DetallesVentas(models.Model):
-    id_detalles_ventas = models.AutoField(primary_key=True, db_column='ID_Detalles_Ventas') # CORREGIDO A AutoField
+    id_detalles_ventas = models.AutoField(primary_key=True, db_column='ID_Detalles_Ventas')
     venta = models.ForeignKey(Ventas, on_delete=models.CASCADE, db_column='ID_ventas', related_name='detalles')
     producto = models.ForeignKey(Productos, on_delete=models.PROTECT, db_column='ID_Productos', related_name='detalles_ventas')
-    lote = models.ForeignKey(LotesProducto, on_delete=models.SET_NULL, null=True, blank=True, related_name='detalles_ventas') # NUEVO: Para saber de qué lote salió
+    lote = models.ForeignKey(LotesProducto, on_delete=models.SET_NULL, null=True, blank=True, related_name='detalles_ventas') 
     cantidad = models.IntegerField(db_column='Cantidad')
-    precio_unitario_venta = models.DecimalField(max_digits=10, decimal_places=2, db_column='Precio_Unitario_Venta') # CORREGIDO
+    precio_unitario_venta = models.DecimalField(max_digits=10, decimal_places=2, db_column='Precio_Unitario_Venta')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, db_column='Subtotal')
 
     def __str__(self):

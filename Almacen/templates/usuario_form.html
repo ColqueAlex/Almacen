@@ -21,7 +21,7 @@
                 <div class="form-row">
                     <div class="input-group">
                         <label>DNI (Documento)</label>
-                        <input type="number" name="dni" class="form-control" min="1" step="1" required value="{% if usuario %}{{ usuario.dni }}{% else %}{{ dni|default:'' }}{% endif %}" {% if es_edicion %}readonly style="background:#e2e8f0; cursor:not-allowed;"{% endif %}>
+                        <input type="text" name="dni" class="form-control" maxlength="8" pattern="\d{8}" required value="{% if usuario %}{{ usuario.dni }}{% else %}{{ dni|default:'' }}{% endif %}" {% if es_edicion %}readonly style="background:#e2e8f0; cursor:not-allowed;"{% endif %}>
                         {% if es_edicion %}<span class="help-text">El DNI no se puede modificar.</span>{% endif %}
                     </div>
                     <div class="input-group">
