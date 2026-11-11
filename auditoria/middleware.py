@@ -1,4 +1,3 @@
-# Almacen/middleware.py
 import threading
 
 _thread_locals = threading.local()

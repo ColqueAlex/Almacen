@@ -37,7 +37,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'Almacen',
+    'usuarios',
+    'productos',
+    'ventas',
+    'compras',
+    'caja',
+    'auditoria',
 ]
 
 MIDDLEWARE = [
@@ -48,7 +53,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'Almacen.middleware.CurrentUserMiddleware',
+    'auditoria.middleware.CurrentUserMiddleware',
 ]
 
 ROOT_URLCONF = 'myproject.urls'
@@ -56,7 +61,7 @@ ROOT_URLCONF = 'myproject.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -138,6 +143,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_REDIRECT_URL = 'inicio'      
 LOGOUT_REDIRECT_URL = 'login'     
 LOGIN_URL = 'login'               
-AUTH_USER_MODEL = 'Almacen.Usuario'
+AUTH_USER_MODEL = 'usuarios.Usuario'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True

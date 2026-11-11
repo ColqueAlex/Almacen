@@ -1,10 +1,15 @@
 from django.db.models.signals import post_save, pre_delete, pre_save
 from django.dispatch import receiver
 from django.forms.models import model_to_dict
-from .models import Productos, Ventas, Clientes, Proveedor, Auditoria, Caja, Compras, Usuario
+
+from usuarios.models import Usuario
+from productos.models import Productos, Proveedor
+from ventas.models import Ventas, Clientes
+from compras.models import Compras
+from caja.models import Caja
+from .models import Auditoria
 from .middleware import get_current_user
 
-# Diccionario temporal para guardar cómo estaba el objeto antes de modificarse
 _estado_anterior = {}
 
 def registrar_auditoria(accion, modelo_nombre, objeto_id, descripcion, datos_ant=None, datos_new=None):
