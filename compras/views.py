@@ -2,6 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.core.paginator import Paginator
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date, datetime
 from decimal import Decimal
@@ -23,6 +25,16 @@ def registro_compras(request):
                 messages.error(request, 'Debe agregar al menos un producto a la compra.')
                 return redirect('registrar_compra')
 
+            confirmar_precios = request.POST.get('confirmar_precios') == 'true'
+            nuevos_precios = {}
+            if confirmar_precios:
+                try:
+                    nuevos_precios = json.loads(request.POST.get('nuevos_precios', '{}'))
+                except (TypeError, json.JSONDecodeError):
+                    raise ValueError('Los nuevos precios no tienen un formato válido.')
+                if not isinstance(nuevos_precios, dict):
+                    raise ValueError('Los nuevos precios no tienen un formato válido.')
+
             proveedor = None
             if proveedor_id:
                 proveedor = Proveedor.objects.filter(pk=proveedor_id).first()
@@ -31,12 +43,80 @@ def registro_compras(request):
             limite_maximo = hoy.replace(year=hoy.year + 10)
 
             with transaction.atomic():
+                producto_ids = {int(item['id_producto']) for item in items}
+                productos = Productos.objects.select_for_update().in_bulk(producto_ids)
+                if len(productos) != len(producto_ids):
+                    raise ValueError('Uno o más productos ya no están disponibles.')
+
                 total_compra = Decimal('0.00')
+                costos_mayores = {}
+                lotes_existentes = {}
+                for lote_existente in LotesProducto.objects.select_for_update().filter(
+                    id_producto_id__in=producto_ids
+                ):
+                    if lote_existente.lote.strip().casefold() == 'sin lote':
+                        continue
+                    clave_lote = (
+                        lote_existente.id_producto_id,
+                        lote_existente.lote.strip().casefold(),
+                    )
+                    lotes_existentes[clave_lote] = lote_existente
+
+                lotes_en_compra = set()
 
                 for item in items:
                     cantidad = int(item['cantidad'])
                     precio_costo = Decimal(str(item['precio_costo']))
+                    if cantidad <= 0 or not precio_costo.is_finite() or precio_costo <= 0:
+                        raise ValueError('La cantidad y el costo deben ser mayores que cero.')
+
+                    producto = productos[int(item['id_producto'])]
+                    lote_str = (item.get('lote') or 'Sin lote').strip() or 'Sin lote'
+                    lote_normalizado = lote_str.casefold()
+                    if lote_normalizado != 'sin lote':
+                        clave_lote = (producto.pk, lote_normalizado)
+                        lote_previo = lotes_existentes.get(clave_lote)
+                        if lote_previo:
+                            raise ValueError(
+                                f'El lote "{lote_previo.lote}" ya está registrado para '
+                                f'"{producto.nombre}". Stock registrado: {lote_previo.stock_actual} unidades.'
+                            )
+                        if clave_lote in lotes_en_compra:
+                            raise ValueError(
+                                f'El lote "{lote_str}" ya se agregó para "{producto.nombre}" '
+                                'en esta compra.'
+                            )
+                        lotes_en_compra.add(clave_lote)
+
+                    if precio_costo >= producto.precio:
+                        costos_mayores[producto.pk] = max(
+                            costos_mayores.get(producto.pk, Decimal('0.00')),
+                            precio_costo,
+                        )
                     total_compra += (cantidad * precio_costo)
+
+                precios_actualizados = {}
+                if costos_mayores:
+                    if not confirmar_precios:
+                        raise ValueError('Confirma los nuevos precios de venta desde el cuadro de advertencia.')
+
+                    campo_precio = Productos._meta.get_field('precio')
+                    for producto_id in costos_mayores:
+                        precio_nuevo = nuevos_precios.get(str(producto_id))
+                        if precio_nuevo is None:
+                            raise ValueError('Indica el nuevo precio de venta de cada producto señalado.')
+                        try:
+                            precio_nuevo = campo_precio.clean(precio_nuevo, None)
+                        except ValidationError as error:
+                            raise ValueError(f'El nuevo precio no es válido: {error}')
+                        if not precio_nuevo.is_finite():
+                            raise ValueError('El nuevo precio debe ser un importe válido.')
+                        precios_actualizados[producto_id] = precio_nuevo
+
+                for producto_id, precio_nuevo in precios_actualizados.items():
+                    producto = productos[producto_id]
+                    producto.precio = precio_nuevo
+                    producto.save(update_fields=['precio'])
 
                 compra = Compras.objects.create(
                     id_proveedor=proveedor,
@@ -45,10 +125,10 @@ def registro_compras(request):
                 )
 
                 for item in items:
-                    producto = get_object_or_404(Productos, pk=item['id_producto'])
+                    producto = productos[int(item['id_producto'])]
                     cantidad = int(item['cantidad'])
                     precio_costo = Decimal(str(item['precio_costo']))
-                    lote_str = item.get('lote', 'Sin lote').strip()
+                    lote_str = (item.get('lote') or 'Sin lote').strip() or 'Sin lote'
                     
                     fecha_venc_str = item.get('fecha_vencimiento')
                     fecha_venc = None
@@ -95,6 +175,16 @@ def registro_compras(request):
     productos = Productos.objects.filter(estado='activo').order_by('nombre')
     
     productos_sin_proveedor = list(Productos.objects.filter(estado='activo', proveedores__isnull=True).values_list('id', flat=True))
+    lotes_usados = {}
+    lotes_existentes = LotesProducto.objects.filter(
+        id_producto__estado='activo'
+    ).values('id_producto_id', 'lote', 'fecha_vencimiento', 'stock_actual')
+    for lote in lotes_existentes:
+        lotes_usados.setdefault(str(lote['id_producto_id']), []).append({
+            'lote': lote['lote'],
+            'fecha_vencimiento': lote['fecha_vencimiento'],
+            'stock_actual': lote['stock_actual'],
+        })
     
     mapeo_proveedores = {}
     for prov in proveedores:
@@ -105,13 +195,18 @@ def registro_compras(request):
         'productos': productos,
         'mapeo_proveedores': mapeo_proveedores, 
         'productos_sin_proveedor': productos_sin_proveedor,
+        'lotes_usados': lotes_usados,
     })
 
 @login_required
 @requiere_perfil('Administrador')
 def listar_compras(request):
     compras = Compras.objects.prefetch_related('detalles__id_producto').order_by('-id')
-    return render(request, 'compras/compras_list.html', {'compras': compras})
+    page_obj = Paginator(compras, 7).get_page(request.GET.get('page'))
+    return render(request, 'compras/compras_list.html', {
+        'compras': page_obj,
+        'page_obj': page_obj,
+    })
 
 @login_required
 @requiere_perfil('Administrador')

@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator
+from decimal import Decimal
 from productos.models import Productos, LotesProducto
 from usuarios.models import Usuario
 from caja.models import Caja
@@ -38,6 +39,36 @@ class DetallesVentas(models.Model):
     precio_unitario_venta = models.DecimalField(max_digits=10, decimal_places=2, db_column='Precio_Unitario_Venta')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, db_column='Subtotal')
     def __str__(self): return f"Detalle {self.id_detalles_ventas} - Venta: {self.venta_id}"
+
+    @property
+    def cantidad_devuelta(self):
+        return sum(devolucion.cantidad for devolucion in self.devoluciones.all())
+
+    @property
+    def cantidad_disponible_para_devolucion(self):
+        return max(0, self.cantidad - self.cantidad_devuelta)
+
+    @property
+    def monto_devuelto(self):
+        return sum((devolucion.monto for devolucion in self.devoluciones.all()), Decimal('0.00'))
+
+class DevolucionVenta(models.Model):
+    METODOS_REINTEGRO = [
+        ('efectivo', 'Efectivo'),
+        ('transferencia', 'Transferencia'),
+        ('fiado', 'Cuenta corriente'),
+    ]
+
+    detalle = models.ForeignKey(DetallesVentas, on_delete=models.PROTECT, related_name='devoluciones')
+    caja = models.ForeignKey(Caja, on_delete=models.PROTECT, related_name='devoluciones_ventas')
+    usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)
+    cantidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    metodo_reintegro = models.CharField(max_length=20, choices=METODOS_REINTEGRO)
+    fecha_hora = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Devolución de {self.cantidad} unidad(es) de {self.detalle.producto.nombre}"
 
 class Pago(models.Model):
     METODO_PAGO_CHOICES = [('efectivo', 'Efectivo'), ('transferencia', 'Transferencia')]

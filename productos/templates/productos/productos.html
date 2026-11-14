@@ -109,6 +109,21 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <div class="pagination">
+            <span class="page-info">
+                Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+            </span>
+            <div class="page-buttons">
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda|urlencode }}&categoria={{ categoria_actual|urlencode }}&estado_stock={{ estado_actual|urlencode }}" class="page-btn">Anterior</a>
+                {% endif %}
+                <a href="#" class="page-btn active" aria-current="page">{{ page_obj.number }}</a>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda|urlencode }}&categoria={{ categoria_actual|urlencode }}&estado_stock={{ estado_actual|urlencode }}" class="page-btn">Siguiente</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <!-- MODAL CREAR PRODUCTO -->

@@ -36,7 +36,7 @@ def consultar(request):
     elif estado_filtro == 'agotado':
         todos_los_productos = [p for p in todos_los_productos if p.stock == 0]
 
-    paginator = Paginator(todos_los_productos, 10) 
+    paginator = Paginator(todos_los_productos, 7)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
@@ -198,7 +198,7 @@ def listar_proveedores(request):
     activos = Proveedor.objects.filter(activo=True).count()
     inactivos = Proveedor.objects.filter(activo=False).count()
 
-    paginator = Paginator(proveedores_qs, 10) 
+    paginator = Paginator(proveedores_qs, 7)
     page_obj = paginator.get_page(request.GET.get('page'))
 
     return render(request, 'productos/proveedores_list.html', {

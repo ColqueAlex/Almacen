@@ -7,6 +7,7 @@ urlpatterns = [
     path('ventas/registrar/', views.registrar_venta, name='registrar_venta'),
     path('ventas/cambiar-estado/<int:id_venta>/', views.cambiar_estado_venta, name='cambiar_estado_venta'),
     path('ventas/anular/<int:id_venta>/', views.anular_venta, name='anular_venta'),
+    path('ventas/devolver/<int:id_detalle>/', views.devolver_detalle_venta, name='devolver_detalle_venta'),
     path('ventas/comprobante/<int:id_venta>/', views.generar_comprobante_pdf, name='generar_comprobante_pdf'),
     
     # Cuentas Corrientes

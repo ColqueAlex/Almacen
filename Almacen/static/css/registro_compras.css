@@ -55,6 +55,8 @@ body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color
 .input-group label { font-size: 13px; font-weight: 600; color: var(--text-main); }
 .form-control { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-body); outline: none; font-size: 14px; color: var(--text-main); transition: all 0.2s; }
 .form-control:focus { border-color: var(--primary); background: var(--bg-surface); }
+.field-error { color: var(--danger); font-size: 12px; font-weight: 600; }
+.form-control[aria-invalid="true"] { border-color: var(--danger); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .btn-primary { background: var(--primary); color: white; padding: 12px; border-radius: 8px; font-weight: 600; text-decoration: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; width: 100%; transition: all 0.2s; }
@@ -76,3 +78,31 @@ body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color
 .cart-footer { padding: 20px; border-top: 1px solid var(--border-color); background: var(--bg-surface); border-radius: 0 0 12px 12px; }
 .btn-finalizar { background: var(--secondary); color: white; padding: 14px; border-radius: 8px; font-weight: 700; font-size: 16px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; transition: all 0.2s; }
 .btn-finalizar:hover { background: #047857; }
+
+.price-warning-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15, 23, 42, 0.6); }
+.price-warning-overlay[hidden] { display: none; }
+.price-warning-dialog { width: min(900px, 100%); max-height: 90vh; overflow-y: auto; padding: 24px; border-radius: 14px; background: var(--bg-surface); box-shadow: 0 20px 25px rgba(0, 0, 0, 0.2); }
+.price-warning-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+.price-warning-header > .material-symbols-outlined { color: var(--tertiary); font-size: 28px; }
+.price-warning-header h2 { margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 20px; }
+.price-warning-header p { color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.price-warning-table-wrap { overflow-x: auto; }
+.price-warning-table { width: 100%; border-collapse: collapse; text-align: left; }
+.price-warning-table th { padding: 12px; background: var(--bg-body); color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+.price-warning-table td { padding: 12px; border-bottom: 1px solid var(--border-color); font-size: 14px; }
+.price-warning-table input { width: 130px; max-width: 100%; padding: 9px; border: 1px solid var(--border-color); border-radius: 7px; color: var(--text-main); font: inherit; }
+.price-warning-table input:focus { border-color: var(--primary); outline: 2px solid var(--primary-light); }
+.price-warning-gain { font-weight: 700; }
+.price-warning-gain.is-positive { color: var(--secondary); }
+.price-warning-gain.is-negative { color: #b91c1c; }
+.price-warning-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.price-warning-actions button { padding: 10px 14px; border: 0; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+.price-warning-cancel { background: var(--bg-body); color: var(--text-main); }
+.price-warning-confirm { background: var(--secondary); color: white; }
+.price-warning-confirm:hover { background: #047857; }
+
+@media (max-width: 640px) {
+    .price-warning-dialog { padding: 18px; }
+    .price-warning-actions { flex-direction: column-reverse; }
+    .price-warning-actions button { width: 100%; }
+}

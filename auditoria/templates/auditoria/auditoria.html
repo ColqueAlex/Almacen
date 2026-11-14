@@ -13,16 +13,29 @@
         <h1 class="page-title">Registro de Actividades</h1>
     </div>
 
-    <div class="toolbar">
+    <form method="get" class="toolbar">
         <div class="search-box">
             <span class="material-symbols-outlined">search</span>
-            <input type="text" id="search-audit" placeholder="Buscar por usuario, módulo o descripción...">
+            <input type="text" name="busqueda" value="{{ busqueda }}" placeholder="Buscar por usuario, módulo o descripción...">
         </div>
         <div style="display: flex; gap: 8px;">
-            <select class="filter-select"><option>Todas las acciones</option></select>
-            <select class="filter-select"><option>Todos los módulos</option></select>
+            <select class="filter-select" name="accion" onchange="this.form.submit()">
+                <option value="">Todas las acciones</option>
+                {% for valor, etiqueta in acciones %}
+                    <option value="{{ valor }}" {% if accion_seleccionada == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+            <select class="filter-select" name="modulo" onchange="this.form.submit()">
+                <option value="">Todos los módulos</option>
+                {% for modulo in modulos %}
+                    <option value="{{ modulo }}" {% if modulo_seleccionado == modulo %}selected{% endif %}>{{ modulo }}</option>
+                {% endfor %}
+            </select>
+            {% if busqueda or accion_seleccionada or modulo_seleccionado %}
+                <a href="{% url 'listar_auditoria' %}" class="btn-action btn-detalle">Limpiar</a>
+            {% endif %}
         </div>
-    </div>
+    </form>
 
     <div class="table-card">
         <table id="tabla-auditoria">
@@ -82,7 +95,11 @@
                 {% empty %}
                 <tr>
                     <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                        No hay registros de auditoría todavía.
+                        {% if busqueda or accion_seleccionada or modulo_seleccionado %}
+                            No hay actividades que coincidan con los filtros.
+                        {% else %}
+                            No hay registros de auditoría todavía.
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -93,11 +110,11 @@
             <span class="page-info">Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
             <div class="page-buttons">
                 {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}" class="page-btn">Anterior</a>
+                    <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda|urlencode }}&accion={{ accion_seleccionada|urlencode }}&modulo={{ modulo_seleccionado|urlencode }}" class="page-btn">Anterior</a>
                 {% endif %}
                 <a href="#" class="page-btn active">{{ page_obj.number }}</a>
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}" class="page-btn">Siguiente</a>
+                    <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda|urlencode }}&accion={{ accion_seleccionada|urlencode }}&modulo={{ modulo_seleccionado|urlencode }}" class="page-btn">Siguiente</a>
                 {% endif %}
             </div>
         </div>
@@ -143,13 +160,6 @@
 
 {% block extra_js %}
 <script>
-    document.getElementById('search-audit').addEventListener('input', function() {
-        const query = this.value.toLowerCase();
-        document.querySelectorAll('.fila-auditoria').forEach(row => {
-            row.style.display = row.dataset.search.includes(query) ? '' : 'none';
-        });
-    });
-
     document.querySelectorAll('.btn-ver-detalle').forEach(btn => {
         btn.addEventListener('click', function() {
             const id = this.dataset.id;

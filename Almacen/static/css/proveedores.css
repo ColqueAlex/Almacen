@@ -77,6 +77,7 @@ tr:hover { background: var(--bg-body); }
 
 .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
 .badge-gray { background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); }
+.supplier-products { font-size: 14px; }
 .badge-success { background: var(--secondary-light); color: var(--secondary); }
 .badge-danger { background: var(--danger-light); color: var(--danger); }
 

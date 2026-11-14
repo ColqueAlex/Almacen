@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>El Refugio - Registrar Compra</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-    <link rel="stylesheet" href="{% static 'css/registro_compras.css' %}">
+    <link rel="stylesheet" href="{% static 'css/registro_compras.css' %}?v=4">
 </head>
 <body>
 
@@ -65,6 +65,7 @@
             <!-- INYECCIÓN SEGURA DE DATOS PARA JAVASCRIPT -->
             {{ mapeo_proveedores|json_script:"mapeo-proveedores-data" }}
             {{ productos_sin_proveedor|json_script:"productos-sin-proveedor-data" }}
+            {{ lotes_usados|json_script:"lotes-usados-data" }}
 
             <div class="compras-grid">
                 <!-- COLUMNA IZQUIERDA: FORMULARIOS -->
@@ -115,6 +116,7 @@
                                     <input type="date" id="fecha_vencimiento" class="form-control">
                                 </div>
                             </div>
+                            <p id="lote-error" class="field-error" role="alert" hidden></p>
 
                             <div class="form-row">
                                 <div class="input-group">
@@ -167,6 +169,8 @@
                                 {% csrf_token %}
                                 <input type="hidden" name="id_proveedor" id="input-proveedor-id">
                                 <input type="hidden" name="cart_data" id="input-cart-data" value="[]">
+                                <input type="hidden" name="confirmar_precios" id="input-confirmar-precios" value="false">
+                                <input type="hidden" name="nuevos_precios" id="input-nuevos-precios" value="{}">
                                 <button type="submit" class="btn-finalizar" id="btn-finalizar">
                                     <span class="material-symbols-outlined">save</span> Finalizar Registro de Compra
                                 </button>
@@ -174,6 +178,36 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div class="price-warning-overlay" id="price-warning-modal" role="dialog" aria-modal="true" aria-labelledby="price-warning-title" aria-describedby="price-warning-description" hidden>
+                <section class="price-warning-dialog">
+                    <div class="price-warning-header">
+                        <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                        <div>
+                            <h2 id="price-warning-title">Ajustar precios de venta</h2>
+                            <p id="price-warning-description">El costo de compra es igual o superior al precio de venta actual. Revisa y edita los nuevos precios antes de finalizar.</p>
+                        </div>
+                    </div>
+                    <div class="price-warning-table-wrap">
+                        <table class="price-warning-table">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Costo de compra</th>
+                                    <th>Precio de venta actual</th>
+                                    <th>Nuevo precio</th>
+                                    <th>Ganancia por unidad</th>
+                                </tr>
+                            </thead>
+                            <tbody id="price-warning-products"></tbody>
+                        </table>
+                    </div>
+                    <div class="price-warning-actions">
+                        <button type="button" class="price-warning-cancel" id="cancel-price-warning">Volver a la compra</button>
+                        <button type="button" class="price-warning-confirm" id="confirm-price-warning">Actualizar precios y finalizar</button>
+                    </div>
+                </section>
             </div>
         </main>
     </div>
@@ -190,11 +224,30 @@
             // 2. Lógica de Filtrado de Productos por Proveedor
             const mapeoProveedores = JSON.parse(document.getElementById('mapeo-proveedores-data').textContent);
             const productosSinProveedor = JSON.parse(document.getElementById('productos-sin-proveedor-data').textContent);
+            const lotesUsados = JSON.parse(document.getElementById('lotes-usados-data').textContent);
             
             const proveedorSelect = document.getElementById('proveedor-select');
             const productoSelect = document.getElementById('producto-select');
             const todasLasOpciones = Array.from(productoSelect.options);
+            const loteInput = document.getElementById('lote-input');
+            const loteError = document.getElementById('lote-error');
             const vencInput = document.getElementById('fecha_vencimiento');
+            function limpiarErrorLote() {
+                loteError.textContent = '';
+                loteError.hidden = true;
+                loteInput.removeAttribute('aria-invalid');
+            }
+
+            function mostrarErrorLote(mensaje) {
+                loteError.textContent = mensaje;
+                loteError.hidden = false;
+                loteInput.setAttribute('aria-invalid', 'true');
+                loteInput.focus();
+            }
+
+            loteInput.addEventListener('input', limpiarErrorLote);
+            productoSelect.addEventListener('change', limpiarErrorLote);
+
             const manana = new Date();
             manana.setHours(0, 0, 0, 0);
             manana.setDate(manana.getDate() + 1);
@@ -205,6 +258,7 @@
             ].join('-');
 
             proveedorSelect.addEventListener('change', function () {
+                limpiarErrorLote();
                 const proveedorId = this.value;
                 productoSelect.innerHTML = '<option value="" disabled selected>Seleccione producto...</option>';
                 
@@ -239,6 +293,17 @@
             const formCompra = document.getElementById('form-compra');
             const inputProveedor = document.getElementById('input-proveedor-id');
             const inputCartData = document.getElementById('input-cart-data');
+            const inputConfirmarPrecios = document.getElementById('input-confirmar-precios');
+            const inputNuevosPrecios = document.getElementById('input-nuevos-precios');
+            const priceWarningModal = document.getElementById('price-warning-modal');
+            const priceWarningProducts = document.getElementById('price-warning-products');
+            const confirmPriceWarningButton = document.getElementById('confirm-price-warning');
+            let pricesConfirmed = false;
+
+            function formatGain(amount) {
+                const formattedAmount = '$' + Math.abs(amount).toFixed(2);
+                return amount < 0 ? '-' + formattedAmount : formattedAmount;
+            }
 
             function renderCart() {
                 if (!cart.length) {
@@ -284,7 +349,8 @@
                 }
 
                 const prodOption = prodSelect.options[prodSelect.selectedIndex];
-                const loteVal = document.getElementById('lote-input').value.trim() || 'Sin lote';
+                const loteIngresado = loteInput.value.trim();
+                const loteVal = loteIngresado || 'Sin lote';
                 const vencVal = vencInput.value;
                 const cantVal = parseInt(document.getElementById('cantidad-input').value) || 0;
                 
@@ -294,11 +360,32 @@
                 if (cantVal <= 0) { alert('La cantidad debe ser mayor a 0.'); return; }
                 if (costoVal <= 0) { alert('El precio de costo debe ser mayor a 0.'); return; }
 
-                // VALIDACIÓN: Costo no puede superar al precio de venta
-                if (costoVal > precioVentaVal) {
-                    alert("¡Atención! El costo ($" + costoVal.toFixed(2) + ") no puede ser mayor al precio de venta ($" + precioVentaVal.toFixed(2) + ").");
-                    return; 
+                const loteNormalizado = loteVal.toLowerCase();
+                if (loteNormalizado !== 'sin lote') {
+                    const lotesProducto = lotesUsados[prodSelect.value] || [];
+                    const loteAnterior = lotesProducto.find(
+                        lote => lote.lote.trim().toLowerCase() === loteNormalizado
+                    );
+                    if (loteAnterior) {
+                        mostrarErrorLote(
+                            `El lote "${loteAnterior.lote}" ya se usó para "${prodOption.dataset.nombre}". ` +
+                            `Stock registrado: ${loteAnterior.stock_actual} unidades.`
+                        );
+                        return;
+                    }
+
+                    const loteEnCompra = cart.find(item =>
+                        item.id_producto === prodSelect.value &&
+                        item.lote.trim().toLowerCase() === loteNormalizado
+                    );
+                    if (loteEnCompra) {
+                        mostrarErrorLote(
+                            `El lote "${loteVal}" ya está agregado para "${prodOption.dataset.nombre}" en esta compra.`
+                        );
+                        return;
+                    }
                 }
+                limpiarErrorLote();
 
                 // Validación fecha
                 if (vencVal) {
@@ -317,7 +404,8 @@
                     lote: loteVal,
                     fecha_vencimiento: vencVal,
                     cantidad: cantVal,
-                    precio_costo: costoVal
+                    precio_costo: costoVal,
+                    precio_venta: precioVentaVal
                 });
 
                 renderCart();
@@ -338,6 +426,96 @@
                 }
                 inputProveedor.value = proveedorSelect.value || '';
                 inputCartData.value = JSON.stringify(cart);
+
+                if (pricesConfirmed) return;
+
+                const productosConPerdida = new Map();
+                cart.forEach(item => {
+                    if (item.precio_costo < item.precio_venta) return;
+
+                    const productoActual = productosConPerdida.get(item.id_producto);
+                    if (!productoActual || item.precio_costo > productoActual.costoCompra) {
+                        productosConPerdida.set(item.id_producto, {
+                            id: item.id_producto,
+                            nombre: item.nombre,
+                            costoCompra: item.precio_costo,
+                            precioVenta: item.precio_venta
+                        });
+                    }
+                });
+
+                if (!productosConPerdida.size) return;
+
+                e.preventDefault();
+                priceWarningProducts.innerHTML = '';
+                productosConPerdida.forEach(producto => {
+                    const row = document.createElement('tr');
+                    const nameCell = document.createElement('td');
+                    const costCell = document.createElement('td');
+                    const currentPriceCell = document.createElement('td');
+                    const newPriceCell = document.createElement('td');
+                    const gainCell = document.createElement('td');
+                    const newPriceInput = document.createElement('input');
+
+                    nameCell.textContent = producto.nombre;
+                    costCell.textContent = '$' + producto.costoCompra.toFixed(2);
+                    currentPriceCell.textContent = '$' + producto.precioVenta.toFixed(2);
+                    newPriceInput.type = 'number';
+                    newPriceInput.min = '0.01';
+                    newPriceInput.step = '0.01';
+                    newPriceInput.value = producto.costoCompra.toFixed(2);
+                    newPriceInput.required = true;
+                    newPriceInput.dataset.productId = producto.id;
+                    newPriceInput.setAttribute('aria-label', 'Nuevo precio de ' + producto.nombre);
+                    newPriceCell.appendChild(newPriceInput);
+                    gainCell.className = 'price-warning-gain';
+
+                    function updateGain() {
+                        const newPrice = newPriceInput.valueAsNumber;
+                        if (!Number.isFinite(newPrice)) {
+                            gainCell.textContent = '--';
+                            gainCell.classList.remove('is-positive', 'is-negative');
+                            return;
+                        }
+
+                        const gain = newPrice - producto.costoCompra;
+                        gainCell.textContent = formatGain(gain);
+                        gainCell.classList.toggle('is-positive', gain > 0);
+                        gainCell.classList.toggle('is-negative', gain < 0);
+                    }
+
+                    newPriceInput.addEventListener('input', updateGain);
+                    updateGain();
+                    row.append(nameCell, costCell, currentPriceCell, newPriceCell, gainCell);
+                    priceWarningProducts.appendChild(row);
+                });
+
+                priceWarningModal.hidden = false;
+                confirmPriceWarningButton.focus();
+            });
+
+            document.getElementById('cancel-price-warning').addEventListener('click', function() {
+                priceWarningModal.hidden = true;
+            });
+
+            confirmPriceWarningButton.addEventListener('click', function() {
+                const newPriceInputs = Array.from(
+                    priceWarningProducts.querySelectorAll('input[data-product-id]')
+                );
+                const newPrices = {};
+
+                for (const input of newPriceInputs) {
+                    if (!input.reportValidity() || input.valueAsNumber < 0.01) {
+                        input.focus();
+                        return;
+                    }
+                    newPrices[input.dataset.productId] = input.valueAsNumber.toFixed(2);
+                }
+
+                inputNuevosPrecios.value = JSON.stringify(newPrices);
+                inputConfirmarPrecios.value = 'true';
+                pricesConfirmed = true;
+                formCompra.requestSubmit();
             });
         });
     </script>

@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>El Refugio - Proveedores</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-    <link rel="stylesheet" href="{% static 'css/proveedores.css' %}">
+    <link rel="stylesheet" href="{% static 'css/proveedores.css' %}?v=2">
 </head>
 <body>
 
@@ -16,16 +16,44 @@
             <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
             <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
         </div>
+        {% with url_name=request.resolver_match.url_name %}
         <nav class="sidebar-nav">
-            <a href="{% url 'inicio' %}" class="nav-item"><span class="material-symbols-outlined">home</span> Inicio</a>
-            <a href="{% url 'registrar_venta' %}" class="nav-item"><span class="material-symbols-outlined">point_of_sale</span> Ventas</a>
-            <a href="{% url 'consultar' %}" class="nav-item"><span class="material-symbols-outlined">inventory_2</span> Productos & Stock</a>
-            <a href="{% url 'listar_proveedores' %}" class="nav-item active"><span class="material-symbols-outlined">local_shipping</span> Proveedores</a>
-            <a href="{% url 'gestion_caja' %}" class="nav-item"><span class="material-symbols-outlined">payments</span> Caja & Arqueo</a>
-            <a href="{% url 'cuentas_clientes' %}" class="nav-item"><span class="material-symbols-outlined">group</span> Clientes (Cuentas)</a>
-            <a href="{% url 'listar_auditoria' %}" class="nav-item"><span class="material-symbols-outlined">history</span> Registro de Actividades</a>
-            <a href="{% url 'listar_usuarios' %}" class="nav-item"><span class="material-symbols-outlined">manage_accounts</span> Usuarios</a>
+            <a href="{% url 'inicio' %}" class="nav-item {% if url_name == 'inicio' %}active{% endif %}">
+                <span class="material-symbols-outlined">home</span> Inicio
+            </a>
+            <a href="{% url 'registrar_venta' %}" class="nav-item {% if url_name in 'registrar_venta,ventas' %}active{% endif %}">
+                <span class="material-symbols-outlined">point_of_sale</span> Ventas
+            </a>
+            <a href="{% url 'ventas' %}" class="nav-item {% if url_name == 'ventas' %}active{% endif %}">
+                <span class="material-symbols-outlined">receipt_long</span> Historial de Ventas
+            </a>
+
+            {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
+            <a href="{% url 'consultar' %}" class="nav-item {% if url_name == 'consultar' %}active{% endif %}">
+                <span class="material-symbols-outlined">inventory_2</span> Productos & Stock
+            </a>
+            <a href="{% url 'listar_proveedores' %}" class="nav-item {% if url_name in 'listar_proveedores,crear_proveedor,editar_proveedor' %}active{% endif %}">
+                <span class="material-symbols-outlined">local_shipping</span> Proveedores
+            </a>
+            <a href="{% url 'listar_compras' %}" class="nav-item {% if url_name in 'registrar_compra,listar_compras' %}active{% endif %}">
+                <span class="material-symbols-outlined">shopping_bag</span> Compras
+            </a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item {% if url_name == 'auditoria' %}active{% endif %}">
+                <span class="material-symbols-outlined">history</span> Auditoría
+            </a>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item {% if url_name in 'listar_usuarios,crear_usuario,editar_usuario' %}active{% endif %}">
+                <span class="material-symbols-outlined">manage_accounts</span> Usuarios
+            </a>
+            {% endif %}
+
+            <a href="{% url 'gestion_caja' %}" class="nav-item {% if url_name == 'gestion_caja' %}active{% endif %}">
+                <span class="material-symbols-outlined">payments</span> Caja & Arqueo
+            </a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item {% if url_name == 'cuentas_clientes' %}active{% endif %}">
+                <span class="material-symbols-outlined">group</span> Clientes (Cuentas)
+            </a>
         </nav>
+        {% endwith %}
     </aside>
 
     <!-- MAIN CONTENT -->
@@ -137,7 +165,7 @@
                                 </div>
                             </td>
                             <td>
-                                <span class="badge badge-gray">{{ proveedor.tipo_productos }}</span>
+                                <span class="badge badge-gray supplier-products">{{ proveedor.tipo_productos }}</span>
                             </td>
                             <td style="text-align: center;">
                                 {% if proveedor.activo %}
@@ -181,13 +209,13 @@
                     </span>
                     <div class="page-buttons">
                         {% if page_obj.has_previous %}
-                            <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span></a>
+                            <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda|urlencode }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span></a>
                         {% endif %}
                         
                         <a href="#" class="page-btn active">{{ page_obj.number }}</a>
                         
                         {% if page_obj.has_next %}
-                            <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span></a>
+                            <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda|urlencode }}" class="page-btn"><span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span></a>
                         {% endif %}
                     </div>
                 </div>

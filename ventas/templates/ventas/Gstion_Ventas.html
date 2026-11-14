@@ -4,7 +4,7 @@
 {% block title %}Historial de Ventas{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/historiales.css' %}">
+    <link rel="stylesheet" href="{% static 'css/historiales.css' %}?v=3">
 {% endblock %}
 
 {% block content %}
@@ -33,22 +33,24 @@
                 <tr class="main-row fila-venta" data-search="{{ venta.id_ventas }} {{ venta.cliente_info|lower }}">
                     <td style="font-weight: 700;">#{{ venta.id_ventas }}</td>
                     <td>Caja {{ venta.id_caja.id_caja }}</td>
-                    <td style="font-weight: 800;">${{ venta.total|floatformat:2 }}</td>
+                    <td style="font-weight: 800;">${{ venta.total_neto|floatformat:2 }}</td>
                     <td>{{ venta.fecha|date:"d/m/Y" }} <span style="color: var(--text-muted); font-size: 12px;">{{ venta.hora|time:"H:i" }}</span></td>
                     <td>
                         {% if not venta.id_clientes %}<span style="color: var(--text-muted);">Consumidor Final</span>
                         {% else %}<span style="color: var(--primary); font-weight: 600;">{{ venta.cliente_info }}</span>{% endif %}
                     </td>
                     <td>
-                        {% if venta.estado_de_pago|lower == 'pagado' %}<span class="badge badge-pagado">Pagado</span>
-                        {% elif venta.estado_de_pago|lower == 'anulado' %}<span class="badge badge-anulado">Anulado</span>
+                        {% if venta.estado_de_pago|lower == 'anulado' %}<span class="badge badge-anulado">Anulado</span>
+                        {% elif venta.esta_devuelta %}<span class="badge badge-devuelta">Devuelta</span>
+                        {% elif venta.tiene_devoluciones %}<span class="badge badge-devolucion-parcial">Devolución parcial</span>
+                        {% elif venta.estado_de_pago|lower == 'pagado' %}<span class="badge badge-pagado">Pagado</span>
                         {% else %}<span class="badge badge-fiado">Fiado</span>{% endif %}
                     </td>
                     <td>
                         <div class="actions">
                             <a href="{% url 'generar_comprobante_pdf' venta.id_ventas %}" target="_blank" class="btn-icon" title="PDF"><span class="material-symbols-outlined" style="font-size: 20px;">print</span></a>
                             <button type="button" class="btn-icon btn-toggle" title="Ver Detalle"><span class="material-symbols-outlined" style="font-size: 20px;">expand_more</span></button>
-                            {% if venta.estado_de_pago|lower != 'anulado' %}
+                            {% if venta.puede_anular %}
                             <form method="post" action="{% url 'anular_venta' venta.id_ventas %}" style="margin: 0;" onsubmit="return confirm('¿Anular Venta #{{ venta.id_ventas }}?');">
                                 {% csrf_token %}<button type="submit" class="btn-icon danger" title="Anular"><span class="material-symbols-outlined" style="font-size: 20px;">cancel</span></button>
                             </form>
@@ -60,15 +62,39 @@
                     <td colspan="7">
                         <div class="detail-content">
                             <table class="detail-table">
-                                <thead><tr><th>Producto</th><th>Lote</th><th>Cant.</th><th>Precio Unit.</th><th>Subtotal</th></tr></thead>
+                                <thead><tr><th>Producto</th><th>Lote</th><th>Vendidos</th><th>Devueltos</th><th>Precio Unit.</th><th>Subtotal original</th><th>Devolución</th></tr></thead>
                                 <tbody>
                                     {% for detalle in venta.detalles.all %}
                                     <tr>
                                         <td style="font-weight: 600;">{{ detalle.producto.nombre }}</td>
                                         <td>{{ detalle.lote.lote|default:"-" }}</td>
                                         <td>{{ detalle.cantidad }}</td>
+                                        <td>{{ detalle.cantidad_devuelta }}</td>
                                         <td>${{ detalle.precio_unitario_venta|floatformat:2 }}</td>
                                         <td style="font-weight: 700;">${{ detalle.subtotal|floatformat:2 }}</td>
+                                        <td>
+                                            {% if venta.puede_devolver and detalle.cantidad_disponible_para_devolucion > 0 %}
+                                                {% if caja_activa %}
+                                                <form method="post" action="{% url 'devolver_detalle_venta' detalle.id_detalles_ventas %}" class="return-form" onsubmit="return confirm('¿Confirmar la devolución de este producto?');">
+                                                    {% csrf_token %}
+                                                    <input type="number" name="cantidad" min="1" max="{{ detalle.cantidad_disponible_para_devolucion }}" value="1" required aria-label="Cantidad a devolver de {{ detalle.producto.nombre }}">
+                                                    <button type="submit" class="btn-devolver">Devolver</button>
+                                                </form>
+                                                {% else %}
+                                                    <a href="{% url 'gestion_caja' %}">Abrir caja</a>
+                                                {% endif %}
+                                            {% elif detalle.cantidad_devuelta > 0 and detalle.cantidad_disponible_para_devolucion == 0 %}
+                                                Devuelto
+                                            {% elif venta.estado_de_pago|lower == 'anulado' %}
+                                                Venta anulada
+                                            {% elif venta.dentro_plazo_devolucion and venta.id_caja.estado == 'cerrada' %}
+                                                Caja de la venta cerrada
+                                            {% elif venta.dentro_plazo_devolucion and not caja_activa %}
+                                                <a href="{% url 'gestion_caja' %}">Abrir caja</a>
+                                            {% else %}
+                                                Fuera de plazo
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -81,6 +107,20 @@
                 {% endfor %}
             </tbody>
         </table>
+        <div class="pagination">
+            <span class="page-info">
+                Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+            </span>
+            <div class="page-buttons">
+                {% if page_obj.has_previous %}
+                    <a href="?filtro={{ periodo|urlencode }}&page={{ page_obj.previous_page_number }}" class="page-btn">Anterior</a>
+                {% endif %}
+                <a href="#" class="page-btn active" aria-current="page">{{ page_obj.number }}</a>
+                {% if page_obj.has_next %}
+                    <a href="?filtro={{ periodo|urlencode }}&page={{ page_obj.next_page_number }}" class="page-btn">Siguiente</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
 {% endblock %}
 

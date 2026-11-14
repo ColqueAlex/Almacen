@@ -2,7 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Sum, Q
+from django.db.models import F, Prefetch, Sum, Q
+from django.db.models.functions import Coalesce
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.http import HttpResponse
@@ -14,10 +15,22 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from .models import Ventas, DetallesVentas, Clientes, Pago
+from .models import Ventas, DetallesVentas, DevolucionVenta, Clientes, Pago
 from productos.models import Productos, LotesProducto
 from caja.models import Caja
 from usuarios.utils import requiere_perfil, _solo_letras_y_espacios, _es_telefono_numerico
+
+def _venta_dentro_del_plazo_de_devolucion(venta, ahora=None):
+    ahora = ahora or timezone.now()
+    fecha_venta = datetime.combine(venta.fecha, venta.hora)
+
+    if timezone.is_aware(ahora) and timezone.is_naive(fecha_venta):
+        fecha_venta = timezone.make_aware(fecha_venta, timezone.get_current_timezone())
+    elif timezone.is_naive(ahora) and timezone.is_aware(fecha_venta):
+        fecha_venta = timezone.make_naive(fecha_venta, timezone.get_current_timezone())
+
+    antiguedad = ahora - fecha_venta
+    return timedelta(0) <= antiguedad <= timedelta(days=1)
 
 @login_required
 @requiere_perfil('Administrador', 'Vendedor')
@@ -28,7 +41,10 @@ def ventas(request):
     hoy = timezone.now().date()
     periodo = request.GET.get('filtro', 'todos')
 
-    ventas_qs = Ventas.objects.prefetch_related('detalles__producto').order_by('-fecha', '-hora')
+    detalles_qs = DetallesVentas.objects.select_related('producto', 'lote').prefetch_related('devoluciones')
+    ventas_qs = Ventas.objects.select_related('id_caja', 'id_clientes').prefetch_related(
+        Prefetch('detalles', queryset=detalles_qs)
+    ).order_by('-fecha', '-hora')
 
     if periodo == 'semana':
         desde = hoy - timedelta(days=7)
@@ -42,12 +58,37 @@ def ventas(request):
 
     page_obj = Paginator(ventas_qs, 7).get_page(request.GET.get('page'))
     fecha_limite = hoy.replace(year=hoy.year - 1)
+    caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
+
+    for venta in page_obj:
+        detalles = list(venta.detalles.all())
+        venta.total_devuelto = sum(
+            (devolucion.monto for detalle in detalles for devolucion in detalle.devoluciones.all()),
+            Decimal('0.00'),
+        )
+        venta.total_neto = max(Decimal('0.00'), venta.total - venta.total_devuelto)
+        venta.tiene_devoluciones = venta.total_devuelto > 0
+        venta.esta_devuelta = bool(detalles) and all(
+            detalle.cantidad_disponible_para_devolucion == 0 for detalle in detalles
+        )
+        venta.dentro_plazo_devolucion = _venta_dentro_del_plazo_de_devolucion(venta)
+        venta.puede_devolver = (
+            venta.estado_de_pago != 'anulado'
+            and venta.dentro_plazo_devolucion
+            and caja_activa is not None
+            and venta.id_caja.estado == 'abierta'
+        )
+        venta.puede_anular = (
+            venta.puede_devolver
+            and not venta.tiene_devoluciones
+        )
     
     return render(request, 'ventas/Gstion_Ventas.html', {
         'ventas': page_obj,
         'page_obj': page_obj,
         'fecha_limite': fecha_limite,
         'periodo': periodo,
+        'caja_activa': caja_activa,
     })
 
 @login_required
@@ -123,37 +164,35 @@ def registrar_venta(request):
                     precio_unitario = Decimal(str(item['precio']))
                     subtotal = cantidad_necesaria * precio_unitario
 
-                    lotes = LotesProducto.objects.filter(
-                        id_producto=producto, activo=True, stock_actual__gt=0
-                    ).order_by('fecha_vencimiento', 'id')
+                    lotes = list(
+                        producto.lotes_vigentes()
+                        .filter(stock_actual__gt=0)
+                        .select_for_update()
+                        .order_by(F('fecha_vencimiento').asc(nulls_last=True), 'id')
+                    )
 
                     pendiente = cantidad_necesaria
-                    lote_principal = None
 
                     for lote in lotes:
                         if pendiente <= 0:
                             break
-                        
-                        if not lote_principal:
-                            lote_principal = lote
 
-                        if lote.stock_actual >= pendiente:
-                            lote.stock_actual -= pendiente
-                            pendiente = 0
-                        else:
-                            pendiente -= lote.stock_actual
-                            lote.stock_actual = 0
-                        
-                        lote.save()
+                        cantidad_del_lote = min(lote.stock_actual, pendiente)
+                        lote.stock_actual -= cantidad_del_lote
+                        lote.save(update_fields=['stock_actual'])
 
-                    DetallesVentas.objects.create(
-                        venta=venta,
-                        producto=producto,
-                        lote=lote_principal,
-                        cantidad=cantidad_necesaria,
-                        precio_unitario_venta=precio_unitario,
-                        subtotal=subtotal
-                    )
+                        DetallesVentas.objects.create(
+                            venta=venta,
+                            producto=producto,
+                            lote=lote,
+                            cantidad=cantidad_del_lote,
+                            precio_unitario_venta=precio_unitario,
+                            subtotal=cantidad_del_lote * precio_unitario
+                        )
+                        pendiente -= cantidad_del_lote
+
+                    if pendiente:
+                        raise ValueError(f'Stock insuficiente para "{producto.nombre}".')
 
                 if fiado and cliente:
                     cliente.saldo += total_venta
@@ -166,15 +205,15 @@ def registrar_venta(request):
             messages.error(request, f'Error al registrar la venta: {str(e)}')
             return redirect('registrar_venta')
 
-    if not caja_activa:
-        messages.warning(request, 'Atención: Debe abrir la caja para poder cobrar ventas.')
-
     productos = Productos.objects.filter(estado='activo').annotate(
-        total_vendido=Sum(
-            'detalles_ventas__cantidad',
-            filter=~Q(detalles_ventas__venta__estado_de_pago__iexact='anulado'),
+        total_vendido=Coalesce(
+            Sum(
+                'detalles_ventas__cantidad',
+                filter=~Q(detalles_ventas__venta__estado_de_pago__iexact='anulado'),
+            ),
+            0,
         )
-    )
+    ).order_by('-total_vendido', 'nombre')
     categorias = Productos.objects.filter(estado='activo').values_list('categoria', flat=True).distinct()
     clientes = Clientes.objects.all().order_by('nombre')
 
@@ -204,46 +243,63 @@ def cambiar_estado_venta(request, id_venta):
     return redirect('ventas')
 
 @login_required
+@requiere_perfil('Administrador', 'Vendedor')
 def anular_venta(request, id_venta):
-    caja_activa = Caja.objects.filter(estado='abierta').last()
+    caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
     if not caja_activa:
         messages.error(request, 'No se puede anular la venta porque la caja está cerrada. Abra caja para realizar movimientos.')
         return redirect('ventas')
 
-    venta = get_object_or_404(Ventas, pk=id_venta)
-
-    if venta.estado_de_pago == 'anulado':
-        messages.warning(request, f'La Venta #{venta.id_ventas} ya se encuentra anulada.')
-        return redirect('ventas')
-
-    if venta.id_caja.estado == 'cerrada':
-        messages.error(
-            request, 
-            f'No se puede anular la Venta #{venta.id_ventas} porque pertenece a la Caja #{venta.id_caja.id_caja}, la cual ya fue CERRADA.'
-        )
-        return redirect('ventas')
-
     try:
         with transaction.atomic():
+            venta = get_object_or_404(
+                Ventas.objects.select_for_update(),
+                pk=id_venta,
+            )
+
+            if venta.estado_de_pago == 'anulado':
+                messages.warning(request, f'La Venta #{venta.id_ventas} ya se encuentra anulada.')
+                return redirect('ventas')
+
+            if not _venta_dentro_del_plazo_de_devolucion(venta):
+                messages.error(request, 'Solo se puede anular una venta dentro de las 24 horas posteriores a su registro.')
+                return redirect('ventas')
+
+            if venta.id_caja.estado == 'cerrada':
+                messages.error(
+                    request,
+                    f'No se puede anular la Venta #{venta.id_ventas} porque pertenece a la Caja #{venta.id_caja.id_caja}, la cual ya fue CERRADA.'
+                )
+                return redirect('ventas')
+
+            detalles = list(
+                DetallesVentas.objects.select_for_update().filter(venta=venta).order_by('pk')
+            )
+            if any(detalle.devoluciones.exists() for detalle in detalles):
+                messages.error(request, 'Esta venta ya tiene devoluciones parciales. Devuelva individualmente las unidades restantes.')
+                return redirect('ventas')
+
+            estado_pago_original = venta.estado_de_pago
+            if venta.id_clientes and estado_pago_original == 'fiado':
+                cliente = venta.id_clientes
+                cliente.saldo -= venta.total
+                cliente.save(update_fields=['saldo'])
+
             venta.estado_de_pago = 'anulado'
             venta.save()
 
-            if venta.id_clientes and venta.estado_de_pago == 'fiado':
-                cliente = venta.id_clientes
-                cliente.saldo -= venta.total
-                cliente.save()
-
-            detalles = DetallesVentas.objects.filter(venta=venta)
-
             for detalle in detalles:
-                if detalle.lote:
-                    detalle.lote.stock_actual += detalle.cantidad
-                    detalle.lote.save()
+                if detalle.lote_id:
+                    lote = LotesProducto.objects.select_for_update().get(pk=detalle.lote_id)
+                    lote.stock_actual += detalle.cantidad
+                    lote.save(update_fields=['stock_actual'])
                 else:
-                    lote = LotesProducto.objects.filter(id_producto=detalle.producto).first()
+                    lote = LotesProducto.objects.select_for_update().filter(
+                        id_producto=detalle.producto,
+                    ).order_by('pk').first()
                     if lote:
                         lote.stock_actual += detalle.cantidad
-                        lote.save()
+                        lote.save(update_fields=['stock_actual'])
                     else:
                         LotesProducto.objects.create(
                             id_producto=detalle.producto,
@@ -258,6 +314,108 @@ def anular_venta(request, id_venta):
     except Exception as e:
         messages.error(request, f'Error al anular la venta: {str(e)}')
 
+    return redirect('ventas')
+
+
+@login_required
+@requiere_perfil('Administrador', 'Vendedor')
+def devolver_detalle_venta(request, id_detalle):
+    if request.method != 'POST':
+        return redirect('ventas')
+
+    caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
+    if not caja_activa:
+        messages.error(request, 'Debe abrir una caja para registrar la devolución y su reintegro.')
+        return redirect('ventas')
+
+    try:
+        cantidad_a_devolver = int(request.POST.get('cantidad', ''))
+    except (TypeError, ValueError):
+        messages.error(request, 'Indique una cantidad válida para devolver.')
+        return redirect('ventas')
+
+    detalle_venta_id = get_object_or_404(
+        DetallesVentas.objects.only('venta_id'),
+        pk=id_detalle,
+    ).venta_id
+
+    with transaction.atomic():
+        venta = get_object_or_404(
+            Ventas.objects.select_for_update(),
+            pk=detalle_venta_id,
+        )
+        detalle = get_object_or_404(
+            DetallesVentas.objects.select_for_update(),
+            pk=id_detalle,
+            venta=venta,
+        )
+
+        if venta.estado_de_pago == 'anulado':
+            messages.error(request, 'No se puede devolver un producto de una venta anulada.')
+            return redirect('ventas')
+
+        if not _venta_dentro_del_plazo_de_devolucion(venta):
+            messages.error(request, 'Solo se aceptan devoluciones dentro de las 24 horas posteriores a la venta.')
+            return redirect('ventas')
+
+        if venta.id_caja.estado == 'cerrada':
+            messages.error(request, 'No se puede devolver el producto porque la caja original de la venta está cerrada.')
+            return redirect('ventas')
+
+        cantidad_devuelta = detalle.devoluciones.aggregate(total=Sum('cantidad'))['total'] or 0
+        cantidad_disponible = detalle.cantidad - cantidad_devuelta
+        if cantidad_a_devolver < 1 or cantidad_a_devolver > cantidad_disponible:
+            messages.error(request, f'Puede devolver entre 1 y {cantidad_disponible} unidad(es) de este producto.')
+            return redirect('ventas')
+
+        if venta.estado_de_pago == 'fiado':
+            metodo_reintegro = 'fiado'
+            if not venta.id_clientes:
+                messages.error(request, 'No se puede ajustar el saldo porque la venta fiada no tiene un cliente asociado.')
+                return redirect('ventas')
+        else:
+            metodo_reintegro = venta.metodo_pago
+            if metodo_reintegro not in ('efectivo', 'transferencia'):
+                messages.error(request, 'No se pudo determinar el medio de pago original para reintegrar la devolución.')
+                return redirect('ventas')
+
+        monto = detalle.precio_unitario_venta * cantidad_a_devolver
+
+        if detalle.lote_id:
+            lote = LotesProducto.objects.select_for_update().get(pk=detalle.lote_id)
+        else:
+            lote, _ = LotesProducto.objects.get_or_create(
+                id_producto=detalle.producto,
+                lote=f'DEVOLUCION-{detalle.pk}',
+                defaults={
+                    'precio_costo': detalle.producto.precio,
+                    'stock_actual': 0,
+                    'activo': True,
+                },
+            )
+
+        lote.stock_actual += cantidad_a_devolver
+        lote.activo = True
+        lote.save(update_fields=['stock_actual', 'activo'])
+
+        if metodo_reintegro == 'fiado':
+            cliente = Clientes.objects.select_for_update().get(pk=venta.id_clientes_id)
+            cliente.saldo -= monto
+            cliente.save(update_fields=['saldo'])
+
+        DevolucionVenta.objects.create(
+            detalle=detalle,
+            caja=caja_activa,
+            usuario=request.user,
+            cantidad=cantidad_a_devolver,
+            monto=monto,
+            metodo_reintegro=metodo_reintegro,
+        )
+
+    messages.success(
+        request,
+        f'Se devolvieron {cantidad_a_devolver} unidad(es) de {detalle.producto.nombre} por ${monto:.2f}.',
+    )
     return redirect('ventas')
 
 @login_required

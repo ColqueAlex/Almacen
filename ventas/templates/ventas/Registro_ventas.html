@@ -4,15 +4,12 @@
 {% block title %}Procesar Venta{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/pos.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pos.css' %}?v=6">
 {% endblock %}
 
 {% block content %}
     <div class="pos-header">
         <div class="pos-title">Procesar Venta <span class="ticket-badge"></span></div>
-        <div class="client-selector">
-            <span class="material-symbols-outlined">person</span>
-        </div>
     </div>
 
     <div class="pos-split">
@@ -26,11 +23,17 @@
             </div>
 
             <div class="category-pills" id="filter-pills">
-                <button class="pill active" data-category="">Todos</button>
+                <button class="pill active" data-mode="top">Más vendidos</button>
+                <label class="top-sellers-control" for="top-sellers-count">
+                    Mostrar
+                    <input type="number" id="top-sellers-count" min="1" step="1" value="12" aria-label="Cantidad de productos más vendidos">
+                    productos
+                </label>
                 {% for cat in categorias %}<button class="pill" data-category="{{ cat }}">{{ cat }}</button>{% endfor %}
             </div>
+            <p class="top-sellers-error" id="top-sellers-error" role="alert" hidden>Indica una cantidad mayor que cero.</p>
 
-            <div class="product-grid" id="product-list">
+            <div class="product-grid" id="product-list" data-page-size="12">
                 {% for prod in productos %}
                     {% if prod.stock > 0 %}
                     <article class="product-card" data-id="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-precio="{{ prod.precio }}" data-stock="{{ prod.stock }}" data-categoria="{{ prod.categoria }}">
@@ -47,6 +50,12 @@
                     {% endif %}
                 {% endfor %}
             </div>
+            <p class="empty-products" id="empty-products" hidden>No hay productos que coincidan con la búsqueda.</p>
+            <nav class="product-pagination" id="product-pagination" aria-label="Paginación de productos" hidden>
+                <button type="button" class="product-page-btn" id="previous-products" disabled>Anterior</button>
+                <span id="product-page-info" aria-live="polite"></span>
+                <button type="button" class="product-page-btn" id="next-products" disabled>Siguiente</button>
+            </nav>
         </section>
 
         <!-- COLUMNA DERECHA: CARRITO -->
@@ -112,6 +121,17 @@
             </form>
         </aside>
     </div>
+
+    {% if not caja_activa %}
+    <div class="cash-closed-overlay">
+        <section class="cash-closed-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cash-closed-title" aria-describedby="cash-closed-description">
+            <span class="material-symbols-outlined cash-closed-icon" aria-hidden="true">lock</span>
+            <h2 id="cash-closed-title">La caja está cerrada</h2>
+            <p id="cash-closed-description">Para registrar una venta, primero debes abrir la caja.</p>
+            <a href="{% url 'gestion_caja' %}" class="btn-abrir">Ir a caja</a>
+        </section>
+    </div>
+    {% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -123,9 +143,54 @@
         const subtotalElement = document.getElementById('subtotal');
         const cartCountElement = document.getElementById('cart-count');
         const cartDataInput = document.getElementById('cart_data');
+        const productList = document.getElementById('product-list');
+        const productCards = Array.from(productList.querySelectorAll('.product-card'));
+        const productsPerPage = Number(productList.dataset.pageSize);
+        const productPagination = document.getElementById('product-pagination');
+        const productPageInfo = document.getElementById('product-page-info');
+        const previousProductsButton = document.getElementById('previous-products');
+        const nextProductsButton = document.getElementById('next-products');
+        const emptyProductsMessage = document.getElementById('empty-products');
+        const topSellersCountInput = document.getElementById('top-sellers-count');
+        const topSellersError = document.getElementById('top-sellers-error');
+        let currentProductPage = 0;
+        let selectedCategory = '';
+        let showTopSellers = true;
+        let topSellersCount = Number(topSellersCountInput.value);
+        let productSearch = '';
+
+        function getFilteredProducts() {
+            const matchingProducts = productCards.filter(card =>
+                (!selectedCategory || card.dataset.categoria === selectedCategory) &&
+                card.dataset.nombre.toLowerCase().includes(productSearch)
+            );
+            return showTopSellers ? matchingProducts.slice(0, topSellersCount) : matchingProducts;
+        }
+
+        function updateProductList() {
+            const filteredProducts = getFilteredProducts();
+            const pageCount = Math.ceil(filteredProducts.length / productsPerPage);
+            currentProductPage = Math.min(currentProductPage, Math.max(pageCount - 1, 0));
+            const firstProductIndex = currentProductPage * productsPerPage;
+            const visibleProducts = new Set(
+                filteredProducts.slice(firstProductIndex, firstProductIndex + productsPerPage)
+            );
+
+            productCards.forEach(card => {
+                card.style.display = visibleProducts.has(card) ? 'flex' : 'none';
+            });
+
+            productPagination.hidden = pageCount <= 1;
+            emptyProductsMessage.hidden = filteredProducts.length > 0;
+            productPageInfo.textContent = pageCount ? `Página ${currentProductPage + 1} de ${pageCount}` : '';
+            previousProductsButton.disabled = currentProductPage === 0;
+            nextProductsButton.disabled = currentProductPage >= pageCount - 1;
+        }
+
+        updateProductList();
         
         // Agregar Producto al Carrito
-        document.querySelectorAll('.product-card').forEach(card => {
+        productCards.forEach(card => {
             card.addEventListener('click', function() {
                 const id = this.dataset.id;
                 const nombre = this.dataset.nombre;
@@ -221,22 +286,48 @@
             pill.addEventListener('click', function() {
                 document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
                 this.classList.add('active');
-                const cat = this.dataset.category;
-                
-                document.querySelectorAll('.product-card').forEach(card => {
-                    if (!cat || card.dataset.categoria === cat) card.style.display = 'flex';
-                    else card.style.display = 'none';
-                });
+                showTopSellers = this.dataset.mode === 'top';
+                selectedCategory = showTopSellers ? '' : this.dataset.category;
+                currentProductPage = 0;
+                updateProductList();
             });
+        });
+
+        topSellersCountInput.addEventListener('input', function() {
+            const count = this.valueAsNumber;
+            if (!Number.isInteger(count) || count < 1) {
+                this.setAttribute('aria-invalid', 'true');
+                topSellersError.hidden = false;
+                return;
+            }
+
+            this.removeAttribute('aria-invalid');
+            topSellersError.hidden = true;
+            topSellersCount = count;
+            currentProductPage = 0;
+            if (showTopSellers) updateProductList();
         });
 
         // Buscador de productos
         document.getElementById('search-product').addEventListener('input', function() {
-            const query = this.value.toLowerCase();
-            document.querySelectorAll('.product-card').forEach(card => {
-                const nombre = card.dataset.nombre.toLowerCase();
-                card.style.display = nombre.includes(query) ? 'flex' : 'none';
-            });
+            productSearch = this.value.toLowerCase();
+            currentProductPage = 0;
+            updateProductList();
+        });
+
+        previousProductsButton.addEventListener('click', function() {
+            if (currentProductPage > 0) {
+                currentProductPage--;
+                updateProductList();
+            }
+        });
+
+        nextProductsButton.addEventListener('click', function() {
+            const filteredCount = getFilteredProducts().length;
+            if (currentProductPage < Math.ceil(filteredCount / productsPerPage) - 1) {
+                currentProductPage++;
+                updateProductList();
+            }
         });
 
         // Toggle Fiado

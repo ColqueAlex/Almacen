@@ -1,7 +1,8 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
-from django.db.models import Sum
+from django.db.models import Q, Sum
+from django.utils import timezone
 
 def validar_categoria(value):
     if any(char.isdigit() for char in value):
@@ -24,9 +25,16 @@ class Productos(models.Model):
     proveedores = models.ManyToManyField(Proveedor, blank=True, related_name='productos_que_suministra')
 
     def __str__(self): return f"{self.nombre} ({self.marca}) - ${self.precio}"
+
+    def lotes_vigentes(self):
+        hoy = timezone.localdate()
+        return self.lotes.filter(activo=True).filter(
+            Q(fecha_vencimiento__isnull=True) | Q(fecha_vencimiento__gte=hoy)
+        )
+
     @property
     def stock(self):
-        res = self.lotes.filter(activo=True).aggregate(total=Sum('stock_actual'))
+        res = self.lotes_vigentes().aggregate(total=Sum('stock_actual'))
         return res['total'] if res['total'] is not None else 0
 
 class LotesProducto(models.Model):

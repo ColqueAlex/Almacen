@@ -2,16 +2,50 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
+from django.core.paginator import Paginator
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
 from .models import Caja
-from ventas.models import Ventas, Pago
+from ventas.models import Ventas, Pago, DevolucionVenta
 from usuarios.utils import requiere_perfil
+
+def _sumar(queryset, campo):
+    return queryset.aggregate(total=Sum(campo))['total'] or Decimal('0.00')
+
+
+def _resumen_caja(caja):
+    ventas = Ventas.objects.filter(id_caja=caja)
+    devoluciones = DevolucionVenta.objects.filter(caja=caja)
+    pagos = Pago.objects.filter(id_caja=caja)
+
+    ventas_efectivo = _sumar(
+        ventas.filter(estado_de_pago='pagado', metodo_pago='efectivo'),
+        'total',
+    ) - _sumar(devoluciones.filter(metodo_reintegro='efectivo'), 'monto')
+    ventas_transferencia = _sumar(
+        ventas.filter(estado_de_pago='pagado', metodo_pago='transferencia'),
+        'total',
+    ) - _sumar(devoluciones.filter(metodo_reintegro='transferencia'), 'monto')
+    ventas_fiado = _sumar(
+        ventas.filter(estado_de_pago='fiado'),
+        'total',
+    ) - _sumar(devoluciones.filter(metodo_reintegro='fiado'), 'monto')
+
+    return {
+        'ventas_efectivo': ventas_efectivo,
+        'ventas_transferencia': ventas_transferencia,
+        'ventas_fiado': ventas_fiado,
+        'cobros_efectivo': _sumar(pagos.filter(metodo_pago='efectivo'), 'monto'),
+        'cobros_transferencia': _sumar(pagos.filter(metodo_pago='transferencia'), 'monto'),
+    }
 
 @login_required
 def gestion_caja(request):
     caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
-    historial_cajas = Caja.objects.all().order_by('-fecha_apertura')[:10]
+    page_obj = Paginator(
+        Caja.objects.all().order_by('-fecha_apertura', '-id_caja'),
+        7,
+    ).get_page(request.GET.get('page'))
 
     ventas_efectivo = Decimal('0.00')
     ventas_transferencia = Decimal('0.00')
@@ -21,18 +55,12 @@ def gestion_caja(request):
     monto_esperado = Decimal('0.00')
 
     if caja_activa:
-        v_efectivo = Ventas.objects.filter(id_caja=caja_activa, estado_de_pago='pagado', metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or Decimal('0.00')
-        
-        v_transf = Ventas.objects.filter(id_caja=caja_activa, estado_de_pago='pagado', metodo_pago='transferencia').aggregate(total=Sum('total'))['total'] or Decimal('0.00') 
-        v_fiado = Ventas.objects.filter(id_caja=caja_activa, estado_de_pago='fiado').aggregate(total=Sum('total'))['total'] or Decimal('0.00')
-        c_efectivo = Pago.objects.filter(id_caja=caja_activa, metodo_pago='efectivo').aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
-        c_transf = Pago.objects.filter(id_caja=caja_activa, metodo_pago='transferencia').aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
-
-        ventas_efectivo = Decimal(str(v_efectivo))
-        ventas_transferencia = Decimal(str(v_transf))
-        ventas_fiado = Decimal(str(v_fiado))
-        cobros_efectivo = Decimal(str(c_efectivo))
-        cobros_transferencia = Decimal(str(c_transf))
+        resumen = _resumen_caja(caja_activa)
+        ventas_efectivo = resumen['ventas_efectivo']
+        ventas_transferencia = resumen['ventas_transferencia']
+        ventas_fiado = resumen['ventas_fiado']
+        cobros_efectivo = resumen['cobros_efectivo']
+        cobros_transferencia = resumen['cobros_transferencia']
 
         monto_esperado = caja_activa.monto_inicial + ventas_efectivo + cobros_efectivo
 
@@ -44,7 +72,8 @@ def gestion_caja(request):
         'cobros_efectivo': cobros_efectivo,
         'cobros_transferencia': cobros_transferencia,
         'monto_esperado': monto_esperado,
-        'historial_cajas': historial_cajas,
+        'historial_cajas': page_obj,
+        'page_obj': page_obj,
     })
 
 @login_required
@@ -97,10 +126,12 @@ def cerrar_caja(request):
 
         observaciones = request.POST.get('observaciones', '').strip()
 
-        v_efectivo = Ventas.objects.filter(id_caja=caja_activa, estado_de_pago='pagado', metodo_pago='efectivo').aggregate(total=Sum('total'))['total'] or Decimal('0.00')
-        c_efectivo = Pago.objects.filter(id_caja=caja_activa, metodo_pago='efectivo').aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
-        
-        monto_esperado = caja_activa.monto_inicial + Decimal(str(v_efectivo)) + Decimal(str(c_efectivo))
+        resumen = _resumen_caja(caja_activa)
+        monto_esperado = (
+            caja_activa.monto_inicial
+            + resumen['ventas_efectivo']
+            + resumen['cobros_efectivo']
+        )
         diferencia = monto_real - monto_esperado
 
         caja_activa.monto_final_esperado = monto_esperado
@@ -126,10 +157,12 @@ def forzar_cierre_caja(request, id_caja):
     if request.method == 'POST':
         caja = get_object_or_404(Caja, pk=id_caja, estado='abierta')
         
-        ventas_efectivo = Ventas.objects.filter(id_caja=caja, estado_de_pago='pagado').aggregate(total=Sum('total'))['total'] or Decimal('0.00')
-        cobros = Pago.objects.filter(id_caja=caja).aggregate(total=Sum('monto'))['total'] or Decimal('0.00')
-        
-        monto_esperado = caja.monto_inicial + Decimal(str(ventas_efectivo)) + Decimal(str(cobros))
+        resumen = _resumen_caja(caja)
+        monto_esperado = (
+            caja.monto_inicial
+            + resumen['ventas_efectivo']
+            + resumen['cobros_efectivo']
+        )
         
         caja.monto_final_esperado = monto_esperado
         caja.monto_final_real = monto_esperado 

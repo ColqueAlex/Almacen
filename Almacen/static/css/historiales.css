@@ -63,6 +63,8 @@ tr:hover { background: var(--bg-body); }
 .badge-pagado { background: var(--secondary-light); color: var(--secondary); }
 .badge-fiado { background: var(--tertiary-light); color: var(--tertiary); }
 .badge-anulado { background: var(--danger-light); color: var(--danger); }
+.badge-devuelta { background: var(--primary-light); color: var(--primary); }
+.badge-devolucion-parcial { background: var(--tertiary-light); color: var(--tertiary); }
 .badge-gray { background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); }
 
 /* ACCIONES */
@@ -79,6 +81,18 @@ tr:hover { background: var(--bg-body); }
 .detail-table th { background: white; border-bottom: 1px solid var(--border-color); font-size: 10px; padding: 10px 14px; }
 .detail-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border-color); }
 .detail-table tr:last-child td { border-bottom: none; }
+.return-form { display: flex; align-items: center; gap: 6px; }
+.return-form input { width: 64px; padding: 7px; border: 1px solid var(--border-color); border-radius: 6px; font: inherit; }
+.btn-devolver { padding: 7px 10px; border: none; border-radius: 6px; background: var(--primary); color: white; font-weight: 600; cursor: pointer; }
+.btn-devolver:hover { background: #1e3a8a; }
+
+/* PAGINACION */
+.pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px; }
+.page-info { font-size: 13px; color: var(--text-muted); }
+.page-buttons { display: flex; gap: 4px; }
+.page-btn { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; padding: 0 8px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; }
+.page-btn:hover { background: var(--bg-body); }
+.page-btn.active { background: var(--primary); color: white; }
 
 /* MODAL */
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; }
