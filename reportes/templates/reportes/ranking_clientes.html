@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Ranking de Clientes{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/reportes.css' %}">
+{% endblock %}
+
+{% block content %}
+    <div class="reporte-header">
+        <div>
+            <span class="subtitle-badge">Reportes · Clientes</span>
+            <h1 class="page-title">Ranking de Clientes por Facturación y Deuda</h1>
+            <p class="reporte-descripcion">Facturación del período (ventas no anuladas, netas de devoluciones) y saldo deudor actual de cada cliente.</p>
+        </div>
+        <a href="?{{ querystring }}&exportar=pdf" target="_blank" class="btn-action btn-pdf">
+            <span class="material-symbols-outlined" style="font-size: 18px;">picture_as_pdf</span> Exportar PDF
+        </a>
+    </div>
+
+    <form method="get" class="filtros-card">
+        <div class="filtros-titulo"><span class="material-symbols-outlined" style="font-size: 16px;">filter_alt</span> Filtros</div>
+        <div class="filtros-grid">
+            <div class="filtro-campo">
+                <label for="desde">Fecha desde</label>
+                <input type="date" id="desde" name="desde" value="{{ desde|date:'Y-m-d' }}">
+            </div>
+            <div class="filtro-campo">
+                <label for="hasta">Fecha hasta</label>
+                <input type="date" id="hasta" name="hasta" value="{{ hasta|date:'Y-m-d' }}">
+            </div>
+            <div class="filtro-campo">
+                <label for="estado">Estado de pago</label>
+                <select id="estado" name="estado">
+                    <option value="">Todos</option>
+                    {% for valor, etiqueta in estados %}
+                        <option value="{{ valor }}" {% if valor == estado_seleccionado %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filtros-acciones">
+                <a href="{% url 'reporte_ranking_clientes' %}" class="btn-action btn-secundario">Limpiar</a>
+                <button type="submit" class="btn-action btn-primario">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">search</span> Aplicar
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <div class="resumen-grid">
+        <div class="resumen-card"><div class="resumen-label">Total facturado</div><div class="resumen-valor">$ {{ totales.facturado|floatformat:"2g" }}</div></div>
+        <div class="resumen-card verde"><div class="resumen-label">Ventas</div><div class="resumen-valor">{{ totales.cantidad }}</div></div>
+        <div class="resumen-card naranja"><div class="resumen-label">Deuda de estos clientes</div><div class="resumen-valor">$ {{ totales.saldo|floatformat:"2g" }}</div></div>
+    </div>
+
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 60px;">#</th>
+                    <th>Cliente</th>
+                    <th class="num">Total facturado</th>
+                    <th class="num">Cant. ventas</th>
+                    <th class="num">Saldo deudor actual</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in filas %}
+                <tr>
+                    <td><span class="posicion {% if f.posicion <= 3 %}top{% endif %}">{{ f.posicion }}</span></td>
+                    <td class="celda-producto"><strong>{{ f.cliente }}</strong>{% if f.telefono %}<span>Tel. {{ f.telefono }}</span>{% endif %}</td>
+                    <td class="num">$ {{ f.facturado|floatformat:"2g" }}</td>
+                    <td class="num">{{ f.cantidad }}</td>
+                    <td class="num">
+                        {% if f.saldo > 0 %}
+                            <span class="badge badge-deuda">$ {{ f.saldo|floatformat:"2g" }}</span>
+                        {% else %}
+                            <span class="badge badge-ok">Al día</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="vacio">No hay ventas a clientes para los filtros seleccionados.</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if total_filas %}
+            <tfoot>
+                <tr>
+                    <td colspan="2">TOTALES <span class="tfoot-nota">{{ total_filas }} cliente(s) · todas las páginas</span></td>
+                    <td class="num">$ {{ totales.facturado|floatformat:"2g" }}</td>
+                    <td class="num">{{ totales.cantidad }}</td>
+                    <td class="num">$ {{ totales.saldo|floatformat:"2g" }}</td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+        {% include 'reportes/_paginacion.html' %}
+    </div>
+{% endblock %}

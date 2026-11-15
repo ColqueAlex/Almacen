@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Stock Valorizado{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/reportes.css' %}">
+{% endblock %}
+
+{% block content %}
+    <div class="reporte-header">
+        <div>
+            <span class="subtitle-badge">Reportes · Administración</span>
+            <h1 class="page-title">Stock Valorizado al Corte</h1>
+            <p class="reporte-descripcion">Corte al {{ fecha_corte|date:"d/m/Y" }}. Solo lotes activos y no vencidos, valuados a su precio de costo (promedio ponderado por unidades).</p>
+        </div>
+        <a href="?{{ querystring }}&exportar=pdf" target="_blank" class="btn-action btn-pdf">
+            <span class="material-symbols-outlined" style="font-size: 18px;">picture_as_pdf</span> Exportar PDF
+        </a>
+    </div>
+
+    <form method="get" class="filtros-card">
+        <div class="filtros-titulo"><span class="material-symbols-outlined" style="font-size: 16px;">filter_alt</span> Filtros</div>
+        <div class="filtros-grid">
+            <div class="filtro-campo">
+                <label for="categoria">Categoría</label>
+                <select id="categoria" name="categoria">
+                    <option value="">Todas las categorías</option>
+                    {% for cat in categorias %}
+                        <option value="{{ cat }}" {% if cat == categoria_seleccionada %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <label class="filtro-check">
+                <input type="checkbox" name="stock_bajo" value="1" {% if solo_stock_bajo %}checked{% endif %}>
+                Solo mostrar stock bajo (&lt; {{ limite_stock }} u.)
+            </label>
+            <div class="filtros-acciones">
+                <a href="{% url 'reporte_stock_valorizado' %}" class="btn-action btn-secundario">Limpiar</a>
+                <button type="submit" class="btn-action btn-primario">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">search</span> Aplicar
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <div class="resumen-grid">
+        <div class="resumen-card verde"><div class="resumen-label">Valor total del stock</div><div class="resumen-valor">$ {{ totales.valor|floatformat:"2g" }}</div></div>
+        <div class="resumen-card"><div class="resumen-label">Unidades en stock</div><div class="resumen-valor">{{ totales.stock }}</div></div>
+        <div class="resumen-card rojo"><div class="resumen-label">Productos con stock bajo</div><div class="resumen-valor">{{ totales.productos_stock_bajo }}</div></div>
+    </div>
+
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th class="num">Cantidad en stock</th>
+                    <th class="num">Precio costo promedio</th>
+                    <th class="num">Valor total del stock</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in filas %}
+                <tr>
+                    <td class="celda-producto"><strong>{{ f.producto }}</strong><span>{{ f.marca }}</span></td>
+                    <td><span class="badge badge-gray">{{ f.categoria }}</span></td>
+                    <td class="num">{{ f.stock }}</td>
+                    <td class="num">{% if f.costo_promedio is not None %}$ {{ f.costo_promedio|floatformat:"2g" }}{% else %}—{% endif %}</td>
+                    <td class="num">$ {{ f.valor|floatformat:"2g" }}</td>
+                    <td>
+                        {% if f.stock_bajo %}
+                            <span class="badge badge-bajo">Stock bajo</span>
+                        {% else %}
+                            <span class="badge badge-ok">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="vacio">No hay productos para los filtros seleccionados.</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if total_filas %}
+            <tfoot>
+                <tr>
+                    <td colspan="2">TOTALES <span class="tfoot-nota">{{ total_filas }} producto(s) · todas las páginas</span></td>
+                    <td class="num">{{ totales.stock }}</td>
+                    <td class="num">{% if totales.costo_promedio is not None %}$ {{ totales.costo_promedio|floatformat:"2g" }}{% else %}—{% endif %}</td>
+                    <td class="num">$ {{ totales.valor|floatformat:"2g" }}</td>
+                    <td>{{ totales.productos_stock_bajo }} bajo(s)</td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+        {% include 'reportes/_paginacion.html' %}
+    </div>
+{% endblock %}

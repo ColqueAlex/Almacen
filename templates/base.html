@@ -60,6 +60,20 @@
             <a href="{% url 'cuentas_clientes' %}" class="nav-item {% if url_name == 'cuentas_clientes' %}active{% endif %}">
                 <span class="material-symbols-outlined">group</span> Clientes (Cuentas)
             </a>
+
+            <!-- REPORTES CONSOLIDADOS -->
+            <div class="nav-section">Reportes</div>
+            {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
+            <a href="{% url 'reporte_rentabilidad' %}" class="nav-item {% if url_name == 'reporte_rentabilidad' %}active{% endif %}">
+                <span class="material-symbols-outlined">trending_up</span> Rentabilidad
+            </a>
+            <a href="{% url 'reporte_stock_valorizado' %}" class="nav-item {% if url_name == 'reporte_stock_valorizado' %}active{% endif %}">
+                <span class="material-symbols-outlined">warehouse</span> Stock Valorizado
+            </a>
+            {% endif %}
+            <a href="{% url 'reporte_ranking_clientes' %}" class="nav-item {% if url_name == 'reporte_ranking_clientes' %}active{% endif %}">
+                <span class="material-symbols-outlined">leaderboard</span> Ranking de Clientes
+            </a>
         </nav>
         {% endwith %}
     </aside>

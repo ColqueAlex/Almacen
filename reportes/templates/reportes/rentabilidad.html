@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Rentabilidad por Producto{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/reportes.css' %}">
+{% endblock %}
+
+{% block content %}
+    <div class="reporte-header">
+        <div>
+            <span class="subtitle-badge">Reportes · Administración</span>
+            <h1 class="page-title">Rentabilidad por Producto</h1>
+            <p class="reporte-descripcion">Ingresos de ventas no anuladas, netos de devoluciones, contra el precio de costo del lote del que salió cada unidad.</p>
+        </div>
+        <a href="?{{ querystring }}&exportar=pdf" target="_blank" class="btn-action btn-pdf">
+            <span class="material-symbols-outlined" style="font-size: 18px;">picture_as_pdf</span> Exportar PDF
+        </a>
+    </div>
+
+    <form method="get" class="filtros-card">
+        <div class="filtros-titulo"><span class="material-symbols-outlined" style="font-size: 16px;">filter_alt</span> Filtros</div>
+        <div class="filtros-grid">
+            <div class="filtro-campo">
+                <label for="desde">Fecha desde</label>
+                <input type="date" id="desde" name="desde" value="{{ desde|date:'Y-m-d' }}">
+            </div>
+            <div class="filtro-campo">
+                <label for="hasta">Fecha hasta</label>
+                <input type="date" id="hasta" name="hasta" value="{{ hasta|date:'Y-m-d' }}">
+            </div>
+            <div class="filtro-campo">
+                <label for="categoria">Categoría</label>
+                <select id="categoria" name="categoria">
+                    <option value="">Todas las categorías</option>
+                    {% for cat in categorias %}
+                        <option value="{{ cat }}" {% if cat == categoria_seleccionada %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filtros-acciones">
+                <a href="{% url 'reporte_rentabilidad' %}" class="btn-action btn-secundario">Limpiar</a>
+                <button type="submit" class="btn-action btn-primario">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">search</span> Aplicar
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <div class="resumen-grid">
+        <div class="resumen-card"><div class="resumen-label">Ingreso total</div><div class="resumen-valor">$ {{ totales.ingreso|floatformat:"2g" }}</div></div>
+        <div class="resumen-card naranja"><div class="resumen-label">Costo total</div><div class="resumen-valor">$ {{ totales.costo|floatformat:"2g" }}</div></div>
+        <div class="resumen-card {% if totales.ganancia < 0 %}rojo{% else %}verde{% endif %}"><div class="resumen-label">Ganancia</div><div class="resumen-valor">$ {{ totales.ganancia|floatformat:"2g" }}</div></div>
+        <div class="resumen-card"><div class="resumen-label">Margen promedio</div><div class="resumen-valor">{% if totales.margen is not None %}{{ totales.margen|floatformat:1 }} %{% else %}—{% endif %}</div></div>
+    </div>
+
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th class="num">Cant. vendida</th>
+                    <th class="num">Ingreso total</th>
+                    <th class="num">Costo total</th>
+                    <th class="num">Ganancia</th>
+                    <th class="num">Margen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in filas %}
+                <tr>
+                    <td class="celda-producto"><strong>{{ f.producto }}</strong><span>{{ f.marca }}</span></td>
+                    <td><span class="badge badge-gray">{{ f.categoria }}</span></td>
+                    <td class="num">{{ f.cantidad }}</td>
+                    <td class="num">$ {{ f.ingreso|floatformat:"2g" }}</td>
+                    <td class="num">$ {{ f.costo|floatformat:"2g" }}</td>
+                    <td class="num {% if f.ganancia < 0 %}negativo{% else %}positivo{% endif %}">$ {{ f.ganancia|floatformat:"2g" }}</td>
+                    <td class="num">{% if f.margen is not None %}{{ f.margen|floatformat:1 }} %{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="vacio">No hay ventas para los filtros seleccionados.</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if total_filas %}
+            <tfoot>
+                <tr>
+                    <td colspan="2">TOTALES <span class="tfoot-nota">{{ total_filas }} producto(s) · todas las páginas</span></td>
+                    <td class="num">{{ totales.cantidad }}</td>
+                    <td class="num">$ {{ totales.ingreso|floatformat:"2g" }}</td>
+                    <td class="num">$ {{ totales.costo|floatformat:"2g" }}</td>
+                    <td class="num">$ {{ totales.ganancia|floatformat:"2g" }}</td>
+                    <td class="num">{% if totales.margen is not None %}{{ totales.margen|floatformat:1 }} %{% else %}—{% endif %}</td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+        {% include 'reportes/_paginacion.html' %}
+    </div>
+{% endblock %}
