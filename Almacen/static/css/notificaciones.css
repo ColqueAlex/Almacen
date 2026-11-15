@@ -1,0 +1,42 @@
+/* BANDEJA DE NOTIFICACIONES */
+.toolbar { background: var(--bg-surface); padding: 12px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.tab-estado { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted); text-decoration: none; border: 1px solid transparent; transition: 0.2s; }
+.tab-estado:hover { background: var(--bg-body); color: var(--text-main); }
+.tab-estado.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary-light); }
+.filter-select { padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-body); font-size: 13px; font-weight: 500; outline: none; cursor: pointer; color: var(--text-main); }
+
+.btn-action { padding: 8px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; transition: 0.2s; font-family: inherit; }
+.btn-primario { background: var(--primary); color: white; }
+.btn-primario:hover { opacity: 0.9; }
+.btn-secundario { background: var(--bg-body); color: var(--primary); border: 1px solid var(--border-color); }
+.btn-secundario:hover { background: var(--primary-light); border-color: var(--primary); }
+
+.notif-list { background: var(--bg-surface); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+.notif-item { display: flex; gap: 16px; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid var(--border-color); border-left: 4px solid transparent; }
+.notif-item:last-child { border-bottom: none; }
+.notif-item.no-leida { background: #f8fbff; border-left-color: var(--primary); }
+.notif-item.leida { opacity: 0.7; }
+
+.notif-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.notif-icon.stock_bajo { background: var(--danger-light); color: var(--danger); }
+.notif-icon.limite_credito { background: var(--tertiary-light); color: var(--tertiary); }
+.notif-icon.vencimiento { background: var(--secondary-light); color: var(--secondary); }
+
+.notif-body { flex: 1; min-width: 0; }
+.notif-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; font-size: 12px; color: var(--text-muted); }
+.notif-tipo { font-weight: 700; color: var(--text-main); font-size: 13px; }
+.notif-mensaje { font-size: 14px; line-height: 1.5; color: var(--text-main); overflow-wrap: anywhere; }
+.notif-leida-info { font-size: 11px; color: var(--text-muted); margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+.notif-acciones { flex-shrink: 0; }
+
+.badge-nueva { background: var(--primary); color: white; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.notif-vacia { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+.notif-vacia .material-symbols-outlined { font-size: 48px; display: block; margin-bottom: 8px; color: var(--border-color); }
+
+.pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--bg-surface); border-top: 1px solid var(--border-color); }
+.page-info { font-size: 13px; color: var(--text-muted); }
+.page-buttons { display: flex; gap: 4px; }
+.page-btn { min-width: 32px; height: 32px; padding: 0 10px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; }
+.page-btn:hover { background: var(--bg-body); }
+.page-btn.active { background: var(--primary); color: white; }

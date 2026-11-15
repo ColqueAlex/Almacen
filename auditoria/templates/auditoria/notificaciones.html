@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Notificaciones{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/notificaciones.css' %}">
+{% endblock %}
+
+{% block content %}
+    <div>
+        <span class="subtitle-badge">Alertas del Sistema</span>
+        <h1 class="page-title">Bandeja de Notificaciones</h1>
+    </div>
+
+    <div class="toolbar">
+        <form method="get" class="filtros">
+            <a href="?estado=no_leidas&tipo={{ tipo_seleccionado|urlencode }}" class="tab-estado {% if estado_seleccionado == 'no_leidas' %}active{% endif %}">
+                No leídas ({{ total_no_leidas }})
+            </a>
+            <a href="?estado=leidas&tipo={{ tipo_seleccionado|urlencode }}" class="tab-estado {% if estado_seleccionado == 'leidas' %}active{% endif %}">Leídas</a>
+            <a href="?estado=todas&tipo={{ tipo_seleccionado|urlencode }}" class="tab-estado {% if estado_seleccionado == 'todas' %}active{% endif %}">Todas</a>
+
+            <input type="hidden" name="estado" value="{{ estado_seleccionado }}">
+            <select class="filter-select" name="tipo" onchange="this.form.submit()">
+                <option value="">Todos los tipos</option>
+                {% for valor, etiqueta in tipos %}
+                    <option value="{{ valor }}" {% if tipo_seleccionado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        {% if total_no_leidas %}
+            <form method="post" action="{% url 'marcar_todas_leidas' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="btn-action btn-primario">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">done_all</span> Marcar todas como leídas
+                </button>
+            </form>
+        {% endif %}
+    </div>
+
+    <div class="notif-list">
+        {% for notif in notificaciones %}
+            <div class="notif-item {% if notif.leida %}leida{% else %}no-leida{% endif %}">
+                <div class="notif-icon {{ notif.tipo }}">
+                    <span class="material-symbols-outlined">{% if notif.tipo == 'stock_bajo' %}inventory{% elif notif.tipo == 'limite_credito' %}credit_card_off{% elif notif.tipo == 'vencimiento' %}event_busy{% else %}notifications{% endif %}</span>
+                </div>
+                <div class="notif-body">
+                    <div class="notif-meta">
+                        <span class="notif-tipo">{{ notif.get_tipo_display }}</span>
+                        <span>•</span>
+                        <span>{{ notif.fecha|date:"d M Y • H:i" }} hs</span>
+                        {% if not notif.leida %}<span class="badge-nueva">Nueva</span>{% endif %}
+                    </div>
+                    <div class="notif-mensaje">{{ notif.mensaje }}</div>
+                    {% if notif.leida and notif.fecha_lectura %}
+                        <div class="notif-leida-info">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">done</span>
+                            Leída el {{ notif.fecha_lectura|date:"d/m/Y H:i" }}
+                        </div>
+                    {% endif %}
+                </div>
+                {% if not notif.leida %}
+                    <div class="notif-acciones">
+                        <form method="post" action="{% url 'marcar_notificacion_leida' notif.id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <button type="submit" class="btn-action btn-secundario" title="Marcar como leída">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">check</span> Marcar leída
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        {% empty %}
+            <div class="notif-vacia">
+                <span class="material-symbols-outlined">notifications_off</span>
+                {% if estado_seleccionado == 'no_leidas' %}
+                    No tenés notificaciones pendientes.
+                {% else %}
+                    No hay notificaciones para mostrar.
+                {% endif %}
+            </div>
+        {% endfor %}
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <div class="pagination">
+            <span class="page-info">Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            <div class="page-buttons">
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}&estado={{ estado_seleccionado|urlencode }}&tipo={{ tipo_seleccionado|urlencode }}" class="page-btn">Anterior</a>
+                {% endif %}
+                <span class="page-btn active">{{ page_obj.number }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}&estado={{ estado_seleccionado|urlencode }}&tipo={{ tipo_seleccionado|urlencode }}" class="page-btn">Siguiente</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -11,5 +11,9 @@ class CurrentUserMiddleware:
 
     def __call__(self, request):
         _thread_locals.user = request.user
-        response = self.get_response(request)
+        try:
+            response = self.get_response(request)
+        finally:
+            # Limpiar para que el usuario no "quede pegado" al hilo en el próximo request
+            _thread_locals.user = None
         return response

@@ -1,14 +1,16 @@
+from django.db import transaction
 from django.db.models.signals import post_save, pre_delete, pre_save
 from django.dispatch import receiver
 from django.forms.models import model_to_dict
 
 from usuarios.models import Usuario
 from productos.models import Productos, Proveedor
-from ventas.models import Ventas, Clientes
+from ventas.models import Ventas, Clientes, Pago
 from compras.models import Compras
 from caja.models import Caja
 from .models import Auditoria
 from .middleware import get_current_user
+from . import notificaciones
 
 _estado_anterior = {}
 
@@ -144,3 +146,37 @@ def registrar_eliminacion(sender, instance, **kwargs):
         desc = f'Eliminó el proveedor "{instance.nombre}"'
     
     registrar_auditoria('eliminacion', modelo_nombre, instance.pk, desc, datos_ant=data_vieja, datos_new={})
+
+
+# =============================================================================
+# REGLAS DE NOTIFICACIÓN
+# =============================================================================
+# La venta se crea ANTES que sus detalles y antes de actualizar el saldo del
+# cliente (todo dentro de transaction.atomic en ventas.views.registrar_venta).
+# Por eso las reglas se evalúan con transaction.on_commit: se ejecutan cuando
+# la transacción terminó y los detalles/saldo ya están guardados. Si la venta
+# falla y se hace rollback, no se genera ninguna notificación.
+
+@receiver(post_save, sender=Ventas)
+def notificar_por_venta(sender, instance, created, **kwargs):
+    venta_id = instance.pk
+
+    # Regla 1: stock bajo de los productos vendidos (solo en ventas nuevas)
+    if created:
+        def _verificar_stock():
+            productos = Productos.objects.filter(detalles_ventas__venta_id=venta_id).distinct()
+            notificaciones.verificar_stock_bajo(productos)
+        transaction.on_commit(_verificar_stock)
+
+    # Regla 2: límite de crédito si la venta es (o pasó a ser) fiada
+    if instance.estado_de_pago == 'fiado' and instance.id_clientes_id:
+        cliente = instance.id_clientes
+        transaction.on_commit(lambda: notificaciones.verificar_limite_credito(cliente))
+
+
+@receiver(post_save, sender=Pago)
+def notificar_por_pago(sender, instance, created, **kwargs):
+    # Regla 2: tras registrar un pago, verificar si la deuda sigue superando el límite
+    if created:
+        cliente = instance.cliente
+        transaction.on_commit(lambda: notificaciones.verificar_limite_credito(cliente))
