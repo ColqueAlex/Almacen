@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Analítica{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/analitica.css' %}">
+{% endblock %}
+
+{% block content %}
+    <div class="analitica-header">
+        <div>
+            <span class="subtitle-badge">Dashboard Ejecutivo</span>
+            <h1 class="page-title">Analítica de Ventas</h1>
+            <p class="analitica-descripcion">Indicadores visuales generados a partir de las ventas no anuladas, netas de devoluciones.</p>
+        </div>
+        <div class="analitica-actualizacion">
+            <span class="material-symbols-outlined" style="font-size: 18px;">update</span>
+            {% if ultima_actualizacion %}
+                Actualizado el {{ ultima_actualizacion|date:"d/m/Y H:i" }} hs
+            {% else %}
+                Sin gráficos generados
+            {% endif %}
+        </div>
+    </div>
+
+    {% if faltan_graficos %}
+        <div class="analitica-aviso">
+            <span class="material-symbols-outlined">info</span>
+            <div>
+                <strong>Faltan gráficos por generar.</strong>
+                Ejecutá <code>python analitica_el_refugio.py</code> desde la raíz del proyecto para crearlos o actualizarlos.
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="analitica-grid">
+        {% for g in graficos %}
+            <div class="grafico-card{% if g.destacado %} grafico-destacado{% endif %}">
+                <div class="grafico-card-header">
+                    <h3>{{ g.titulo }}</h3>
+                    <p>{{ g.descripcion }}</p>
+                </div>
+                <div class="grafico-card-body">
+                    {% if g.existe %}
+                        <a href="{% static 'analitica/'|add:g.archivo %}?v={{ g.version }}" target="_blank" title="Abrir en tamaño completo">
+                            <img src="{% static 'analitica/'|add:g.archivo %}?v={{ g.version }}" alt="Gráfico: {{ g.titulo }}" style="width: 100%; border-radius: 8px;" loading="lazy">
+                        </a>
+                    {% else %}
+                        <div class="grafico-vacio">
+                            <span class="material-symbols-outlined">image_not_supported</span>
+                            Gráfico no generado
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}

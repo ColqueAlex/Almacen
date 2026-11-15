@@ -4,7 +4,10 @@ from decimal import Decimal
 from django.test import TestCase
 from django.urls import reverse
 
+from django.utils import timezone
+
 from caja.models import Caja
+from compras.models import Compras, DetallesCompra
 from productos.models import LotesProducto, Productos
 from reportes import servicios
 from usuarios.models import Perfil, Usuario
@@ -96,7 +99,8 @@ class ReportesTests(TestCase):
         self.assertEqual([f['cliente'] for f in filas], ['Beto'])
 
     def test_stock_valorizado_ignora_lotes_vencidos(self):
-        filas, totales, limite = servicios.stock_valorizado()
+        filas, totales, limite, corte = servicios.stock_valorizado()
+        self.assertEqual(corte, date.today())
         self.assertEqual(limite, 10)
         yerba = next(f for f in filas if f['producto'] == 'Yerba')
         gaseosa = next(f for f in filas if f['producto'] == 'Gaseosa')
@@ -107,8 +111,48 @@ class ReportesTests(TestCase):
         self.assertTrue(gaseosa['stock_bajo'])
         self.assertEqual(totales['valor'], D('1420'))
 
-        filas, _, _ = servicios.stock_valorizado(solo_stock_bajo=True)
+        filas, _, _, _ = servicios.stock_valorizado(solo_stock_bajo=True)
         self.assertEqual([f['producto'] for f in filas], ['Gaseosa'])
+
+    def test_stock_valorizado_a_fecha_de_corte_pasada(self):
+        hoy = date.today()
+        ayer = hoy - timedelta(days=1)
+        # Compra de HOY (lote Y3): al corte de ayer todavía no existía
+        compra_hoy = Compras.objects.create(id_usuario=self.admin, total=D('400'))
+        DetallesCompra.objects.create(id_compra=compra_hoy, id_producto=self.yerba, lote='Y3', cantidad=5,
+                                      precio_unitario_compra=D('80'), subtotal=D('400'))
+        LotesProducto.objects.create(id_producto=self.yerba, lote='Y3', stock_actual=5, precio_costo=D('80'))
+        # Compra de hace 5 días (lote Y4) ANULADA hoy: al corte de ayer estaba vigente (+4)
+        compra_vieja = Compras.objects.create(id_usuario=self.admin, total=D('200'), estado='Anulado',
+                                              fecha_anulacion=timezone.now())
+        Compras.objects.filter(pk=compra_vieja.pk).update(fecha=hoy - timedelta(days=5))
+        DetallesCompra.objects.create(id_compra=compra_vieja, id_producto=self.yerba, lote='Y4', cantidad=4,
+                                      precio_unitario_compra=D('50'), subtotal=D('200'))
+        LotesProducto.objects.create(id_producto=self.yerba, lote='Y4', stock_actual=0, precio_costo=D('50'))
+
+        # Hoy: Y1 10 + Y2 10 + Y3 5 = 25
+        filas, _, _, _ = servicios.stock_valorizado(categoria='Almacen')
+        self.assertEqual(filas[0]['stock'], 25)
+
+        # Ayer: Y1 10+3 (venta de hoy) · Y2 10+2-1 (venta y devolución de hoy) · Y3 0 · Y4 4
+        filas, totales, _, corte = servicios.stock_valorizado(categoria='Almacen', fecha_corte=ayer)
+        self.assertEqual(corte, ayer)
+        self.assertEqual(filas[0]['stock'], 13 + 11 + 4)
+        self.assertEqual(filas[0]['valor'], D('13') * 60 + D('11') * 70 + D('4') * 50)
+
+        # El lote vencido ayer todavía estaba vigente al corte de ayer
+        filas, _, _, _ = servicios.stock_valorizado(categoria='Bebidas', fecha_corte=ayer)
+        self.assertEqual(filas[0]['stock'], 4 + 100)
+
+        # Filtro de ingreso: solo lotes comprados hoy (Y3)
+        filas, _, _, _ = servicios.stock_valorizado(categoria='Almacen', ingreso_desde=hoy)
+        self.assertEqual(filas[0]['stock'], 5)
+
+    def test_fecha_de_corte_futura_usa_hoy(self):
+        self.client.force_login(self.admin)
+        manana = (date.today() + timedelta(days=1)).isoformat()
+        respuesta = self.client.get(reverse('reporte_stock_valorizado'), {'hasta': manana})
+        self.assertEqual(respuesta.context['fecha_corte'], date.today())
 
     # ---- Vistas ----------------------------------------------------------
     def test_vendedor_no_accede_a_reportes_de_admin(self):

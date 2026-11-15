@@ -184,9 +184,17 @@ def reporte_stock_valorizado(request):
     if categoria not in categorias:
         categoria = ''
     solo_stock_bajo = request.GET.get('stock_bajo') == '1'
+    # desde = lotes ingresados (comprados) desde; hasta = fecha de corte del stock
+    ingreso_desde, fecha_corte = _leer_rango_fechas(request)
+    hoy = timezone.localdate()
+    if fecha_corte and fecha_corte > hoy:
+        messages.error(request, 'La fecha de corte no puede ser futura; se usó la fecha de hoy.')
+        fecha_corte = hoy
 
-    filas, totales, limite = servicios.stock_valorizado(categoria, solo_stock_bajo)
+    filas, totales, limite, corte = servicios.stock_valorizado(categoria, solo_stock_bajo, fecha_corte, ingreso_desde)
     filtros_texto = (
+        f'Fecha de corte: {corte:%d/%m/%Y}; '
+        f'Lotes ingresados: {_texto_rango(ingreso_desde, corte) if ingreso_desde else "todos"}; '
         f'Categoría: {categoria or "Todas"}; '
         f'Solo stock bajo: {"Sí (< " + str(limite) + " u.)" if solo_stock_bajo else "No"}'
     )
@@ -194,7 +202,7 @@ def reporte_stock_valorizado(request):
     if _quiere_pdf(request):
         return generar_reporte_pdf(
             titulo='Reporte de Stock Valorizado al Corte',
-            subtitulo=f'Corte al {timezone.localdate():%d/%m/%Y} — Lotes activos y no vencidos, valuados a precio de costo',
+            subtitulo=f'Corte al {corte:%d/%m/%Y} — Lotes activos y no vencidos a esa fecha, valuados a precio de costo',
             columnas=['Producto', 'Categoría', 'Stock', 'Costo promedio', 'Valor total', 'Estado'],
             filas=[
                 [_nombre_producto(f), f['categoria'], str(f['stock']),
@@ -205,7 +213,7 @@ def reporte_stock_valorizado(request):
                           _moneda(totales['valor']), f"{totales['productos_stock_bajo']} bajo(s)"],
             filtros_texto=filtros_texto,
             usuario=request.user.username,
-            nombre_archivo=f'Stock_Valorizado_{timezone.localdate():%Y%m%d}.pdf',
+            nombre_archivo=f'Stock_Valorizado_{corte:%Y%m%d}.pdf',
             anchos=[180, 90, 55, 85, 90, 52],
             alinear_derecha=(2, 3, 4),
         )
@@ -214,6 +222,6 @@ def reporte_stock_valorizado(request):
     contexto.update({
         'categorias': categorias, 'categoria_seleccionada': categoria,
         'solo_stock_bajo': solo_stock_bajo, 'limite_stock': limite,
-        'fecha_corte': timezone.localdate(),
+        'fecha_corte': corte, 'ingreso_desde': ingreso_desde, 'hoy': hoy,
     })
     return render(request, 'reportes/stock_valorizado.html', contexto)

@@ -1,3 +1,7 @@
+import os
+from datetime import datetime
+
+from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -109,3 +113,45 @@ def marcar_todas_leidas(request):
     ).update(leida=True, fecha_lectura=timezone.now())
     messages.success(request, f'Se marcaron {cantidad} notificación(es) como leídas.')
     return _volver_a_bandeja(request)
+
+
+# --- Dashboard Ejecutivo de Analítica -------------------------------------
+# Las imágenes las genera el script independiente analitica_el_refugio.py en
+# static/analitica/. La vista solo verifica que existan y las muestra.
+GRAFICOS_ANALITICA = [
+    ('grafico_dashboard.png', 'Panel integrado de KPIs', 'Facturación, ticket promedio, composición del cobro, top de productos y días más fuertes en una sola vista.'),
+    ('grafico_ventas_categoria.png', 'Ventas mensuales por categoría', 'Unidades vendidas por mes, agrupadas por categoría de producto.'),
+    ('grafico_metodos_pago.png', 'Métodos de pago', 'Participación de Efectivo y Transferencia en el total cobrado.'),
+    ('grafico_evolucion.png', 'Evolución de la facturación', 'Facturación diaria de los últimos 30 días con línea de tendencia.'),
+    ('grafico_heatmap.png', 'Mapa de calor de ventas', 'Días de la semana y horas con mayor cantidad de ventas.'),
+]
+
+
+@login_required
+@requiere_perfil('Administrador')
+def panel_analitica(request):
+    carpeta = os.path.join(settings.BASE_DIR, 'static', 'analitica')
+    graficos = []
+    for archivo, titulo, descripcion in GRAFICOS_ANALITICA:
+        ruta = os.path.join(carpeta, archivo)
+        existe = os.path.isfile(ruta)
+        modificado = os.path.getmtime(ruta) if existe else None
+        graficos.append({
+            'archivo': archivo,
+            'titulo': titulo,
+            'descripcion': descripcion,
+            'existe': existe,
+            # ?v=<timestamp> evita que el navegador muestre una versión cacheada vieja
+            'version': int(modificado) if modificado else 0,
+            'destacado': archivo == 'grafico_dashboard.png',   # ocupa el ancho completo
+        })
+
+    fechas = [os.path.getmtime(os.path.join(carpeta, g['archivo'])) for g in graficos if g['existe']]
+    ultima_actualizacion = (
+        timezone.make_aware(datetime.fromtimestamp(max(fechas))) if fechas else None
+    )
+    return render(request, 'auditoria/analitica.html', {
+        'graficos': graficos,
+        'ultima_actualizacion': ultima_actualizacion,
+        'faltan_graficos': not all(g['existe'] for g in graficos),
+    })

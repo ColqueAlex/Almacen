@@ -1,0 +1,5 @@
+# Dependencias del script analitica_el_refugio.py (versiones con las que se probó)
+pandas==3.1.1
+numpy==2.5.4
+matplotlib==3.11.2
+mysql-connector-python==26.10.0

@@ -8,6 +8,7 @@ exactamente los mismos números.
 Las devoluciones (DevolucionVenta) se descuentan: Ventas.total no se modifica
 al devolver, así que sin restarlas los reportes quedarían inflados.
 """
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum, Value
@@ -15,7 +16,8 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from auditoria.models import Configuracion
-from productos.models import Productos
+from compras.models import DetallesCompra
+from productos.models import LotesProducto, Productos
 from ventas.models import Clientes, DetallesVentas, DevolucionVenta, Ventas
 
 CERO = Decimal('0.00')
@@ -155,41 +157,120 @@ def ranking_clientes(desde=None, hasta=None, estado_pago=''):
 # ---------------------------------------------------------------------------
 # Reporte 3: Stock valorizado al corte
 # ---------------------------------------------------------------------------
-def stock_valorizado(categoria='', solo_stock_bajo=False):
+def _clave_lote(producto_id, codigo_lote, vencimiento):
+    """Identifica un lote igual que compras.views: producto + código de lote + vencimiento."""
+    return (producto_id, (codigo_lote or '').strip().casefold(), vencimiento)
+
+
+def _inicio_del_dia_siguiente(fecha):
+    return timezone.make_aware(datetime.combine(fecha + timedelta(days=1), time.min))
+
+
+def stock_valorizado(categoria='', solo_stock_bajo=False, fecha_corte=None, ingreso_desde=None):
+    """
+    Stock valorizado a una fecha de corte (por defecto, hoy).
+
+    El stock histórico se reconstruye HACIA ATRÁS desde el stock actual
+    (LotesProducto.stock_actual), deshaciendo los movimientos posteriores al corte:
+      - compra confirmada posterior al corte .................. resta
+      - venta (no anulada) posterior al corte ................. suma
+      - devolución posterior al corte ......................... resta
+      - compra anterior al corte pero anulada después de él ... suma
+    Así el resultado es correcto aunque existan lotes cargados sin compra.
+    Limitación: las ventas anuladas se ignoran (el sistema solo permite anular
+    dentro de las 24 h y no guarda la fecha de anulación).
+
+    `ingreso_desde` filtra los lotes cuya primera compra está en
+    [ingreso_desde, fecha_corte] (antigüedad de la mercadería).
+    """
     hoy = timezone.localdate()
+    corte = min(fecha_corte or hoy, hoy)
     limite = limite_stock_critico()
-    # Mismo criterio que Productos.lotes_vigentes(): activos y no vencidos
-    lote_vigente = (
-        Q(lotes__activo=True, lotes__stock_actual__gt=0)
-        & (Q(lotes__fecha_vencimiento__isnull=True) | Q(lotes__fecha_vencimiento__gte=hoy))
-    )
 
     productos = Productos.objects.filter(estado='activo')
     if categoria:
         productos = productos.filter(categoria=categoria)
+    productos = list(productos.order_by('categoria', 'nombre'))
+    ids_productos = [p.pk for p in productos]
 
-    productos = productos.annotate(
-        stock_total=Coalesce(Sum('lotes__stock_actual', filter=lote_vigente), 0),
-        valor_total=Coalesce(
-            Sum(_multiplicar('lotes__stock_actual', F('lotes__precio_costo')), filter=lote_vigente),
-            Value(CERO), output_field=MONEDA,
-        ),
-    ).order_by('categoria', 'nombre')
+    lotes = list(LotesProducto.objects.filter(id_producto_id__in=ids_productos, activo=True))
+    stock = {lote.pk: lote.stock_actual for lote in lotes}
+    lote_por_clave = {_clave_lote(l.id_producto_id, l.lote, l.fecha_vencimiento): l.pk for l in lotes}
 
-    if solo_stock_bajo:
-        productos = productos.filter(stock_total__lt=limite)
+    # --- Compras: deshacer las posteriores al corte y registrar fecha de ingreso ---
+    fecha_ingreso = {}
+    compras = DetallesCompra.objects.filter(id_producto_id__in=ids_productos).values(
+        'id_producto_id', 'lote', 'fecha_vencimiento', 'cantidad',
+        'id_compra__fecha', 'id_compra__estado', 'id_compra__fecha_anulacion',
+    )
+    for d in compras:
+        pk = lote_por_clave.get(_clave_lote(d['id_producto_id'], d['lote'], d['fecha_vencimiento']))
+        if pk is None:
+            continue
+        fecha_compra = d['id_compra__fecha']
+        anulada = (d['id_compra__estado'] or '').casefold() == 'anulado'
+        if not anulada:
+            fecha_ingreso[pk] = min(fecha_ingreso.get(pk, fecha_compra), fecha_compra)
+            if fecha_compra > corte:
+                stock[pk] -= d['cantidad']
+        elif fecha_compra <= corte and d['id_compra__fecha_anulacion'] \
+                and timezone.localdate(d['id_compra__fecha_anulacion']) > corte:
+            stock[pk] += d['cantidad']   # al corte esa compra todavía estaba vigente
+
+    if corte < hoy:
+        # --- Ventas posteriores al corte: esas unidades todavía estaban en stock ---
+        ventas = (
+            DetallesVentas.objects.filter(lote_id__in=stock.keys(), venta__fecha__gt=corte)
+            .exclude(venta__estado_de_pago='anulado')
+            .order_by().values('lote_id').annotate(unidades=Sum('cantidad'))
+        )
+        for v in ventas:
+            stock[v['lote_id']] += v['unidades']
+
+        # --- Devoluciones posteriores al corte: esas unidades todavía no habían vuelto ---
+        devoluciones = DevolucionVenta.objects.filter(
+            fecha_hora__gte=_inicio_del_dia_siguiente(corte), detalle__producto_id__in=ids_productos,
+        ).values('cantidad', 'detalle_id', 'detalle__lote_id', 'detalle__producto_id')
+        for d in devoluciones:
+            pk = d['detalle__lote_id'] or lote_por_clave.get(
+                _clave_lote(d['detalle__producto_id'], f"DEVOLUCION-{d['detalle_id']}", None)
+            )
+            if pk in stock:
+                stock[pk] -= d['cantidad']
+
+    # --- Agregar por producto (solo lotes no vencidos a la fecha de corte) ---
+    por_producto = {pk: {'stock': 0, 'valor': CERO} for pk in ids_productos}
+    for lote in lotes:
+        unidades = max(stock[lote.pk], 0)
+        if not unidades:
+            continue
+        if lote.fecha_vencimiento and lote.fecha_vencimiento < corte:
+            continue
+        if ingreso_desde:
+            ingreso = fecha_ingreso.get(lote.pk)
+            if ingreso is None or not (ingreso_desde <= ingreso <= corte):
+                continue
+        acumulado = por_producto[lote.id_producto_id]
+        acumulado['stock'] += unidades
+        acumulado['valor'] += unidades * lote.precio_costo
 
     filas = []
     for p in productos:
+        unidades = por_producto[p.pk]['stock']
+        valor = por_producto[p.pk]['valor']
+        if solo_stock_bajo and unidades >= limite:
+            continue
+        if ingreso_desde and not unidades:
+            continue  # con filtro de ingreso, solo productos con lotes en ese rango
         filas.append({
             'producto': p.nombre,
             'marca': p.marca,
             'categoria': p.categoria,
-            'stock': p.stock_total,
+            'stock': unidades,
             # Promedio ponderado por unidades de cada lote
-            'costo_promedio': (p.valor_total / p.stock_total) if p.stock_total else None,
-            'valor': p.valor_total,
-            'stock_bajo': p.stock_total < limite,
+            'costo_promedio': (valor / unidades) if unidades else None,
+            'valor': valor,
+            'stock_bajo': unidades < limite,
         })
 
     totales = {
@@ -198,4 +279,4 @@ def stock_valorizado(categoria='', solo_stock_bajo=False):
         'productos_stock_bajo': sum(1 for f in filas if f['stock_bajo']),
     }
     totales['costo_promedio'] = (totales['valor'] / totales['stock']) if totales['stock'] else None
-    return filas, totales, limite
+    return filas, totales, limite, corte

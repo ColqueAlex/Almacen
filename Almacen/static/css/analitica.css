@@ -1,0 +1,27 @@
+/* DASHBOARD EJECUTIVO DE ANALÍTICA */
+.analitica-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.analitica-descripcion { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+.analitica-actualizacion { display: flex; align-items: center; gap: 6px; background: var(--bg-surface); padding: 8px 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-size: 13px; font-weight: 600; color: var(--text-muted); }
+
+.analitica-aviso { display: flex; gap: 12px; align-items: flex-start; background: var(--tertiary-light); color: #92400e; border: 1px solid #fde68a; padding: 14px 16px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+.analitica-aviso code { background: rgba(255,255,255,0.7); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+
+/* Cuadrícula 2x2 en pantallas grandes, 1 columna en móviles */
+.analitica-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 1100px) {
+    .analitica-grid { grid-template-columns: 1fr; }
+}
+
+.grafico-card { background: var(--bg-surface); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 12px rgba(15,23,42,0.04); overflow: hidden; display: flex; flex-direction: column; transition: box-shadow 0.2s; }
+.grafico-destacado { grid-column: 1 / -1; }
+.grafico-destacado .grafico-card-body img { max-width: 1400px; margin: 0 auto; }
+.grafico-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,0.08); }
+.grafico-card-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border-color); }
+.grafico-card-header h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 16px; font-weight: 700; }
+.grafico-card-header p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.grafico-card-body { padding: 16px; flex: 1; display: flex; align-items: center; justify-content: center; }
+.grafico-card-body a { display: block; width: 100%; cursor: zoom-in; }
+.grafico-card-body img { display: block; max-width: 100%; height: auto; }
+
+.grafico-vacio { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 60px 20px; color: var(--text-muted); font-size: 14px; }
+.grafico-vacio .material-symbols-outlined { font-size: 44px; color: var(--border-color); }

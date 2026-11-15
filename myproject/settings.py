@@ -135,6 +135,7 @@ STATIC_URL = 'static/'
 
 STATICFILES_DIRS = [
     BASE_DIR / "Almacen" / "static",
+    BASE_DIR / "static",  # gráficos generados por analitica_el_refugio.py (static/analitica/)
 ]
 
 # Default primary key field type

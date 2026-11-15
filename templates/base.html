@@ -52,6 +52,7 @@
             <a href="{% url 'listar_usuarios' %}" class="nav-item {% if url_name in 'listar_usuarios,crear_usuario,editar_usuario' %}active{% endif %}">
                 <span class="material-symbols-outlined">manage_accounts</span> Usuarios
             </a>
+            <a href="{% url 'panel_analitica' %}" class="nav-item {% if url_name == 'panel_analitica' %}active{% endif %}"><span class="material-symbols-outlined">monitoring</span> Analítica</a>
             {% endif %}
 
             <a href="{% url 'gestion_caja' %}" class="nav-item {% if url_name == 'gestion_caja' %}active{% endif %}">

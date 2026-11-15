@@ -12,7 +12,7 @@
         <div>
             <span class="subtitle-badge">Reportes · Administración</span>
             <h1 class="page-title">Stock Valorizado al Corte</h1>
-            <p class="reporte-descripcion">Corte al {{ fecha_corte|date:"d/m/Y" }}. Solo lotes activos y no vencidos, valuados a su precio de costo (promedio ponderado por unidades).</p>
+            <p class="reporte-descripcion">Corte al {{ fecha_corte|date:"d/m/Y" }}. Cruza Compras (ingresos de lotes) y Ventas/Devoluciones (egresos) para reconstruir el stock a esa fecha. Solo lotes no vencidos al corte, valuados a su precio de costo (promedio ponderado por unidades).</p>
         </div>
         <a href="?{{ querystring }}&exportar=pdf" target="_blank" class="btn-action btn-pdf">
             <span class="material-symbols-outlined" style="font-size: 18px;">picture_as_pdf</span> Exportar PDF
@@ -22,6 +22,14 @@
     <form method="get" class="filtros-card">
         <div class="filtros-titulo"><span class="material-symbols-outlined" style="font-size: 16px;">filter_alt</span> Filtros</div>
         <div class="filtros-grid">
+            <div class="filtro-campo">
+                <label for="desde">Lotes ingresados desde</label>
+                <input type="date" id="desde" name="desde" value="{{ ingreso_desde|date:'Y-m-d' }}" max="{{ hoy|date:'Y-m-d' }}">
+            </div>
+            <div class="filtro-campo">
+                <label for="hasta">Fecha de corte</label>
+                <input type="date" id="hasta" name="hasta" value="{{ fecha_corte|date:'Y-m-d' }}" max="{{ hoy|date:'Y-m-d' }}">
+            </div>
             <div class="filtro-campo">
                 <label for="categoria">Categoría</label>
                 <select id="categoria" name="categoria">

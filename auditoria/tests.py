@@ -59,6 +59,7 @@ class AuditoriaFilterTests(TestCase):
 
 
 import os
+from pathlib import Path
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -196,3 +197,51 @@ class NotificacionesTests(TestCase):
         self.client.force_login(self.admin)
         self.client.post(reverse('marcar_todas_leidas'))
         self.assertFalse(Notificacion.objects.filter(leida=False).exists())
+
+
+import shutil
+import tempfile
+
+from django.contrib.staticfiles import finders
+
+
+class PanelAnaliticaTests(TestCase):
+    def setUp(self):
+        perfil_admin, _ = Perfil.objects.get_or_create(nombre='Administrador')
+        perfil_vendedor, _ = Perfil.objects.get_or_create(nombre='Vendedor')
+        self.admin = Usuario.objects.create_user(dni='33333333', apellido='A', nombre='A', correo='pa@example.com',
+                                                 password='x', username='panadmin', id_perfil=perfil_admin)
+        self.vendedor = Usuario.objects.create_user(dni='44444444', apellido='V', nombre='V', correo='pv@example.com',
+                                                    password='x', username='panvende', id_perfil=perfil_vendedor)
+        for u in (self.admin, self.vendedor):
+            u.debe_cambiar_clave = False
+            u.save()
+        # BASE_DIR temporal para no depender de las imágenes reales
+        self.base_tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.base_tmp, ignore_errors=True)
+
+    def test_solo_administrador(self):
+        self.client.force_login(self.vendedor)
+        self.assertRedirects(self.client.get(reverse('panel_analitica')), reverse('inicio'), fetch_redirect_response=False)
+
+    def test_avisa_si_faltan_graficos_y_muestra_los_existentes(self):
+        self.client.force_login(self.admin)
+        with override_settings(BASE_DIR=Path(self.base_tmp)):
+            respuesta = self.client.get(reverse('panel_analitica'))
+            self.assertTrue(respuesta.context['faltan_graficos'])
+            self.assertContains(respuesta, 'python analitica_el_refugio.py')
+
+            carpeta = Path(self.base_tmp) / 'static' / 'analitica'
+            carpeta.mkdir(parents=True)
+            for nombre in ('grafico_dashboard.png', 'grafico_ventas_categoria.png', 'grafico_metodos_pago.png',
+                           'grafico_evolucion.png', 'grafico_heatmap.png'):
+                (carpeta / nombre).write_bytes(b'png')
+            respuesta = self.client.get(reverse('panel_analitica'))
+        self.assertFalse(respuesta.context['faltan_graficos'])
+        self.assertContains(respuesta, '/static/analitica/grafico_heatmap.png?v=')
+        self.assertContains(respuesta, 'grafico-destacado')
+        self.assertIsNotNone(respuesta.context['ultima_actualizacion'])
+
+    def test_static_analitica_esta_en_staticfiles_dirs(self):
+        # .gitkeep existe en el repo: si Django lo encuentra, la carpeta se sirve como estática
+        self.assertIsNotNone(finders.find('analitica/.gitkeep'))

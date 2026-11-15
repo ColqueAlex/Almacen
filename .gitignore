@@ -9,3 +9,5 @@ venv/
 
 staticfiles/
 media/
+# Salida de tareas programadas (scripts/alertas_vencimiento.bat)
+logs/
