@@ -29,14 +29,25 @@
             <a href="{% url 'inicio' %}" class="nav-item {% if url_name == 'inicio' %}active{% endif %}">
                 <span class="material-symbols-outlined">home</span> Inicio
             </a>
-            <a href="{% url 'registrar_venta' %}" class="nav-item {% if url_name in 'registrar_venta,ventas' %}active{% endif %}">
+
+            <!-- OPERACIONES DIARIAS (todos los perfiles) -->
+            <div class="nav-section-title">Operaciones diarias</div>
+            <a href="{% url 'registrar_venta' %}" class="nav-item {% if url_name == 'registrar_venta' %}active{% endif %}">
                 <span class="material-symbols-outlined">point_of_sale</span> Ventas
             </a>
             <a href="{% url 'ventas' %}" class="nav-item {% if url_name == 'ventas' %}active{% endif %}">
                 <span class="material-symbols-outlined">receipt_long</span> Historial de Ventas
             </a>
-            
+            <a href="{% url 'gestion_caja' %}" class="nav-item {% if url_name == 'gestion_caja' %}active{% endif %}">
+                <span class="material-symbols-outlined">payments</span> Caja & Arqueo
+            </a>
+            <a href="{% url 'cuentas_clientes' %}" class="nav-item {% if url_name == 'cuentas_clientes' %}active{% endif %}">
+                <span class="material-symbols-outlined">group</span> Clientes (Cuentas)
+            </a>
+
             {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
+            <!-- GESTIÓN DE STOCK (solo Administrador) -->
+            <div class="nav-section-title">Gestión de stock</div>
             <a href="{% url 'consultar' %}" class="nav-item {% if url_name == 'consultar' %}active{% endif %}">
                 <span class="material-symbols-outlined">inventory_2</span> Productos & Stock
             </a>
@@ -46,35 +57,35 @@
             <a href="{% url 'listar_compras' %}" class="nav-item {% if url_name in 'registrar_compra,listar_compras' %}active{% endif %}">
                 <span class="material-symbols-outlined">shopping_bag</span> Compras
             </a>
-            <a href="{% url 'listar_auditoria' %}" class="nav-item {% if url_name == 'auditoria' %}active{% endif %}">
-                <span class="material-symbols-outlined">history</span> Auditoría
-            </a>
-            <a href="{% url 'listar_usuarios' %}" class="nav-item {% if url_name in 'listar_usuarios,crear_usuario,editar_usuario' %}active{% endif %}">
-                <span class="material-symbols-outlined">manage_accounts</span> Usuarios
-            </a>
-            <a href="{% url 'panel_analitica' %}" class="nav-item {% if url_name == 'panel_analitica' %}active{% endif %}"><span class="material-symbols-outlined">monitoring</span> Analítica</a>
             {% endif %}
 
-            <a href="{% url 'gestion_caja' %}" class="nav-item {% if url_name == 'gestion_caja' %}active{% endif %}">
-                <span class="material-symbols-outlined">payments</span> Caja & Arqueo
-            </a>
-            <a href="{% url 'cuentas_clientes' %}" class="nav-item {% if url_name == 'cuentas_clientes' %}active{% endif %}">
-                <span class="material-symbols-outlined">group</span> Clientes (Cuentas)
-            </a>
-
-            <!-- REPORTES CONSOLIDADOS -->
-            <div class="nav-section">Reportes</div>
+            <!-- ANÁLISIS Y CONTROL (Ranking: Administrador y Vendedor; el resto solo Administrador) -->
+            <div class="nav-section-title">Análisis y control</div>
             {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
             <a href="{% url 'reporte_rentabilidad' %}" class="nav-item {% if url_name == 'reporte_rentabilidad' %}active{% endif %}">
                 <span class="material-symbols-outlined">trending_up</span> Rentabilidad
-            </a>
-            <a href="{% url 'reporte_stock_valorizado' %}" class="nav-item {% if url_name == 'reporte_stock_valorizado' %}active{% endif %}">
-                <span class="material-symbols-outlined">warehouse</span> Stock Valorizado
             </a>
             {% endif %}
             <a href="{% url 'reporte_ranking_clientes' %}" class="nav-item {% if url_name == 'reporte_ranking_clientes' %}active{% endif %}">
                 <span class="material-symbols-outlined">leaderboard</span> Ranking de Clientes
             </a>
+            {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
+            <a href="{% url 'reporte_stock_valorizado' %}" class="nav-item {% if url_name == 'reporte_stock_valorizado' %}active{% endif %}">
+                <span class="material-symbols-outlined">warehouse</span> Stock Valorizado
+            </a>
+            <a href="{% url 'panel_analitica' %}" class="nav-item {% if url_name == 'panel_analitica' %}active{% endif %}">
+                <span class="material-symbols-outlined">monitoring</span> Analítica
+            </a>
+            <a href="{% url 'listar_auditoria' %}" class="nav-item {% if url_name == 'listar_auditoria' %}active{% endif %}">
+                <span class="material-symbols-outlined">history</span> Auditoría
+            </a>
+
+            <!-- SISTEMA (solo Administrador) -->
+            <div class="nav-section-title">Sistema</div>
+            <a href="{% url 'listar_usuarios' %}" class="nav-item {% if url_name in 'listar_usuarios,crear_usuario,editar_usuario' %}active{% endif %}">
+                <span class="material-symbols-outlined">manage_accounts</span> Usuarios
+            </a>
+            {% endif %}
         </nav>
         {% endwith %}
     </aside>

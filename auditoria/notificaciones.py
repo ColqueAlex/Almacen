@@ -115,7 +115,7 @@ def verificar_limite_credito(cliente):
 # ---------------------------------------------------------------------------
 def verificar_vencimientos(dias=None):
     """Genera notificaciones para lotes con stock que vencen dentro de `dias`. Devuelve cuántas creó."""
-    from productos.models import LotesProducto  # import local: solo se necesita aquí
+    from productos.models import LotesProducto 
 
     if dias is None:
         dias = Configuracion.obtener(*DIAS_ALERTA_VENCIMIENTO, tipo=int)
