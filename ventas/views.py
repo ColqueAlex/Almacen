@@ -18,7 +18,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from .models import Ventas, DetallesVentas, DevolucionVenta, Clientes, Pago
 from productos.models import Productos, LotesProducto
 from caja.models import Caja
-from usuarios.utils import requiere_perfil, _solo_letras_y_espacios, _es_telefono_numerico
+from usuarios.utils import requiere_perfil, _solo_letras_y_espacios, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO
 
 def _venta_dentro_del_plazo_de_devolucion(venta, ahora=None):
     ahora = ahora or timezone.now()
@@ -500,12 +500,16 @@ def crear_cliente(request):
             messages.error(request, 'El apellido del cliente solo puede contener letras y espacios.')
             return redirect('cuentas_clientes')
         if telefono and not _es_telefono_numerico(telefono):
-            messages.error(request, 'El teléfono solo puede contener números.')
+            messages.error(request, MENSAJE_TELEFONO_INVALIDO)
+            return redirect('cuentas_clientes')
+        if telefono and Clientes.objects.filter(telefono=telefono).exists():
+            messages.error(request, f'Ya existe un cliente registrado con el teléfono {telefono}.')
             return redirect('cuentas_clientes')
         cliente = Clientes.objects.create(
             nombre=nombre,
             apellido=apellido,
-            telefono=telefono
+            # Sin teléfono se guarda NULL: la columna es única y varios '' chocarían.
+            telefono=telefono or None
         )
         messages.success(request, f'Cliente "{cliente.nombre} {cliente.apellido or ""}" registrado con éxito.')
     

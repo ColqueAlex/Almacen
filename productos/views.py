@@ -6,7 +6,7 @@ from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
 from .models import Productos, Proveedor
-from usuarios.utils import requiere_perfil, _contiene_letras, _es_telefono_numerico
+from usuarios.utils import requiere_perfil, _contiene_letras, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO
 
 @login_required
 @requiere_perfil('Administrador')
@@ -221,8 +221,8 @@ def crear_proveedor(request):
         error = None
         if not _contiene_letras(nombre):
             error = 'El nombre del proveedor debe contener letras y no puede ser solo números.'
-        elif not _es_telefono_numerico(telefono):
-            error = 'El número de teléfono solo puede contener números.'
+        elif not telefono or not _es_telefono_numerico(telefono):
+            error = MENSAJE_TELEFONO_INVALIDO
         elif not _contiene_letras(tipo_productos):
             error = 'El rubro debe contener letras y no puede ser solo números.'
 
@@ -237,7 +237,12 @@ def crear_proveedor(request):
             })
 
         if Proveedor.objects.filter(nombre__iexact=nombre).exists():
-            messages.error(request, f'Ya existe un proveedor registrado con el nombre "{nombre}".')
+            error = f'Ya existe un proveedor registrado con el nombre "{nombre}".'
+        elif Proveedor.objects.filter(numero_telefono=telefono).exists():
+            error = f'Ya existe un proveedor registrado con el teléfono {telefono}.'
+
+        if error:
+            messages.error(request, error)
             return render(request, 'productos/proveedor_form.html', {
                 'es_edicion': False,
                 'datos_enviados': True,
@@ -269,13 +274,25 @@ def editar_proveedor(request, id):
         error = None
         if not _contiene_letras(nombre):
             error = 'El nombre del proveedor debe contener letras y no puede ser solo números.'
-        elif not _es_telefono_numerico(telefono):
-            error = 'El número de teléfono solo puede contener números.'
+        elif not telefono or not _es_telefono_numerico(telefono):
+            error = MENSAJE_TELEFONO_INVALIDO
         elif not _contiene_letras(tipo_productos):
             error = 'El rubro debe contener letras y no puede ser solo números.'
 
         if error:
             messages.error(request, error)
+            return render(request, 'productos/proveedor_form.html', {
+                'proveedor': proveedor,
+                'es_edicion': True,
+                'datos_enviados': True,
+                'nombre': nombre,
+                'telefono': telefono,
+                'tipo_productos': tipo_productos,
+            })
+
+        # Se excluye al propio proveedor para que pueda guardar sin cambiar su teléfono.
+        if Proveedor.objects.filter(numero_telefono=telefono).exclude(pk=proveedor.pk).exists():
+            messages.error(request, f'Ya existe otro proveedor registrado con el teléfono {telefono}.')
             return render(request, 'productos/proveedor_form.html', {
                 'proveedor': proveedor,
                 'es_edicion': True,

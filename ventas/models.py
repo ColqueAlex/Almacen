@@ -4,12 +4,13 @@ from decimal import Decimal
 from productos.models import Productos, LotesProducto
 from usuarios.models import Usuario
 from caja.models import Caja
+from usuarios.utils import validar_telefono
 
 class Clientes(models.Model):
     id_clientes = models.AutoField(primary_key=True, db_column='ID_Clientes')
     nombre = models.CharField(max_length=30)
     apellido = models.CharField(max_length=30, blank=True, null=True)
-    telefono = models.CharField(max_length=20, blank=True, null=True)
+    telefono = models.CharField(max_length=20, blank=True, null=True, unique=True, validators=[validar_telefono])
     saldo = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     def __str__(self): return f"{self.nombre} {self.apellido or ''} - Deuda: ${self.saldo}"
 

@@ -39,7 +39,7 @@
             </div>
             <div class="kpi-card">
                 <div class="kpi-header"><div><div class="kpi-title" style="color: var(--primary);">Transferencias</div></div><div class="kpi-icon" style="color: var(--primary);"><span class="material-symbols-outlined" style="font-size: 18px;">qr_code_scanner</span></div></div>
-                <div><div class="kpi-value" style="color: var(--primary);">${{ ventas_transferencia|floatformat:2 }}</div></div>
+                <div><div class="kpi-value" style="color: var(--primary);">${{ total_transferencias|floatformat:2 }}</div><div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Ventas ${{ ventas_transferencia|floatformat:2 }} · Cobros ${{ cobros_transferencia|floatformat:2 }}</div></div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-header"><div><div class="kpi-title" style="color: var(--tertiary);">Cobro Fiados</div></div><div class="kpi-icon" style="color: var(--tertiary); background: var(--tertiary-light);"><span class="material-symbols-outlined" style="font-size: 18px;">receipt_long</span></div></div>
@@ -59,7 +59,7 @@
                     <div style="background:var(--danger-light); color:var(--danger); width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center;"><span class="material-symbols-outlined">calculate</span></div>
                     <div><h2 style="font-size: 16px; font-weight: 700;">Arqueo y Cierre</h2></div>
                 </div>
-                <label>Efectivo Físico Real ($)</label>
+                <label>Monto Real Contado ($) <span style="font-weight: 400; color: var(--text-muted);">(efectivo en caja + transferencias recibidas)</span></label>
                 <input type="number" min="0" step="0.01" name="monto_real" id="inputEfectivoReal" class="form-control" placeholder="0.00" required value="{{ monto_esperado|floatformat:2 }}">
             </div>
             <div class="input-group">

@@ -1,6 +1,16 @@
 from functools import wraps
 from django.shortcuts import redirect
 from django.contrib import messages
+from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
+
+# Teléfono: solo dígitos (con un "+" inicial opcional), entre 8 y 15 dígitos.
+TELEFONO_REGEX = r'^\+?\d{8,15}$'
+MENSAJE_TELEFONO_INVALIDO = (
+    'El teléfono solo puede contener números (opcionalmente con "+" al inicio) '
+    'y debe tener entre 8 y 15 dígitos.'
+)
+validar_telefono = RegexValidator(regex=TELEFONO_REGEX, message=MENSAJE_TELEFONO_INVALIDO)
 
 def requiere_perfil(*perfiles_permitidos):
     def decorator(view_func):
@@ -33,4 +43,11 @@ def _contiene_letras(valor):
     return any(caracter.isalpha() for caracter in valor)
 
 def _es_telefono_numerico(valor):
-    return not valor or (valor.isascii() and valor.isdigit())
+    """True si el valor está vacío o cumple el mismo formato que validar_telefono."""
+    if not valor:
+        return True
+    try:
+        validar_telefono(valor)
+    except ValidationError:
+        return False
+    return True

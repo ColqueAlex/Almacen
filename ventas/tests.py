@@ -386,3 +386,32 @@ class RegistrarVentaLotesTests(TestCase):
         self.assertFalse(DevolucionVenta.objects.filter(detalle=detalle).exists())
         lote.refresh_from_db()
         self.assertEqual(lote.stock_actual, 3)
+
+
+class ClienteTelefonoUnicoTests(TestCase):
+    def setUp(self):
+        usuario = Usuario.objects.create_user(
+            dni='11223344', apellido='Tel', nombre='Admin',
+            correo='tel@example.com', password='test-password', username='teladmin',
+        )
+        usuario.is_superuser = True
+        usuario.debe_cambiar_clave = False
+        usuario.save()
+        self.client.force_login(usuario)
+
+    def test_rechaza_telefono_duplicado(self):
+        Clientes.objects.create(nombre='Ana', telefono='3875541230')
+        self.client.post(reverse('crear_cliente'), {'nombre': 'Beto', 'telefono': '3875541230'})
+        self.assertEqual(Clientes.objects.filter(telefono='3875541230').count(), 1)
+        self.assertFalse(Clientes.objects.filter(nombre='Beto').exists())
+
+    def test_rechaza_telefono_corto_y_acepta_prefijo_mas(self):
+        self.client.post(reverse('crear_cliente'), {'nombre': 'Corto', 'telefono': '12345'})
+        self.assertFalse(Clientes.objects.filter(nombre='Corto').exists())
+        self.client.post(reverse('crear_cliente'), {'nombre': 'Internacional', 'telefono': '+543875541230'})
+        self.assertTrue(Clientes.objects.filter(nombre='Internacional').exists())
+
+    def test_varios_clientes_sin_telefono_se_guardan_como_null(self):
+        self.client.post(reverse('crear_cliente'), {'nombre': 'Uno', 'telefono': ''})
+        self.client.post(reverse('crear_cliente'), {'nombre': 'Dos', 'telefono': ''})
+        self.assertEqual(Clientes.objects.filter(telefono__isnull=True).count(), 2)

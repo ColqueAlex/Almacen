@@ -39,6 +39,19 @@ def _resumen_caja(caja):
         'cobros_transferencia': _sumar(pagos.filter(metodo_pago='transferencia'), 'monto'),
     }
 
+
+def _monto_esperado(caja, resumen):
+    """Total que debería haber al cierre: monto inicial + ventas y cobros
+    en efectivo + ventas y cobros por transferencia (netos de devoluciones).
+    Las ventas fiadas no suman porque todavía no ingresó dinero."""
+    return (
+        caja.monto_inicial
+        + resumen['ventas_efectivo']
+        + resumen['cobros_efectivo']
+        + resumen['ventas_transferencia']
+        + resumen['cobros_transferencia']
+    )
+
 @login_required
 def gestion_caja(request):
     caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
@@ -62,7 +75,7 @@ def gestion_caja(request):
         cobros_efectivo = resumen['cobros_efectivo']
         cobros_transferencia = resumen['cobros_transferencia']
 
-        monto_esperado = caja_activa.monto_inicial + ventas_efectivo + cobros_efectivo
+        monto_esperado = _monto_esperado(caja_activa, resumen)
 
     return render(request, 'caja/gestion_caja.html', {
         'caja_activa': caja_activa,
@@ -71,6 +84,7 @@ def gestion_caja(request):
         'ventas_fiado': ventas_fiado,
         'cobros_efectivo': cobros_efectivo,
         'cobros_transferencia': cobros_transferencia,
+        'total_transferencias': ventas_transferencia + cobros_transferencia,
         'monto_esperado': monto_esperado,
         'historial_cajas': page_obj,
         'page_obj': page_obj,
@@ -117,21 +131,17 @@ def cerrar_caja(request):
         try:
             monto_real = Decimal(request.POST.get('monto_real', '0.00'))
         except (InvalidOperation, TypeError, ValueError):
-            messages.error(request, 'El efectivo contado debe ser un número válido igual o mayor que cero.')
+            messages.error(request, 'El monto contado debe ser un número válido igual o mayor que cero.')
             return redirect('gestion_caja')
 
         if not monto_real.is_finite() or monto_real < 0:
-            messages.error(request, 'El efectivo contado no puede ser negativo.')
+            messages.error(request, 'El monto contado no puede ser negativo.')
             return redirect('gestion_caja')
 
         observaciones = request.POST.get('observaciones', '').strip()
 
         resumen = _resumen_caja(caja_activa)
-        monto_esperado = (
-            caja_activa.monto_inicial
-            + resumen['ventas_efectivo']
-            + resumen['cobros_efectivo']
-        )
+        monto_esperado = _monto_esperado(caja_activa, resumen)
         diferencia = monto_real - monto_esperado
 
         caja_activa.monto_final_esperado = monto_esperado
@@ -158,11 +168,7 @@ def forzar_cierre_caja(request, id_caja):
         caja = get_object_or_404(Caja, pk=id_caja, estado='abierta')
         
         resumen = _resumen_caja(caja)
-        monto_esperado = (
-            caja.monto_inicial
-            + resumen['ventas_efectivo']
-            + resumen['cobros_efectivo']
-        )
+        monto_esperado = _monto_esperado(caja, resumen)
         
         caja.monto_final_esperado = monto_esperado
         caja.monto_final_real = monto_esperado 

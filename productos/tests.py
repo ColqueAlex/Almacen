@@ -47,7 +47,7 @@ class InventarioPaginacionTests(TestCase):
         for numero in range(8):
             Proveedor.objects.create(
                 nombre=f'Proveedor {numero}',
-                numero_telefono='123456',
+                numero_telefono=f'38750000{numero:02d}',
                 tipo_productos='Alimentos',
             )
 
@@ -95,3 +95,38 @@ class StockLotesVigentesTests(TestCase):
         )
 
         self.assertEqual(producto.stock, 30)
+
+
+class ProveedorTelefonoUnicoTests(TestCase):
+    def setUp(self):
+        usuario = Usuario.objects.create_user(
+            dni='55667788', apellido='Prov', nombre='Admin',
+            correo='prov@example.com', password='test-password', username='provadmin',
+        )
+        usuario.is_superuser = True
+        usuario.debe_cambiar_clave = False
+        usuario.save()
+        self.client.force_login(usuario)
+        self.norte = Proveedor.objects.create(nombre='Norte', numero_telefono='3876894527', tipo_productos='Bebidas')
+        self.sur = Proveedor.objects.create(nombre='Sur', numero_telefono='3875669230', tipo_productos='Lacteos')
+
+    def test_crear_rechaza_telefono_duplicado(self):
+        response = self.client.post(reverse('crear_proveedor'), {
+            'nombre': 'Este', 'telefono': '3876894527', 'tipo_productos': 'Snacks',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Ya existe un proveedor registrado con el teléfono')
+        self.assertFalse(Proveedor.objects.filter(nombre='Este').exists())
+
+    def test_editar_permite_conservar_su_telefono_pero_no_usar_el_de_otro(self):
+        response = self.client.post(reverse('editar_proveedor', args=[self.norte.pk]), {
+            'nombre': 'Norte SA', 'telefono': '3876894527', 'tipo_productos': 'Bebidas',
+        })
+        self.assertEqual(response.status_code, 302)
+        response = self.client.post(reverse('editar_proveedor', args=[self.norte.pk]), {
+            'nombre': 'Norte SA', 'telefono': '3875669230', 'tipo_productos': 'Bebidas',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Ya existe otro proveedor registrado con el teléfono')
+        self.norte.refresh_from_db()
+        self.assertEqual(self.norte.numero_telefono, '3876894527')

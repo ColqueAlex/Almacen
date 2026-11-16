@@ -25,7 +25,7 @@
 
                 <div class="input-group">
                     <label>Número de Teléfono</label>
-                    <input type="tel" name="telefono" class="form-control" pattern="[0-9]*" inputmode="numeric" title="Ingrese solo números." value="{% if datos_enviados %}{{ telefono }}{% elif es_edicion %}{{ proveedor.numero_telefono }}{% endif %}" placeholder="Ej: 1123456789">
+                    <input type="tel" name="telefono" class="form-control" pattern="\+?[0-9]{8,15}" inputmode="tel" maxlength="16" title="Solo números (opcionalmente + al inicio), entre 8 y 15 dígitos." value="{% if datos_enviados %}{{ telefono }}{% elif es_edicion %}{{ proveedor.numero_telefono }}{% endif %}" placeholder="Ej: 1123456789">
                 </div>
 
                 <div class="input-group">

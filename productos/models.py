@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
 from django.db.models import Q, Sum
 from django.utils import timezone
+from usuarios.utils import validar_telefono
 
 def validar_categoria(value):
     if any(char.isdigit() for char in value):
@@ -10,7 +11,7 @@ def validar_categoria(value):
 
 class Proveedor(models.Model):
     nombre = models.CharField(max_length=30)
-    numero_telefono = models.CharField(max_length=20)
+    numero_telefono = models.CharField(max_length=20, unique=True, validators=[validar_telefono])
     tipo_productos = models.CharField(max_length=30)
     activo = models.BooleanField(default=True)
     def __str__(self): return self.nombre
