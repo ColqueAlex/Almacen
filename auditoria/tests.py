@@ -200,7 +200,9 @@ class NotificacionesTests(TestCase):
 
 
 import shutil
+import subprocess
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.staticfiles import finders
 
@@ -245,3 +247,76 @@ class PanelAnaliticaTests(TestCase):
     def test_static_analitica_esta_en_staticfiles_dirs(self):
         # .gitkeep existe en el repo: si Django lo encuentra, la carpeta se sirve como estática
         self.assertIsNotNone(finders.find('analitica/.gitkeep'))
+
+    # ---- Formulario de filtros (POST -> subprocess) ----------------------
+    def _post(self, **datos):
+        self.client.force_login(self.admin)
+        return self.client.post(reverse('panel_analitica'), datos)
+
+    @patch('auditoria.views.subprocess.run')
+    def test_post_ejecuta_script_con_las_fechas_y_redirige(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='Listo.', stderr='')
+        ayer = (date.today() - timedelta(days=1)).isoformat()
+        respuesta = self._post(fecha_inicio='2026-11-01', fecha_fin=ayer)
+
+        self.assertRedirects(respuesta, reverse('panel_analitica'), fetch_redirect_response=False)
+        comando = mock_run.call_args.args[0]
+        self.assertTrue(comando[1].endswith('analitica_el_refugio.py'))
+        self.assertEqual(comando[2:], ['--fecha_fin', ayer, '--fecha_inicio', '2026-11-01'])
+        self.assertNotIn('shell', mock_run.call_args.kwargs)
+
+    @patch('auditoria.views.subprocess.run')
+    def test_post_sin_fecha_inicio_usa_todo_el_historial(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout='', stderr='')
+        self._post(fecha_inicio='', fecha_fin='')
+        self.assertEqual(mock_run.call_args.args[0][2:], ['--fecha_fin', date.today().isoformat()])
+
+    @patch('auditoria.views.subprocess.run')
+    def test_error_del_script_se_muestra_y_conserva_las_fechas(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout='', stderr='Traceback...\nError al conectar a MySQL: Connection refused')
+        respuesta = self._post(fecha_inicio='2026-11-01', fecha_fin='2026-11-10')
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'Error al conectar a MySQL: Connection refused')
+        self.assertContains(respuesta, 'value="2026-11-01"')
+
+    @patch('auditoria.views.subprocess.run')
+    def test_libreria_faltante_sugiere_pip_install(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout='', stderr="ModuleNotFoundError: No module named 'pandas'")
+        respuesta = self._post(fecha_fin='2026-11-10')
+        self.assertContains(respuesta, 'pip install -r requirements-analitica.txt')
+
+    @patch('auditoria.views.subprocess.run', side_effect=subprocess.TimeoutExpired(cmd='python', timeout=120))
+    def test_timeout_no_rompe_la_pagina(self, _mock_run):
+        respuesta = self._post(fecha_fin='2026-11-10')
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'se canceló')
+
+    @patch('auditoria.views.subprocess.run')
+    def test_fechas_invalidas_no_ejecutan_el_script(self, mock_run):
+        manana = (date.today() + timedelta(days=1)).isoformat()
+        for datos in ({'fecha_inicio': '2026-11-10', 'fecha_fin': '2026-11-01'},
+                      {'fecha_fin': manana},
+                      {'fecha_inicio': 'no-es-fecha'}):
+            respuesta = self._post(**datos)
+            self.assertEqual(respuesta.status_code, 200)
+        mock_run.assert_not_called()
+
+    @patch('auditoria.views.subprocess.run')
+    def test_vendedor_no_puede_ejecutar_el_script(self, mock_run):
+        self.client.force_login(self.vendedor)
+        self.client.post(reverse('panel_analitica'), {'fecha_fin': '2026-11-10'})
+        mock_run.assert_not_called()
+
+    def test_get_precarga_filtros_de_la_ultima_generacion(self):
+        self.client.force_login(self.admin)
+        with override_settings(BASE_DIR=Path(self.base_tmp)):
+            carpeta = Path(self.base_tmp) / 'static' / 'analitica'
+            carpeta.mkdir(parents=True)
+            (carpeta / 'ultima_generacion.json').write_text(
+                '{"fecha_inicio": "2026-11-01", "fecha_fin": "2026-11-12"}', encoding='utf-8')
+            respuesta = self.client.get(reverse('panel_analitica'))
+        self.assertContains(respuesta, 'value="2026-11-01"')
+        self.assertContains(respuesta, 'value="2026-11-12"')
+        self.assertContains(respuesta, 'del 01/11/2026')

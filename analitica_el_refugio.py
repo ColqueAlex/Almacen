@@ -23,10 +23,11 @@ Uso:
     python analitica_el_refugio.py
     python analitica_el_refugio.py --desde 2026-11-01 --hasta 2026-11-30
     python analitica_el_refugio.py --categoria bebidas --dias 15
+    python analitica_el_refugio.py --fecha_inicio 2026-11-01 --fecha_fin 2026-11-30   (alias)
 
 Parámetros (filtros):
-    --desde      Fecha inicial YYYY-MM-DD (por defecto: todo el historial).
-    --hasta      Fecha final / de corte YYYY-MM-DD (por defecto: hoy).
+    --desde      (alias --fecha_inicio) Fecha inicial YYYY-MM-DD (por defecto: todo el historial).
+    --hasta      (alias --fecha_fin)    Fecha final YYYY-MM-DD (por defecto: hoy).
     --categoria  Analiza solo una categoría de producto (sin distinguir mayúsculas).
     --dias       Ventana del gráfico de evolución cuando no se indica --desde (default 30).
     --salida     Carpeta de salida (default: static/analitica/).
@@ -40,6 +41,7 @@ Reproducibilidad:
 ==============================================================================
 """
 import argparse
+import json
 import os
 import sys
 import warnings
@@ -81,6 +83,8 @@ ARCHIVOS = {
     'heatmap': 'grafico_heatmap.png',
     'dashboard': 'grafico_dashboard.png',
 }
+# Filtros de la última ejecución (el panel de Django los muestra y precarga el formulario)
+ARCHIVO_METADATOS = 'ultima_generacion.json'
 
 # --- Estilo visual común (colores de la paleta del sistema, base.css) --------
 COLOR_PRIMARIO = '#1e40af'
@@ -586,6 +590,20 @@ def imprimir_resumen(ventas):
     print(f'  Percentil 90       : {formato_moneda(np.percentile(tickets, 90))}')
 
 
+def guardar_metadatos(carpeta, filtros, ventas):
+    """Guarda con qué filtros se generaron las imágenes (lo lee el panel de Django)."""
+    datos = {
+        'fecha_inicio': filtros.desde.isoformat() if filtros.desde else None,
+        'fecha_fin': filtros.hasta.isoformat(),
+        'categoria': filtros.categoria,
+        'generado': datetime.now().isoformat(timespec='seconds'),
+        'cantidad_ventas': int(len(ventas)),
+        'facturacion': float(np.sum(ventas['total_neto'].to_numpy())) if len(ventas) else 0.0,
+    }
+    with open(carpeta / ARCHIVO_METADATOS, 'w', encoding='utf-8') as archivo:
+        json.dump(datos, archivo, ensure_ascii=False, indent=2)
+
+
 # =============================================================================
 # 6. PROGRAMA PRINCIPAL
 # =============================================================================
@@ -597,9 +615,10 @@ def parsear_argumentos():
             raise argparse.ArgumentTypeError(f'"{texto}" no es una fecha válida (formato YYYY-MM-DD).')
 
     parser = argparse.ArgumentParser(description='Genera los gráficos de analítica de ventas de El Refugio.')
-    parser.add_argument('--desde', type=fecha, default=None,
+    # --fecha_inicio / --fecha_fin son alias de --desde / --hasta (los usa el panel de Django)
+    parser.add_argument('--desde', '--fecha_inicio', dest='desde', type=fecha, default=None,
                         help='Fecha inicial YYYY-MM-DD (por defecto: todo el historial).')
-    parser.add_argument('--hasta', type=fecha, default=date.today(),
+    parser.add_argument('--hasta', '--fecha_fin', dest='hasta', type=fecha, default=date.today(),
                         help='Fecha final YYYY-MM-DD (por defecto: hoy). Fijarla hace el resultado reproducible.')
     parser.add_argument('--categoria', default=None, help='Analizar solo esta categoría de producto (ej: bebidas).')
     parser.add_argument('--dias', type=int, default=30,
@@ -638,6 +657,7 @@ def main():
     grafico_facturacion_diaria(ventas, carpeta, filtros)
     grafico_heatmap_dia_hora(ventas, carpeta, filtros)
     grafico_dashboard(detalles, ventas, carpeta, filtros)
+    guardar_metadatos(carpeta, filtros, ventas)
     imprimir_resumen(ventas)
     print('\nListo.')
 

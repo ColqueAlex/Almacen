@@ -24,12 +24,34 @@
         </div>
     </div>
 
+    <!-- Filtros: ejecuta analitica_el_refugio.py con el rango elegido -->
+    <form method="POST" class="analitica-filtros" id="form-analitica">
+        {% csrf_token %}
+        <div class="filtro-campo">
+            <label for="fecha_inicio">Fecha desde</label>
+            <input type="date" id="fecha_inicio" name="fecha_inicio" value="{{ fecha_inicio }}" max="{{ hoy|date:'Y-m-d' }}">
+        </div>
+        <div class="filtro-campo">
+            <label for="fecha_fin">Fecha hasta</label>
+            <input type="date" id="fecha_fin" name="fecha_fin" value="{{ fecha_fin }}" max="{{ hoy|date:'Y-m-d' }}">
+        </div>
+        <button type="submit" class="btn-generar" id="btn-generar">🔄 Generar Analítica con estos filtros</button>
+        <p class="filtros-ayuda">
+            {% if generado_con_metadatos %}
+                Gráficos actuales generados
+                {% if generado_desde %}del {{ generado_desde|date:"d/m/Y" }}{% else %}desde el inicio del historial{% endif %}
+                al {{ generado_hasta|date:"d/m/Y" }}.
+            {% endif %}
+            Dejá "Fecha desde" vacío para usar todo el historial.
+        </p>
+    </form>
+
     {% if faltan_graficos %}
         <div class="analitica-aviso">
             <span class="material-symbols-outlined">info</span>
             <div>
                 <strong>Faltan gráficos por generar.</strong>
-                Ejecutá <code>python analitica_el_refugio.py</code> desde la raíz del proyecto para crearlos o actualizarlos.
+                Tocá <em>Generar Analítica</em> o ejecutá <code>python analitica_el_refugio.py</code> desde la raíz del proyecto.
             </div>
         </div>
     {% endif %}
@@ -56,4 +78,15 @@
             </div>
         {% endfor %}
     </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Evita doble envío y avisa que el script está corriendo (tarda unos segundos)
+    document.getElementById('form-analitica').addEventListener('submit', function () {
+        const boton = document.getElementById('btn-generar');
+        boton.disabled = true;
+        boton.textContent = '⏳ Generando gráficos...';
+    });
+</script>
 {% endblock %}

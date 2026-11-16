@@ -152,18 +152,12 @@ SESSION_SAVE_EVERY_REQUEST = True
 
 
 # --- Correo electrónico (alertas de notificaciones) ---
-# Sin EMAIL_HOST configurado se usa el backend de consola: los correos se
-# imprimen en la terminal de runserver (útil para desarrollo/demostración).
-EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
-EMAIL_BACKEND = os.environ.get(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST else 'django.core.mail.backends.console.EmailBackend',
-)
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'nicopruebaemail1@gmail.com'
+EMAIL_HOST_PASSWORD = 'cdcn cjxs ggfg gvha'
 EMAIL_TIMEOUT = 10
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'alertas@elrefugio.local')
-# Destinatario(s) de las alertas de stock bajo (separar varios con coma)
-ALERTAS_EMAIL_DESTINATARIO = os.environ.get('ALERTAS_EMAIL_DESTINATARIO', 'admin@elrefugio.local')
+DEFAULT_FROM_EMAIL = f'El Refugio <{EMAIL_HOST_USER}>'
+ALERTAS_EMAIL_DESTINATARIO = 'nicopruebaemail@gmail.com'
