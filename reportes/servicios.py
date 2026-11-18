@@ -111,14 +111,32 @@ def rentabilidad_por_producto(desde=None, hasta=None, categoria=''):
 # ---------------------------------------------------------------------------
 # Reporte 2: Ranking de clientes por facturación y deuda
 # ---------------------------------------------------------------------------
-def ranking_clientes(desde=None, hasta=None, estado_pago=''):
+ESTADO_DEUDA_AL_DIA = 'al_dia'
+ESTADO_DEUDA_CON_DEUDA = 'con_deuda'
+
+
+def ranking_clientes(desde=None, hasta=None, estado_deuda=''):
+    """
+    Ranking de clientes por facturación del período.
+
+    `estado_deuda` filtra por el SALDO ACTUAL del cliente, no por el estado de
+    cada venta: cuando un cliente paga su fiado la venta original sigue como
+    'fiado' y lo que cambia es Clientes.saldo. Se cuentan siempre TODAS las
+    ventas no anuladas (pagadas y fiadas), así un cliente al día que compró
+    en efectivo no desaparece del ranking.
+      - 'al_dia'    -> saldo <= 0
+      - 'con_deuda' -> saldo > 0
+      - ''          -> sin filtrar
+    """
     ventas = Ventas.objects.exclude(estado_de_pago='anulado').filter(id_clientes__isnull=False)
     if desde:
         ventas = ventas.filter(fecha__gte=desde)
     if hasta:
         ventas = ventas.filter(fecha__lte=hasta)
-    if estado_pago:
-        ventas = ventas.filter(estado_de_pago=estado_pago)
+    if estado_deuda == ESTADO_DEUDA_AL_DIA:
+        ventas = ventas.filter(id_clientes__saldo__lte=0)
+    elif estado_deuda == ESTADO_DEUDA_CON_DEUDA:
+        ventas = ventas.filter(id_clientes__saldo__gt=0)
 
     por_cliente = (
         ventas.order_by().values('id_clientes')

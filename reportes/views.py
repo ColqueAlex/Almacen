@@ -7,7 +7,6 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from usuarios.utils import requiere_perfil
-from ventas.models import Ventas
 from . import servicios
 from .pdf import generar_reporte_pdf
 
@@ -133,7 +132,11 @@ def reporte_rentabilidad(request):
 # ---------------------------------------------------------------------------
 # Reporte 2: Ranking de clientes por facturación y deuda
 # ---------------------------------------------------------------------------
-ESTADOS_PAGO_REPORTE = [(valor, etiqueta) for valor, etiqueta in Ventas.ESTADO_PAGO_CHOICES if valor != 'anulado']
+# Filtro por estado de deuda del cliente (saldo actual), no por el estado de la venta.
+ESTADOS_DEUDA_REPORTE = [
+    (servicios.ESTADO_DEUDA_AL_DIA, 'Pagado'),
+    (servicios.ESTADO_DEUDA_CON_DEUDA, 'Pendiente'),
+]
 
 
 @login_required
@@ -141,7 +144,7 @@ ESTADOS_PAGO_REPORTE = [(valor, etiqueta) for valor, etiqueta in Ventas.ESTADO_P
 def reporte_ranking_clientes(request):
     desde, hasta = _leer_rango_fechas(request)
     estado = request.GET.get('estado', '').strip()
-    estados_validos = dict(ESTADOS_PAGO_REPORTE)
+    estados_validos = dict(ESTADOS_DEUDA_REPORTE)
     if estado not in estados_validos:
         estado = ''
 
@@ -168,7 +171,7 @@ def reporte_ranking_clientes(request):
     contexto = _contexto_base(request, filas, totales, filtros_texto)
     contexto.update({
         'desde': desde, 'hasta': hasta,
-        'estados': ESTADOS_PAGO_REPORTE, 'estado_seleccionado': estado,
+        'estados': ESTADOS_DEUDA_REPORTE, 'estado_seleccionado': estado,
     })
     return render(request, 'reportes/ranking_clientes.html', contexto)
 

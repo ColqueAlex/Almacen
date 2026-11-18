@@ -1,8 +1,8 @@
 {
-  "fecha_inicio": null,
+  "fecha_inicio": "2026-11-01",
   "fecha_fin": "2026-11-16",
   "categoria": null,
-  "generado": "2026-11-16T09:34:15",
-  "cantidad_ventas": 17,
-  "facturacion": 166000.0
+  "generado": "2026-11-16T17:55:31",
+  "cantidad_ventas": 20,
+  "facturacion": 285000.0
 }

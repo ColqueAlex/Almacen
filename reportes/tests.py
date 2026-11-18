@@ -95,8 +95,24 @@ class ReportesTests(TestCase):
         self.assertEqual(filas[0]['saldo'], D('500'))
         self.assertEqual(totales['facturado'], D('500'))
 
-        filas, _ = servicios.ranking_clientes(estado_pago='pagado')
+        # Filtro por saldo del cliente, no por estado de la venta
+        filas, _ = servicios.ranking_clientes(estado_deuda='al_dia')
         self.assertEqual([f['cliente'] for f in filas], ['Beto'])
+        filas, _ = servicios.ranking_clientes(estado_deuda='con_deuda')
+        self.assertEqual([f['cliente'] for f in filas], ['Ana'])
+
+    def test_ranking_al_dia_incluye_cliente_que_pago_su_fiado(self):
+        # Carla compró fiado y ya saldó la deuda: la venta sigue 'fiado' pero su saldo es 0
+        carla = Clientes.objects.create(nombre='Carla', saldo=D('0'))
+        self._venta(date.today(), D('300'), carla, 'fiado')
+        filas, _ = servicios.ranking_clientes(estado_deuda='al_dia')
+        self.assertIn('Carla', [f['cliente'] for f in filas])
+        carla_fila = next(f for f in filas if f['cliente'] == 'Carla')
+        self.assertEqual(carla_fila['facturado'], D('300'))
+
+        self.client.force_login(self.admin)
+        pdf = self.client.get(reverse('reporte_ranking_clientes'), {'estado': 'al_dia', 'exportar': 'pdf'})
+        self.assertEqual(pdf['Content-Type'], 'application/pdf')
 
     def test_stock_valorizado_ignora_lotes_vencidos(self):
         filas, totales, limite, corte = servicios.stock_valorizado()
