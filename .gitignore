@@ -25,6 +25,9 @@ media/
 logs/
 *.log
 
+# --- Backups de la base de datos (contienen datos reales: nunca a Git) ---
+backups/
+
 # --- Gráficos generados por analitica_el_refugio.py ---
 reportes_analitica/
 static/analitica/*

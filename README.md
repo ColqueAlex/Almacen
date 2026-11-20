@@ -139,6 +139,11 @@ Para detenerlo: `docker compose down` (agregar `-v` borra también los datos de 
 - **Alertas de vencimiento:** `python manage.py alertas_vencimiento`. En Windows se puede
   programar como tarea diaria con `scripts/programar_alertas_vencimiento.ps1`; la salida queda
   en `logs/alertas_vencimiento.log`.
+- **Backup diario de la base de datos:** `python manage.py backup_db` genera un backup completo
+  con `mysqldump` (ruta en `MYSQLDUMP_PATH` del `.env`), lo comprime en `backups/` y borra los
+  `.zip` de más de 7 días. Se programa a las 3:00 con `scripts/programar_backup_db.ps1`.
+  Para restaurar: descomprimir el `.zip` y ejecutar `mysql -h HOST -P PUERTO -u USUARIO -p BASE < archivo.sql`.
+  La carpeta `backups/` no se sube a Git.
 
 ## Estructura del proyecto
 

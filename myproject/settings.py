@@ -181,6 +181,14 @@ DEFAULT_FROM_EMAIL = f'El Refugio <{EMAIL_HOST_USER}>'
 ALERTAS_EMAIL_DESTINATARIO = config('ALERTAS_EMAIL_DESTINATARIO', default='')
 
 
+
+# -----------------------------------------------------------------------------
+# Backups de la base de datos (python manage.py backup_db)
+# -----------------------------------------------------------------------------
+# Ruta a mysqldump.exe; si queda vacía se busca en el PATH del sistema.
+MYSQLDUMP_PATH = config('MYSQLDUMP_PATH', default='')
+BACKUP_DIR = BASE_DIR / 'backups'
+
 # -----------------------------------------------------------------------------
 # Logging
 #   Consola            -> INFO o superior
