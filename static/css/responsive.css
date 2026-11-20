@@ -1,0 +1,149 @@
+/* ==========================================================================
+   RESPONSIVE GLOBAL (celulares y tablets)
+   --------------------------------------------------------------------------
+   Se carga DESPUÉS del CSS de cada vista (ver templates/base.html) porque
+   varios de esos archivos redefinen .sidebar / .main-content y, si estas
+   reglas estuvieran en base.css, quedarían pisadas.
+
+   Escritorio (> 1024px): no se modifica nada. Fuera de los media queries
+   solo se ocultan los elementos nuevos (botón hamburguesa y fondo oscuro).
+
+   Breakpoints:
+     <= 1024px  tablets  -> sidebar como menú hamburguesa (panel deslizable)
+     <=  768px  móviles  -> header compacto, controles táctiles de 44px
+     <=  480px  móviles chicos -> se oculta el nombre de usuario del header
+   Las grillas propias de cada vista se adaptan en su propio CSS.
+   ========================================================================== */
+
+/* Elementos que solo existen en pantallas chicas */
+.menu-toggle,
+.sidebar-overlay { display: none; }
+
+/* ---------------------------------------------------------------- TABLETS */
+@media (max-width: 1024px) {
+    /* Sidebar fuera de pantalla; se abre con el botón hamburguesa */
+    .sidebar {
+        width: 280px;
+        max-width: 85vw;
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: none;
+    }
+    body.sidebar-abierto .sidebar {
+        transform: translateX(0);
+        box-shadow: 0 0 40px rgba(15, 23, 42, 0.25);
+    }
+    body.sidebar-abierto { overflow: hidden; }
+
+    .sidebar-overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        background: rgba(15, 23, 42, 0.5);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.25s ease, visibility 0.25s ease;
+    }
+    body.sidebar-abierto .sidebar-overlay { opacity: 1; visibility: visible; }
+
+    /* El contenido ocupa todo el ancho. min-width: 0 evita que una tabla
+       ancha estire la página en lugar de scrollear dentro de su tarjeta. */
+    .main-content { margin-left: 0; min-width: 0; width: 100%; }
+    .inv-container, .pos-container, .content-area, .form-container { min-width: 0; }
+
+    .menu-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        flex-shrink: 0;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--bg-surface);
+        color: var(--text-main);
+        cursor: pointer;
+    }
+    .menu-toggle:hover { background: var(--bg-body); }
+
+    .header-izquierda { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+    /* Overlay "caja cerrada" del POS: ya no hay sidebar fijo a la izquierda */
+    .cash-closed-overlay { inset: 0; }
+
+    /* Tablas: scroll horizontal con el dedo dentro de su contenedor */
+    .table-card,
+    .detail-content,
+    .cart-body,
+    .price-warning-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+    }
+}
+
+/* ---------------------------------------------------------------- MÓVILES */
+@media (max-width: 768px) {
+    /* Header compacto: se oculta el reloj y se reduce el espacio */
+    .top-header { height: 60px; padding: 0 12px; gap: 8px; }
+    .header-reloj { display: none !important; }
+    .header-user { gap: 8px; padding-left: 0; border-left: none; min-width: 0; }
+    .header-user form { margin-left: 0 !important; }
+    .header-user-datos { min-width: 0; max-width: 120px; }
+    .header-user-datos strong,
+    .header-user-datos span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-logout { width: 44px; height: 44px; }
+    .notif-bell { width: 44px; height: 44px; margin-right: 0; }
+
+    /* Contenedores y títulos */
+    .inv-container, .pos-container, .content-area { padding: 16px; gap: 16px; }
+    .form-container { padding: 16px; }
+    .page-title, .pos-title { font-size: 22px; }
+
+    /* Barras de herramientas y filtros: cada control ocupa una fila */
+    .search-box, .search-input-wrapper { min-width: 0; flex: 1 1 100%; }
+    .toolbar-left { flex: 1 1 100%; }
+    .filter-select { flex: 1 1 auto; }
+    .search-bar { flex-wrap: wrap; }
+    .filtro-campo { min-width: 0; flex: 1 1 100%; }
+    .filtros-acciones { margin-left: 0; width: 100%; flex-wrap: wrap; }
+    .filtros-acciones > * { flex: 1 1 auto; justify-content: center; }
+
+    /* Paginación y acciones de formularios */
+    .pagination { justify-content: center; text-align: center; }
+    .page-buttons { flex-wrap: wrap; justify-content: center; }
+    .form-actions, .modal-footer { flex-wrap: wrap; }
+    .form-actions > *, .modal-footer > * { flex: 1 1 auto; justify-content: center; }
+
+    /* Modales: ocupan el ancho disponible */
+    .modal-overlay { padding: 16px; }
+    .modal-content, .modal-panel { width: 100% !important; max-width: 100% !important; max-height: 90vh; overflow-y: auto; }
+    .form-card { padding: 20px; }
+
+    /* Controles táctiles: mínimo 44px de alto */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]),
+    select,
+    textarea {
+        min-height: 44px;
+        font-size: 16px; /* evita el zoom automático de iOS al enfocar */
+    }
+    button,
+    .btn, .btn-primary, .btn-action, .btn-save, .btn-cancel,
+    .btn-cerrar, .btn-abrir, .btn-checkout, .btn-finalizar, .btn-devolver,
+    .method-btn, .pill, .product-page-btn, .hero-btn,
+    .price-warning-actions button {
+        min-height: 44px;
+    }
+    .btn-icon, .page-btn, .btn-delete, .cart-qty-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    .nav-item { min-height: 44px; }
+}
+
+/* --------------------------------------------------------- MÓVILES CHICOS */
+@media (max-width: 480px) {
+    .header-user-datos { display: none !important; }
+}

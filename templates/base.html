@@ -15,11 +15,17 @@
     
     <!-- Bloque para CSS específico de cada página -->
     {% block extra_css %}{% endblock %}
+
+    <!-- Adaptación a celulares y tablets (va al final para no quedar pisado por el CSS de cada vista) -->
+    <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
 </head>
 <body>
 
+    <!-- Fondo oscuro detrás del menú en móviles (oculto en escritorio) -->
+    <div class="sidebar-overlay" aria-hidden="true"></div>
+
     <!-- SIDEBAR -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand" style="justify-content: center; padding: 20px 10px;">
         <img src="{% static 'img/logo.png' %}" alt="Logo El Refugio" style="max-width: 100%; height: auto; max-height: 55px; object-fit: contain;">
     </div>
@@ -94,9 +100,15 @@
     <div class="main-content">
         <!-- HEADER -->
         <header class="top-header">
-            <div class="header-time">
-                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
-                <span id="current-datetime">Cargando...</span>
+            <div class="header-izquierda">
+                <!-- Botón hamburguesa (solo visible en pantallas chicas) -->
+                <button type="button" class="menu-toggle" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+                <div class="header-time header-reloj">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                    <span id="current-datetime">Cargando...</span>
+                </div>
             </div>
             <div class="header-user">
                 <!-- Campana de notificaciones (badge desde auditoria.context_processors.notificaciones) -->
@@ -108,7 +120,7 @@
                     {% endif %}
                 </a>
 
-                <div style="display: flex; flex-direction: column; text-align: right;">
+                <div class="header-user-datos" style="display: flex; flex-direction: column; text-align: right;">
                     <strong style="font-size: 13px;">{{ request.user.username }}</strong>
                     <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Usuario" }}</span>
                 </div>
@@ -150,6 +162,8 @@
         setInterval(updateClock, 1000); updateClock();
     </script>
     
+    <script src="{% static 'js/menu.js' %}"></script>
+
     <!-- Bloque para JS específico de cada página -->
     {% block extra_js %}{% endblock %}
 </body>

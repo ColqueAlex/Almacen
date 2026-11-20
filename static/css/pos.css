@@ -123,3 +123,18 @@ body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color
 
 /* UTILIDADES */
 .hidden { display: none !important; }
+/* RESPONSIVE: productos y carrito apilados */
+@media (max-width: 900px) {
+    .pos-split { grid-template-columns: minmax(0, 1fr); }
+    .pos-split > * { min-width: 0; }
+}
+@media (max-width: 768px) {
+    .client-selector { width: 100%; }
+    .product-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .cash-calc { grid-template-columns: 1fr; }
+    .cart-items { max-height: none; }
+    .summary-total strong { font-size: 24px; }
+}
+@media (max-width: 380px) {
+    .product-grid { grid-template-columns: 1fr; }
+}

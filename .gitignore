@@ -1,13 +1,37 @@
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
 
-db.sqlite3
-.env
-.venv/
+# --- Entornos virtuales ---
 venv/
+.venv/
+env/
+ENV/
 
+# --- Variables de entorno / secretos ---
+.env
+.env.*
+!.env.example
+
+# --- Base de datos local ---
+db.sqlite3
+
+# --- Archivos estáticos y media generados ---
 staticfiles/
 media/
-# Salida de tareas programadas (scripts/alertas_vencimiento.bat)
+
+# --- Logs (salida de tareas programadas: scripts/alertas_vencimiento.bat) ---
 logs/
+*.log
+
+# --- Gráficos generados por analitica_el_refugio.py ---
+reportes_analitica/
+static/analitica/*
+!static/analitica/.gitkeep
+
+# --- Editores / SO ---
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

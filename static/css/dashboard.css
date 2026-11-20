@@ -212,3 +212,12 @@ body {
     .modules-wrapper { grid-template-columns: 1fr; }
     .alerts-grid { grid-template-columns: 1fr; }
 }
+/* RESPONSIVE: módulos del inicio en 1 columna en móviles */
+@media (max-width: 768px) {
+    .module-grid { grid-template-columns: 1fr; }
+    .hero-sale { flex-direction: column; align-items: stretch; gap: 20px; padding: 20px; }
+    .hero-content { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .hero-text h2 { font-size: 24px; }
+    .hero-btn { justify-content: center; }
+    .welcome-card h1 { font-size: 22px; }
+}

@@ -125,8 +125,8 @@ DIAS_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Dom
 def obtener_credenciales():
     """
     Lee las credenciales desde myproject/settings.py para no duplicarlas.
-    settings.py solo usa `os` y `pathlib`, así que se puede importar sin
-    inicializar Django. Si falla, usa las mismas variables de entorno.
+    settings.py solo depende de `pathlib` y `python-decouple` (que lee el .env),
+    así que se puede importar sin inicializar Django. Si falla, usa variables de entorno.
     """
     try:
         sys.path.insert(0, str(BASE_DIR))
@@ -136,8 +136,8 @@ def obtener_credenciales():
         print(f'[aviso] No se pudo leer settings.py ({error}); se usan variables de entorno.')
         db = {
             'NAME': os.environ.get('DB_NAME', 'Almacen_ElRefugio'),
-            'USER': os.environ.get('DB_USER', 'myuser'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', 'mypassword'),
+            'USER': os.environ.get('DB_USER', ''),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
             'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
             'PORT': os.environ.get('DB_PORT', '3307'),
         }

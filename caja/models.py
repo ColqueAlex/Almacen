@@ -11,6 +11,6 @@ class Caja(models.Model):
     diferencia = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
     fecha_apertura = models.DateTimeField(auto_now_add=True)
     fecha_cierre = models.DateTimeField(null=True, blank=True)
-    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='abierta')
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='abierta', db_index=True)
     observaciones = models.TextField(blank=True, null=True)
     def __str__(self): return f"Caja #{self.id_caja} ({self.get_estado_display()}) - {self.usuario.username}"

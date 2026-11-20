@@ -107,3 +107,8 @@ tr:hover { background: var(--bg-body); }
 .page-btn { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; }
 .page-btn:hover { background: var(--bg-body); }
 .page-btn.active { background: var(--primary); color: white; }
+/* RESPONSIVE: KPIs en 1 columna en móviles */
+@media (max-width: 768px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+    .kpi-info .value { font-size: 26px; }
+}

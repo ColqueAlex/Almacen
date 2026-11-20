@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import F, Prefetch, Sum, Q
+from django.db.models import Count, F, Prefetch, Sum, Q
 from django.db.models.functions import Coalesce
 from django.core.paginator import Paginator
 from django.utils import timezone
@@ -16,6 +16,7 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from .models import Ventas, DetallesVentas, DevolucionVenta, Clientes, Pago
+from productos.cache import categorias_productos
 from productos.models import Productos, LotesProducto
 from caja.models import Caja
 from usuarios.utils import requiere_perfil, _solo_letras_y_espacios, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO
@@ -205,7 +206,7 @@ def registrar_venta(request):
             messages.error(request, f'Error al registrar la venta: {str(e)}')
             return redirect('registrar_venta')
 
-    productos = Productos.objects.filter(estado='activo').annotate(
+    productos = Productos.objects.filter(estado='activo').con_stock().annotate(
         total_vendido=Coalesce(
             Sum(
                 'detalles_ventas__cantidad',
@@ -214,7 +215,7 @@ def registrar_venta(request):
             0,
         )
     ).order_by('-total_vendido', 'nombre')
-    categorias = Productos.objects.filter(estado='activo').values_list('categoria', flat=True).distinct()
+    categorias = categorias_productos(solo_activos=True)
     clientes = Clientes.objects.all().order_by('nombre')
 
     return render(request, 'ventas/Registro_ventas.html', {
@@ -421,13 +422,19 @@ def devolver_detalle_venta(request, id_detalle):
 @login_required
 def cuentas_clientes(request):
     clientes_qs = Clientes.objects.all().order_by('-saldo', 'nombre')
-    
-    pagos_recientes = Pago.objects.all().order_by('-fecha')[:10]
 
-    deuda_total = sum(c.saldo for c in clientes_qs if c.saldo > 0)
-    con_deuda = sum(1 for c in clientes_qs if c.saldo > 0)
-    al_dia = sum(1 for c in clientes_qs if c.saldo == 0)
-    total_clientes = clientes_qs.count()
+    pagos_recientes = Pago.objects.select_related('cliente', 'usuario').order_by('-fecha')[:10]
+
+    totales = Clientes.objects.aggregate(
+        deuda_total=Coalesce(Sum('saldo', filter=Q(saldo__gt=0)), Decimal('0.00')),
+        con_deuda=Count('pk', filter=Q(saldo__gt=0)),
+        al_dia=Count('pk', filter=Q(saldo=0)),
+        total_clientes=Count('pk'),
+    )
+    deuda_total = totales['deuda_total']
+    con_deuda = totales['con_deuda']
+    al_dia = totales['al_dia']
+    total_clientes = totales['total_clientes']
 
     return render(request, 'ventas/cuentas_clientes.html', {
         'clientes': clientes_qs,
@@ -517,8 +524,8 @@ def crear_cliente(request):
 
 @login_required
 def generar_comprobante_pdf(request, id_venta):
-    venta = get_object_or_404(Ventas, pk=id_venta)
-    detalles = DetallesVentas.objects.filter(venta=venta)
+    venta = get_object_or_404(Ventas.objects.select_related('id_clientes'), pk=id_venta)
+    detalles = DetallesVentas.objects.filter(venta=venta).select_related('producto')
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)

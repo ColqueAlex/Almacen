@@ -7,11 +7,14 @@
     <title>El Refugio - Registrar Compra</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <link rel="stylesheet" href="{% static 'css/registro_compras.css' %}?v=4">
+    <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
 </head>
 <body>
 
+    <div class="sidebar-overlay" aria-hidden="true"></div>
+
     <!-- SIDEBAR -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
             <div class="brand-icon"><span class="material-symbols-outlined">storefront</span></div>
             <div class="brand-text"><h1>El Refugio</h1><span>ALMACÉN CENTRAL</span></div>
@@ -33,12 +36,17 @@
     <!-- MAIN CONTENT -->
     <div class="main-content">
         <header class="top-header">
-            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
-                <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
-                <span id="current-datetime">Cargando...</span>
+            <div class="header-izquierda">
+                <button type="button" class="menu-toggle" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+                <div class="header-reloj" style="display: flex; align-items: center; gap: 8px; background: var(--bg-body); padding: 6px 12px; border-radius: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">schedule</span>
+                    <span id="current-datetime">Cargando...</span>
+                </div>
             </div>
             <div class="header-user">
-                <div style="display: flex; flex-direction: column; text-align: right;">
+                <div class="header-user-datos" style="display: flex; flex-direction: column; text-align: right;">
                     <strong style="font-size: 13px;">{{ request.user.username }}</strong>
                     <span style="font-size: 11px; color: var(--text-muted);">{{ request.user.id_perfil.nombre|default:"Administrador" }}</span>
                 </div>
@@ -519,5 +527,6 @@
             });
         });
     </script>
+    <script src="{% static 'js/menu.js' %}"></script>
 </body>
 </html>

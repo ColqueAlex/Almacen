@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash, authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import timedelta
 from django.core.validators import validate_email
@@ -9,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django_email_validators import validate_email_mx
 from .models import Usuario, Perfil
 from productos.models import LotesProducto
+from .cache import perfiles_disponibles
 from .utils import requiere_perfil, _solo_letras_y_espacios
 
 @login_required
@@ -24,7 +26,7 @@ def home(request):
     hoy = timezone.now().date()
     limite = hoy + timedelta(days=30)
     
-    alertas = LotesProducto.objects.filter(
+    alertas = LotesProducto.objects.select_related('id_producto').filter(
         activo=True, 
         stock_actual__gt=0, 
         fecha_vencimiento__isnull=False,
@@ -127,11 +129,16 @@ def cambiar_clave(request):
 @login_required
 @requiere_perfil('Administrador')
 def listar_usuarios(request):
-    usuarios = Usuario.objects.all().order_by('nombre')
-    
-    total_usuarios = usuarios.count()
-    usuarios_activos = usuarios.filter(activo=True).count()
-    usuarios_inactivos = usuarios.filter(activo=False).count()
+    usuarios = Usuario.objects.select_related('id_perfil').order_by('nombre')
+
+    totales = Usuario.objects.aggregate(
+        total=Count('pk'),
+        activos=Count('pk', filter=Q(activo=True)),
+        inactivos=Count('pk', filter=Q(activo=False)),
+    )
+    total_usuarios = totales['total']
+    usuarios_activos = totales['activos']
+    usuarios_inactivos = totales['inactivos']
 
     return render(request, 'usuarios/usuarios_list.html', {
         'usuarios': usuarios,
@@ -173,7 +180,7 @@ def crear_usuario(request):
         if error:
             messages.error(request, error)
             return render(request, 'usuarios/usuario_form.html', {
-                'perfiles': Perfil.objects.all(),
+                'perfiles': perfiles_disponibles(),
                 'es_edicion': False,
                 'dni': dni,
                 'apellido': apellido,
@@ -185,7 +192,7 @@ def crear_usuario(request):
         if Usuario.objects.filter(dni=dni).exists():
             messages.error(request, f'Ya existe un usuario registrado con el DNI {dni}.')
             return render(request, 'usuarios/usuario_form.html', {
-                'perfiles': Perfil.objects.all(),
+                'perfiles': perfiles_disponibles(),
                 'es_edicion': False,
                 'dni': dni,
                 'apellido': apellido,
@@ -212,7 +219,7 @@ def crear_usuario(request):
         messages.success(request, f'Usuario {usuario.username} creado exitosamente.')
         return redirect('listar_usuarios')
 
-    perfiles = Perfil.objects.all()
+    perfiles = perfiles_disponibles()
     return render(request, 'usuarios/usuario_form.html', {'perfiles': perfiles, 'es_edicion': False})
 
 @login_required
@@ -227,7 +234,7 @@ def editar_usuario(request, dni):
         messages.success(request, 'Usuario actualizado correctamente.')
         return redirect('listar_usuarios')
 
-    perfiles = Perfil.objects.all()
+    perfiles = perfiles_disponibles()
     return render(request, 'usuarios/usuario_form.html', {
         'usuario': usuario,
         'perfiles': perfiles,

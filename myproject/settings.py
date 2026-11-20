@@ -12,20 +12,25 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 
+from decouple import Csv, config
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+# -----------------------------------------------------------------------------
+# Variables de entorno
+# python-decouple lee primero las variables del sistema (p. ej. las de
+# docker-compose.yml) y, si no existen, las del archivo .env de la raíz.
+# Las variables sin `default` son obligatorias: si faltan, Django no arranca.
+# -----------------------------------------------------------------------------
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6#d8nd+bxsor&pde9upo9oe@k-(0711#d5+!dcxurl09fh(dw^'
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'testserver']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 
 # Application definition
@@ -82,16 +87,15 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-import os
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('DB_NAME', 'Almacen_ElRefugio'),
-        'USER': os.environ.get('DB_USER', 'myuser'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'mypassword'),
-        'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
-        'PORT': os.environ.get('DB_PORT', '3307'),
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST', default='127.0.0.1'),
+        'PORT': config('DB_PORT', default='3306'),
     }
 }
 
@@ -121,7 +125,6 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'es-ar'
 
 TIME_ZONE = 'America/Argentina/Buenos_Aires'
-USE_TZ = True
 
 USE_I18N = True
 
@@ -133,10 +136,25 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Carpeta global de estáticos: css/, img/ y gráficos generados por
+# analitica_el_refugio.py (static/analitica/).
 STATICFILES_DIRS = [
-    BASE_DIR / "Almacen" / "static",
-    BASE_DIR / "static",  # gráficos generados por analitica_el_refugio.py (static/analitica/)
+    BASE_DIR / 'static',
 ]
+
+# Destino de `python manage.py collectstatic` (producción).
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
+# Caché en memoria local (por proceso). Para varios servidores/procesos en
+# producción conviene cambiarla por Redis o Memcached.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'el-refugio',
+        'TIMEOUT': 300,
+    }
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -156,8 +174,75 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'nicopruebaemail1@gmail.com'
-EMAIL_HOST_PASSWORD = 'cdcn cjxs ggfg gvha'
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = f'El Refugio <{EMAIL_HOST_USER}>'
-ALERTAS_EMAIL_DESTINATARIO = 'nicopruebaemail@gmail.com'
+ALERTAS_EMAIL_DESTINATARIO = config('ALERTAS_EMAIL_DESTINATARIO', default='')
+
+
+# -----------------------------------------------------------------------------
+# Logging
+#   Consola            -> INFO o superior
+#   logs/django.log    -> WARNING o superior de todo el sistema
+#   logs/auditoria.log -> INFO o superior de la app auditoria (notificaciones,
+#                         alertas y acciones importantes)
+# Los archivos rotan al llegar a 5 MB (se conservan 5 copias).
+# -----------------------------------------------------------------------------
+LOGS_DIR = BASE_DIR / 'logs'
+LOGS_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'detallado': {
+            'format': '[{asctime}] {levelname:<8} {name}: {message}',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'consola': {
+            'class': 'logging.StreamHandler',
+            'level': 'INFO',
+            'formatter': 'detallado',
+        },
+        'archivo_django': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'level': 'WARNING',
+            'filename': LOGS_DIR / 'django.log',
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
+            'encoding': 'utf-8',
+            'delay': True,
+            'formatter': 'detallado',
+        },
+        'archivo_auditoria': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'level': 'INFO',
+            'filename': LOGS_DIR / 'auditoria.log',
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
+            'encoding': 'utf-8',
+            'delay': True,
+            'formatter': 'detallado',
+        },
+    },
+    'root': {
+        'handlers': ['consola', 'archivo_django'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['consola', 'archivo_django'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'auditoria': {
+            'handlers': ['consola', 'archivo_django', 'archivo_auditoria'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

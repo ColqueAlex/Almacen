@@ -57,3 +57,7 @@ select[multiple].form-control { height: auto; padding: 8px; }
 .btn-cancel:hover { background: var(--border-color); }
 .btn-save { background: var(--primary); color: white; }
 .btn-save:hover { background: #1e3a8a; }
+/* RESPONSIVE: campos del formulario en 1 columna en móviles */
+@media (max-width: 768px) {
+    .form-row { grid-template-columns: 1fr; gap: 0; }
+}

@@ -11,12 +11,13 @@ al devolver, así que sin restarlas los reportes quedarían inflados.
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum, Value
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from auditoria.models import Configuracion
 from compras.models import DetallesCompra
+from productos.cache import categorias_productos
 from productos.models import LotesProducto, Productos
 from ventas.models import Clientes, DetallesVentas, DevolucionVenta, Ventas
 
@@ -38,9 +39,7 @@ def limite_stock_critico():
 
 
 def categorias_disponibles():
-    return list(
-        Productos.objects.exclude(categoria='').order_by('categoria').values_list('categoria', flat=True).distinct()
-    )
+    return categorias_productos()
 
 
 # ---------------------------------------------------------------------------

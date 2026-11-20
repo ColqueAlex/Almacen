@@ -103,3 +103,13 @@ tr:hover { background: var(--bg-body); }
 .page-btn { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; }
 .page-btn:hover { background: var(--bg-body); }
 .page-btn.active { background: var(--primary); color: white; }
+/* RESPONSIVE: 5 KPIs -> 3 columnas en tablets, 1 en móviles; arqueo en 1 columna */
+@media (max-width: 1024px) {
+    .kpi-grid-5 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+    .kpi-grid-5 { grid-template-columns: 1fr; }
+    .arqueo-card { grid-template-columns: 1fr; gap: 16px; }
+    .apertura-card { padding: 24px 16px; margin: 16px auto; }
+    .header-status { width: 100%; }
+}

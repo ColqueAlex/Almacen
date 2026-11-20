@@ -106,3 +106,13 @@ body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color
     .price-warning-actions { flex-direction: column-reverse; }
     .price-warning-actions button { width: 100%; }
 }
+/* RESPONSIVE: formulario y carrito apilados; campos en 1 columna */
+@media (max-width: 900px) {
+    .compras-grid { grid-template-columns: minmax(0, 1fr); }
+    .compras-grid > * { min-width: 0; }
+}
+@media (max-width: 768px) {
+    .form-row { grid-template-columns: minmax(0, 1fr); }
+    .cart-card { min-height: 0; }
+    .cart-table { min-width: 560px; }
+}

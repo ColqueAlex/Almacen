@@ -50,7 +50,7 @@
                     <td>
                         <div class="prod-info">
                             <div class="prod-avatar {% if cliente.saldo == 0 %}badge-success{% endif %}" style="{% if cliente.saldo == 0 %}background: var(--secondary-light); color: var(--secondary);{% endif %}">
-                                {{ cliente.nombre|first|upper }}{{ cliente.apellido|first|upper }}
+                                {{ cliente.nombre|first|upper }}{{ cliente.apellido|default:""|first|upper }}
                             </div>
                             <div class="prod-details"><h4>{{ cliente.nombre }} {{ cliente.apellido|default:"" }}</h4><span>Cuenta #{{ cliente.id_clientes|stringformat:"04d" }}</span></div>
                         </div>

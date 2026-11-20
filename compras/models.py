@@ -4,10 +4,10 @@ from productos.models import Proveedor, Productos
 from usuarios.models import Usuario
 
 class Compras(models.Model):
-    fecha = models.DateField(auto_now_add=True)
+    fecha = models.DateField(auto_now_add=True, db_index=True)
     hora = models.TimeField(auto_now_add=True)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    estado = models.CharField(max_length=20, default='Confirmado')
+    estado = models.CharField(max_length=20, default='Confirmado', db_index=True)
     id_proveedor = models.ForeignKey(Proveedor, on_delete=models.PROTECT, null=True, blank=True)
     id_usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT)
     motivo_anulacion = models.TextField(blank=True, null=True)

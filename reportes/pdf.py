@@ -21,7 +21,7 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 
 AZUL = colors.HexColor('#0d6efd')
 GRIS_CLARO = colors.HexColor('#f8f9fa')
-LOGO = settings.BASE_DIR / 'Almacen' / 'static' / 'img' / 'logo.png'
+LOGO = settings.BASE_DIR / 'static' / 'img' / 'logo.png'
 
 
 def _logo(alto=40):

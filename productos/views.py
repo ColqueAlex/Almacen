@@ -1,46 +1,51 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum, Q
+from django.db.models import Count, ProtectedError, Q
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
-from django.db.models import ProtectedError
+from .cache import categorias_productos
 from .models import Productos, Proveedor
 from usuarios.utils import requiere_perfil, _contiene_letras, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO
+
+# Un producto con stock entre 1 y este valor se considera "stock bajo".
+STOCK_BAJO_MAXIMO = 10
 
 @login_required
 @requiere_perfil('Administrador')
 def consultar(request):
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
-        
-    productos_qs = Productos.objects.all().order_by('nombre')
-    
+
     busqueda = request.GET.get('busqueda', '').strip()
     cat_filtro = request.GET.get('categoria', '')
     estado_filtro = request.GET.get('estado_stock', '')
 
+    productos_qs = Productos.objects.all()
     if busqueda:
         productos_qs = productos_qs.filter(Q(nombre__icontains=busqueda) | Q(marca__icontains=busqueda))
     if cat_filtro:
         productos_qs = productos_qs.filter(categoria__iexact=cat_filtro)
 
-    todos_los_productos = list(productos_qs)
-    
-    total_productos = len(todos_los_productos)
-    stock_bajo = sum(1 for p in todos_los_productos if 0 < p.stock <= 10)
-    sin_stock = sum(1 for p in todos_los_productos if p.stock == 0)
+    # Stock vigente calculado en la base de datos (una sola consulta, sin N+1).
+    productos_qs = productos_qs.con_stock()
+
+    kpis = productos_qs.aggregate(
+        total_productos=Count('id'),
+        stock_bajo=Count('id', filter=Q(stock_vigente__gt=0, stock_vigente__lte=STOCK_BAJO_MAXIMO)),
+        sin_stock=Count('id', filter=Q(stock_vigente=0)),
+        inactivos=Count('id', filter=Q(estado='inactivo')),
+    )
 
     if estado_filtro == 'bajo':
-        todos_los_productos = [p for p in todos_los_productos if 0 < p.stock <= 10]
+        productos_qs = productos_qs.filter(stock_vigente__gt=0, stock_vigente__lte=STOCK_BAJO_MAXIMO)
     elif estado_filtro == 'agotado':
-        todos_los_productos = [p for p in todos_los_productos if p.stock == 0]
+        productos_qs = productos_qs.filter(stock_vigente=0)
+    elif estado_filtro == 'normal':
+        productos_qs = productos_qs.filter(stock_vigente__gt=STOCK_BAJO_MAXIMO)
 
-    paginator = Paginator(todos_los_productos, 7)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-
-    categorias = Productos.objects.values_list('categoria', flat=True).distinct()
+    productos_qs = productos_qs.prefetch_related('proveedores').order_by('nombre', 'id')
+    page_obj = Paginator(productos_qs, 7).get_page(request.GET.get('page'))
 
     return render(request, "productos/productos.html", {
         'productos': page_obj,
@@ -48,11 +53,11 @@ def consultar(request):
         'busqueda': busqueda,
         'categoria_actual': cat_filtro,
         'estado_actual': estado_filtro,
-        'categorias': categorias,
-        'total_productos': total_productos,
-        'stock_bajo': stock_bajo,
-        'sin_stock': sin_stock,
-        'has_inactive_products': productos_qs.filter(estado='inactivo').exists(),
+        'categorias': categorias_productos(),
+        'total_productos': kpis['total_productos'],
+        'stock_bajo': kpis['stock_bajo'],
+        'sin_stock': kpis['sin_stock'],
+        'has_inactive_products': kpis['inactivos'] > 0,
         'proveedores': Proveedor.objects.filter(activo=True).order_by('nombre'),
     })
 
