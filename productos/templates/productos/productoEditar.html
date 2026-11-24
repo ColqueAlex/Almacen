@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static l10n %}
 
 {% block title %}Editar Producto{% endblock %}
 
@@ -37,7 +37,7 @@
                     </div>
                     <div class="input-group">
                         <label>Precio de Venta ($)</label>
-                        <input type="number" name="precio" min="0.01" step="0.01" class="form-control" required value="{{ producto.precio }}">
+                        <input type="number" name="precio" min="0.01" max="99999999.99" step="0.01" class="form-control" required value="{{ producto.precio|unlocalize }}">
                     </div>
                 </div>
 

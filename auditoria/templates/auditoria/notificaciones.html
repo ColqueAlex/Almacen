@@ -45,7 +45,7 @@
         {% for notif in notificaciones %}
             <div class="notif-item {% if notif.leida %}leida{% else %}no-leida{% endif %}">
                 <div class="notif-icon {{ notif.tipo }}">
-                    <span class="material-symbols-outlined">{% if notif.tipo == 'stock_bajo' %}inventory{% elif notif.tipo == 'limite_credito' %}credit_card_off{% elif notif.tipo == 'vencimiento' %}event_busy{% else %}notifications{% endif %}</span>
+                    <span class="material-symbols-outlined">{% if notif.tipo == 'stock_bajo' %}inventory{% elif notif.tipo == 'limite_credito' %}credit_card_off{% elif notif.tipo == 'vencimiento' %}event_busy{% elif notif.tipo == 'caja_abierta' %}lock_clock{% elif notif.tipo == 'limpieza_productos' %}cleaning_services{% else %}notifications{% endif %}</span>
                 </div>
                 <div class="notif-body">
                     <div class="notif-meta">

@@ -169,6 +169,11 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
 
 
+# --- Ticket de venta ---
+# Ancho del papel de la impresora térmica en mm (80 es el estándar; 58 para impresoras chicas).
+TICKET_ANCHO_MM = config('TICKET_ANCHO_MM', default=80, cast=int)
+
+
 # --- Correo electrónico (alertas de notificaciones) ---
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

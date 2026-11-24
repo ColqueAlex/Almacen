@@ -10,7 +10,7 @@ from decimal import Decimal
 import json
 from .models import Compras, DetallesCompra
 from productos.models import Productos, Proveedor, LotesProducto
-from usuarios.utils import requiere_perfil
+from usuarios.utils import MONTO_MAXIMO, MONTO_MAXIMO_TEXTO, leer_cantidad, leer_monto, requiere_perfil
 
 @login_required
 @requiere_perfil('Administrador')
@@ -65,12 +65,15 @@ def registro_compras(request):
                 lotes_en_compra = set()
 
                 for item in items:
-                    cantidad = int(item['cantidad'])
-                    precio_costo = Decimal(str(item['precio_costo']))
-                    if cantidad <= 0 or not precio_costo.is_finite() or precio_costo <= 0:
-                        raise ValueError('La cantidad y el costo deben ser mayores que cero.')
-
                     producto = productos[int(item['id_producto'])]
+                    cantidad, error = leer_cantidad(item.get('cantidad'), f'La cantidad de "{producto.nombre}"')
+                    if error:
+                        raise ValueError(error)
+                    precio_costo, error = leer_monto(item.get('precio_costo'), f'El costo de "{producto.nombre}"',
+                                                     permitir_cero=False)
+                    if error:
+                        raise ValueError(error)
+                    item['cantidad'], item['precio_costo'] = cantidad, precio_costo
                     lote_str = (item.get('lote') or 'Sin lote').strip() or 'Sin lote'
                     lote_normalizado = lote_str.casefold()
                     if lote_normalizado != 'sin lote':
@@ -94,6 +97,8 @@ def registro_compras(request):
                             precio_costo,
                         )
                     total_compra += (cantidad * precio_costo)
+                    if total_compra > MONTO_MAXIMO:
+                        raise ValueError(f'El total de la compra no puede superar {MONTO_MAXIMO_TEXTO}.')
 
                 precios_actualizados = {}
                 if costos_mayores:

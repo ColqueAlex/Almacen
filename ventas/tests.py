@@ -415,3 +415,86 @@ class ClienteTelefonoUnicoTests(TestCase):
         self.client.post(reverse('crear_cliente'), {'nombre': 'Uno', 'telefono': ''})
         self.client.post(reverse('crear_cliente'), {'nombre': 'Dos', 'telefono': ''})
         self.assertEqual(Clientes.objects.filter(telefono__isnull=True).count(), 2)
+
+
+# =============================================================================
+# Ticket de venta (impresora térmica)
+# =============================================================================
+import re
+from datetime import date, datetime
+
+from django.test import override_settings
+
+from .ticket import _renglones, generar_ticket_pdf
+
+
+def _medidas_pdf(contenido):
+    """(cantidad de páginas, ancho mm, alto mm) leyendo el PDF crudo."""
+    paginas = len(re.findall(rb'/Type /Page\b', contenido))
+    caja = re.search(rb'/MediaBox \[\s*[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)', contenido)
+    return paginas, round(float(caja.group(1)) / 72 * 25.4, 1), round(float(caja.group(2)) / 72 * 25.4, 1)
+
+
+class TicketVentaTests(TestCase):
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            dni='40100100', apellido='Ticket', nombre='Caja', correo='ticket@example.com',
+            password='x', username='cajero',
+        )
+        self.usuario.is_superuser = True
+        self.usuario.debe_cambiar_clave = False
+        self.usuario.save()
+        self.client.force_login(self.usuario)
+        self.caja = Caja.objects.create(usuario=self.usuario, monto_inicial=Decimal('0'))
+
+    def _venta(self, productos):
+        """productos: lista de (nombre, cantidad, precio)."""
+        total = sum(Decimal(precio) * cantidad for _, cantidad, precio in productos)
+        venta = Ventas.objects.create(id_caja=self.caja, total=total, fecha=date.today(),
+                                      hora=datetime.now().time(), metodo_pago='efectivo')
+        for nombre, cantidad, precio in productos:
+            producto, _ = Productos.objects.get_or_create(nombre=nombre, defaults={'categoria': 'Varios', 'precio': precio})
+            DetallesVentas.objects.create(venta=venta, producto=producto, cantidad=cantidad,
+                                          precio_unitario_venta=precio, subtotal=Decimal(precio) * cantidad)
+        return venta
+
+    def test_vista_devuelve_un_ticket_de_80mm_en_una_sola_hoja(self):
+        venta = self._venta([('Yerba', 2, '1500'), ('Azúcar', 1, '900')])
+        respuesta = self.client.get(reverse('generar_comprobante_pdf', args=[venta.pk]))
+        self.assertEqual(respuesta['Content-Type'], 'application/pdf')
+        paginas, ancho, alto = _medidas_pdf(respuesta.content)
+        self.assertEqual((paginas, ancho), (1, 80.0))
+        self.assertLess(alto, 150)   # un ticket corto, no una hoja A4 (297 mm)
+
+    def test_muchos_productos_alargan_el_ticket_sin_cortarlo_en_hojas(self):
+        venta = self._venta([(f'Producto número {i} con un nombre bastante largo para que ocupe dos líneas', 1, '100')
+                             for i in range(60)])
+        paginas, _, alto = _medidas_pdf(generar_ticket_pdf(venta))
+        self.assertEqual(paginas, 1)
+        self.assertGreater(alto, 300)
+
+    @override_settings(TICKET_ANCHO_MM=58)
+    def test_ancho_configurable_58mm(self):
+        venta = self._venta([('Yerba', 1, '99999.99')])
+        paginas, ancho, _ = _medidas_pdf(generar_ticket_pdf(venta))
+        self.assertEqual((paginas, ancho), (1, 58.0))
+
+    def test_nombres_con_caracteres_especiales_no_rompen_el_pdf(self):
+        venta = self._venta([('Galletitas <Oreo> & "Toddy"', 1, '500')])
+        self.assertTrue(generar_ticket_pdf(venta).startswith(b'%PDF'))
+
+    def test_venta_anulada_y_fiada_se_generan(self):
+        venta = self._venta([('Yerba', 1, '100')])
+        for estado in ('anulado', 'fiado'):
+            venta.estado_de_pago = estado
+            venta.save()
+            self.assertEqual(_medidas_pdf(generar_ticket_pdf(venta))[0], 1)
+
+    def test_un_producto_de_dos_lotes_es_un_solo_renglon(self):
+        venta = self._venta([('Yerba', 2, '1500')])
+        DetallesVentas.objects.create(venta=venta, producto=Productos.objects.get(nombre='Yerba'), cantidad=3,
+                                      precio_unitario_venta=Decimal('1500'), subtotal=Decimal('4500'))
+        renglones = _renglones(venta)
+        self.assertEqual(len(renglones), 1)
+        self.assertEqual(renglones[0]['cantidad'], 5)
+        self.assertEqual(renglones[0]['subtotal'], Decimal('7500'))

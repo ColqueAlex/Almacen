@@ -25,6 +25,8 @@ PERFIL_ADMIN = 'Administrador'
 LIMITE_STOCK_CRITICO = ('limite_stock_critico', 10)
 LIMITE_DEUDA_CLIENTE = ('limite_deuda_cliente', Decimal('100000'))
 DIAS_ALERTA_VENCIMIENTO = ('dias_alerta_vencimiento', 30)
+HORAS_ALERTA_CAJA_ABIERTA = ('horas_alerta_caja_abierta', 12)
+DIAS_INACTIVO_PARA_LIMPIEZA = ('dias_inactivo_para_limpieza', 365)
 
 
 def crear_notificacion(tipo, mensaje, perfil_nombre=PERFIL_ADMIN, prefijo_unico=None):
@@ -143,3 +145,64 @@ def verificar_vencimientos(dias=None):
         _, creada = crear_notificacion('vencimiento', mensaje, prefijo_unico=prefijo)
         creadas += int(creada)
     return creadas
+
+
+# ---------------------------------------------------------------------------
+# Regla 4: Caja abierta demasiado tiempo (probable olvido de cierre)
+# ---------------------------------------------------------------------------
+def horas_alerta_caja_abierta():
+    return Configuracion.obtener(*HORAS_ALERTA_CAJA_ABIERTA, tipo=int)
+
+
+def verificar_cajas_abiertas():
+    """
+    Avisa al Administrador por cada caja abierta hace más de N horas
+    (configuración "horas_alerta_caja_abierta", 12 por defecto).
+    Es barata (una consulta), así que se llama al entrar al inicio y a la caja;
+    las alertas no leídas de la misma caja no se duplican. Devuelve cuántas creó.
+    """
+    from caja.models import Caja
+
+    horas = horas_alerta_caja_abierta()
+    limite = timezone.now() - timedelta(hours=horas)
+    creadas = 0
+    for caja in Caja.objects.select_related('usuario').filter(estado='abierta', fecha_apertura__lte=limite):
+        abierta_hace = int((timezone.now() - caja.fecha_apertura).total_seconds() // 3600)
+        prefijo = f'Caja abierta: caja #{caja.pk} de "{caja.usuario.username}"'
+        mensaje = (f'{prefijo} lleva {abierta_hace} hora(s) abierta '
+                   f'(desde el {timezone.localtime(caja.fecha_apertura):%d/%m/%Y %H:%M}). '
+                   f'Si el vendedor olvidó cerrarla, un administrador puede forzar el cierre desde Gestión de Caja.')
+        _, creada = crear_notificacion('caja_abierta', mensaje, prefijo_unico=prefijo)
+        if creada:
+            enviar_correo_alerta(f'Caja #{caja.pk} abierta hace {abierta_hace} horas', mensaje)
+        creadas += int(creada)
+    return creadas
+
+
+# ---------------------------------------------------------------------------
+# Regla 5: Limpieza de catálogo (sugerencia, nunca borra nada)
+# ---------------------------------------------------------------------------
+PREFIJO_LIMPIEZA = 'Limpieza de catálogo:'
+
+
+def dias_inactivo_para_limpieza():
+    return Configuracion.obtener(*DIAS_INACTIVO_PARA_LIMPIEZA, tipo=int)
+
+
+def verificar_limpieza_productos():
+    """
+    Avisa al Administrador cuántos productos llevan más de N días inactivos
+    (config "dias_inactivo_para_limpieza", 365 por defecto) sin haber tenido
+    ventas, compras ni stock. Mantiene una sola notificación sin leer y le
+    actualiza el número. Devuelve la cantidad de candidatos.
+    """
+    from productos.models import Productos
+
+    dias = dias_inactivo_para_limpieza()
+    cantidad = Productos.objects.candidatos_limpieza(dias).count()
+    if cantidad:
+        mensaje = (f'{PREFIJO_LIMPIEZA} {cantidad} producto(s) llevan más de {dias} días inactivos y nunca '
+                   f'tuvieron ventas, compras ni stock. Podés revisarlos y eliminarlos desde Inventario → '
+                   f'"Sugeridos para eliminar".')
+        crear_notificacion('limpieza_productos', mensaje, prefijo_unico=PREFIJO_LIMPIEZA)
+    return cantidad

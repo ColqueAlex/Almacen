@@ -1,13 +1,19 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
-from decimal import Decimal, InvalidOperation
+from django.views.decorators.http import require_POST
+from decimal import Decimal
 from .models import Caja
 from ventas.models import Ventas, Pago, DevolucionVenta
-from usuarios.utils import requiere_perfil
+from usuarios.utils import leer_monto, requiere_perfil, _tiene_perfil
+from auditoria.notificaciones import horas_alerta_caja_abierta, verificar_cajas_abiertas
+
+# Largo mínimo del motivo de un cierre forzado.
+MOTIVO_MINIMO = 10
 
 def _sumar(queryset, campo):
     return queryset.aggregate(total=Sum(campo))['total'] or Decimal('0.00')
@@ -55,10 +61,21 @@ def _monto_esperado(caja, resumen):
 @login_required
 def gestion_caja(request):
     caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
-    page_obj = Paginator(
-        Caja.objects.all().order_by('-fecha_apertura', '-id_caja'),
-        7,
-    ).get_page(request.GET.get('page'))
+    solo_forzados = request.GET.get('forzados') == '1'
+    historial = Caja.objects.select_related('usuario', 'cerrada_por').order_by('-fecha_apertura', '-id_caja')
+    if solo_forzados:
+        historial = historial.filter(cierre_forzado=True)
+    page_obj = Paginator(historial, 7).get_page(request.GET.get('page'))
+
+    # Cajas abiertas por otros usuarios (bloquean la apertura de una nueva).
+    verificar_cajas_abiertas()
+    es_admin = _tiene_perfil(request.user, 'Administrador')
+    horas_alerta = horas_alerta_caja_abierta()
+    ahora = timezone.now()
+    cajas_de_otros = []
+    for caja in Caja.objects.select_related('usuario').filter(estado='abierta').exclude(usuario=request.user):
+        horas = (ahora - caja.fecha_apertura).total_seconds() / 3600
+        cajas_de_otros.append({'caja': caja, 'horas': int(horas), 'demorada': horas >= horas_alerta})
 
     ventas_efectivo = Decimal('0.00')
     ventas_transferencia = Decimal('0.00')
@@ -88,6 +105,11 @@ def gestion_caja(request):
         'monto_esperado': monto_esperado,
         'historial_cajas': page_obj,
         'page_obj': page_obj,
+        'solo_forzados': solo_forzados,
+        'cajas_de_otros': cajas_de_otros,
+        'es_admin': es_admin,
+        'horas_alerta': horas_alerta,
+        'motivo_minimo': MOTIVO_MINIMO,
     })
 
 @login_required
@@ -98,14 +120,9 @@ def abrir_caja(request):
             messages.warning(request, 'Ya existe una caja abierta en el sistema.')
             return redirect('gestion_caja')
 
-        try:
-            monto_inicial = Decimal(request.POST.get('monto_inicial', '0.00'))
-        except (InvalidOperation, TypeError, ValueError):
-            messages.error(request, 'El monto inicial debe ser un número válido igual o mayor que cero.')
-            return redirect('gestion_caja')
-
-        if not monto_inicial.is_finite() or monto_inicial < 0:
-            messages.error(request, 'El monto inicial no puede ser negativo.')
+        monto_inicial, error = leer_monto(request.POST.get('monto_inicial'), 'El monto inicial')
+        if error:
+            messages.error(request, error)
             return redirect('gestion_caja')
 
         Caja.objects.create(
@@ -128,14 +145,9 @@ def cerrar_caja(request):
             messages.error(request, 'No hay ninguna caja abierta para cerrar.')
             return redirect('gestion_caja')
 
-        try:
-            monto_real = Decimal(request.POST.get('monto_real', '0.00'))
-        except (InvalidOperation, TypeError, ValueError):
-            messages.error(request, 'El monto contado debe ser un número válido igual o mayor que cero.')
-            return redirect('gestion_caja')
-
-        if not monto_real.is_finite() or monto_real < 0:
-            messages.error(request, 'El monto contado no puede ser negativo.')
+        monto_real, error = leer_monto(request.POST.get('monto_real'), 'El monto contado')
+        if error:
+            messages.error(request, error)
             return redirect('gestion_caja')
 
         observaciones = request.POST.get('observaciones', '').strip()
@@ -163,20 +175,52 @@ def cerrar_caja(request):
 
 @login_required
 @requiere_perfil('Administrador')
+@require_POST
 def forzar_cierre_caja(request, id_caja):
-    if request.method == 'POST':
-        caja = get_object_or_404(Caja, pk=id_caja, estado='abierta')
-        
+    """
+    Cierre de una caja que su dueño dejó abierta. El administrador cuenta el
+    dinero y escribe el motivo: la diferencia se calcula igual que en un cierre
+    normal, así un faltante queda registrado en lugar de ocultarse.
+    """
+    motivo = ' '.join(request.POST.get('motivo', '').split())
+    monto_real, error = leer_monto(request.POST.get('monto_real'), 'El monto contado')
+
+    with transaction.atomic():
+        # Bloquea la fila: si el vendedor justo la está cerrando, no se pisan.
+        caja = get_object_or_404(Caja.objects.select_for_update().select_related('usuario'), pk=id_caja)
+        if caja.estado != 'abierta':
+            messages.info(request, f'La caja #{caja.id_caja} ya estaba cerrada.')
+            return redirect('gestion_caja')
+        if caja.usuario_id == request.user.pk:
+            error = 'Para cerrar tu propia caja usá el arqueo normal.'
+        elif len(motivo) < MOTIVO_MINIMO:
+            error = f'Indicá el motivo del cierre forzado (al menos {MOTIVO_MINIMO} caracteres).'
+        if error:
+            messages.error(request, error)
+            return redirect('gestion_caja')
+
         resumen = _resumen_caja(caja)
         monto_esperado = _monto_esperado(caja, resumen)
-        
+        diferencia = monto_real - monto_esperado
+
         caja.monto_final_esperado = monto_esperado
-        caja.monto_final_real = monto_esperado 
-        caja.diferencia = Decimal('0.00')
+        caja.monto_final_real = monto_real
+        caja.diferencia = diferencia
         caja.fecha_cierre = timezone.now()
         caja.estado = 'cerrada'
-        caja.observaciones = f"Cierre forzado por el Administrador {request.user.username}. (Caja original de {caja.usuario.username})"
+        caja.cierre_forzado = True
+        caja.cerrada_por = request.user
+        caja.motivo_cierre_forzado = motivo
+        caja.observaciones = (
+            f'Cierre forzado por {request.user.username} (caja de {caja.usuario.username}). Motivo: {motivo}'
+        )
         caja.save()
-        
-        messages.warning(request, f'Se forzó el cierre de la caja #{caja.id_caja} que pertenecía a {caja.usuario.username}.')
+
+    texto = f'Se forzó el cierre de la caja #{caja.id_caja} de {caja.usuario.username}. '
+    if diferencia == 0:
+        messages.warning(request, texto + 'El conteo coincide con lo esperado.')
+    elif diferencia > 0:
+        messages.warning(request, texto + f'Sobrante de ${diferencia:.2f}.')
+    else:
+        messages.error(request, texto + f'FALTANTE de ${abs(diferencia):.2f}.')
     return redirect('gestion_caja')

@@ -4,37 +4,100 @@
 {% block title %}Auditoría{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/auditoria.css' %}">
+    <link rel="stylesheet" href="{% static 'css/auditoria.css' %}?v=2">
 {% endblock %}
 
 {% block content %}
-    <div>
-        <span class="subtitle-badge">Seguridad y Control</span>
-        <h1 class="page-title">Registro de Actividades</h1>
+    <div class="audit-header">
+        <div>
+            <span class="subtitle-badge">Seguridad y Control</span>
+            <h1 class="page-title">Registro de Actividades</h1>
+            <p class="page-subtitle">Trazabilidad completa de operaciones, accesos y eventos del sistema.</p>
+        </div>
+        <a href="{% url 'exportar_auditoria' %}{% if querystring %}?{{ querystring }}{% endif %}" class="btn-action btn-primario">
+            <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Exportar CSV
+        </a>
     </div>
 
-    <form method="get" class="toolbar">
+    <!-- KPIs -->
+    <div class="audit-kpis">
+        <div class="audit-kpi">
+            <span class="material-symbols-outlined kpi-icon kpi-azul">receipt_long</span>
+            <div><h3>Eventos hoy</h3><div class="value">{{ kpis.eventos_hoy }}</div></div>
+        </div>
+        <div class="audit-kpi">
+            <span class="material-symbols-outlined kpi-icon kpi-verde">login</span>
+            <div><h3>Inicios de sesión hoy</h3><div class="value">{{ kpis.logins_hoy }}</div></div>
+        </div>
+        <a class="audit-kpi audit-kpi-link" href="?accion=login_fallido">
+            <span class="material-symbols-outlined kpi-icon kpi-naranja">gpp_maybe</span>
+            <div><h3>Intentos fallidos (24 h)</h3><div class="value">{{ kpis.fallidos_24h }}</div></div>
+        </a>
+        <a class="audit-kpi audit-kpi-link" href="?nivel=critico">
+            <span class="material-symbols-outlined kpi-icon kpi-rojo">crisis_alert</span>
+            <div><h3>Eventos críticos (7 días)</h3><div class="value">{{ kpis.criticos_7d }}</div></div>
+        </a>
+    </div>
+
+    {% if cuentas_atacadas %}
+    <div class="audit-alerta">
+        <span class="material-symbols-outlined">shield</span>
+        <div>
+            <strong>Actividad sospechosa en las últimas 24 horas</strong>
+            <ul>
+                {% for cuenta in cuentas_atacadas %}
+                <li>
+                    <a href="?accion=login_fallido&busqueda={{ cuenta.usuario_nombre|urlencode }}">"{{ cuenta.usuario_nombre|default:'(vacío)' }}"</a>:
+                    {{ cuenta.intentos }} intentos fallidos · último {{ cuenta.ultimo|date:"d/m H:i" }} hs
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- FILTROS -->
+    <form method="get" class="toolbar audit-filtros">
         <div class="search-box">
             <span class="material-symbols-outlined">search</span>
-            <input type="text" name="busqueda" value="{{ busqueda }}" placeholder="Buscar por usuario, módulo o descripción...">
+            <input type="text" name="busqueda" value="{{ filtros.busqueda }}" placeholder="Buscar por usuario, descripción, objeto o IP...">
         </div>
-        <div style="display: flex; gap: 8px;">
-            <select class="filter-select" name="accion" onchange="this.form.submit()">
-                <option value="">Todas las acciones</option>
-                {% for valor, etiqueta in acciones %}
-                    <option value="{{ valor }}" {% if accion_seleccionada == valor %}selected{% endif %}>{{ etiqueta }}</option>
-                {% endfor %}
-            </select>
-            <select class="filter-select" name="modulo" onchange="this.form.submit()">
-                <option value="">Todos los módulos</option>
-                {% for modulo in modulos %}
-                    <option value="{{ modulo }}" {% if modulo_seleccionado == modulo %}selected{% endif %}>{{ modulo }}</option>
-                {% endfor %}
-            </select>
-            {% if busqueda or accion_seleccionada or modulo_seleccionado %}
-                <a href="{% url 'listar_auditoria' %}" class="btn-action btn-detalle">Limpiar</a>
-            {% endif %}
-        </div>
+        <select class="filter-select" name="categoria" aria-label="Categoría">
+            <option value="">Todas las categorías</option>
+            {% for valor, etiqueta in categorias %}
+                <option value="{{ valor }}" {% if filtros.categoria == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+        </select>
+        <select class="filter-select" name="accion" aria-label="Acción">
+            <option value="">Todas las acciones</option>
+            {% for valor, etiqueta in acciones %}
+                <option value="{{ valor }}" {% if filtros.accion == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+        </select>
+        <select class="filter-select" name="nivel" aria-label="Nivel">
+            <option value="">Todos los niveles</option>
+            {% for valor, etiqueta in niveles %}
+                <option value="{{ valor }}" {% if filtros.nivel == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+        </select>
+        <select class="filter-select" name="modulo" aria-label="Módulo">
+            <option value="">Todos los módulos</option>
+            {% for modulo in modulos %}
+                <option value="{{ modulo }}" {% if filtros.modulo == modulo %}selected{% endif %}>{{ modulo }}</option>
+            {% endfor %}
+        </select>
+        <select class="filter-select" name="usuario" aria-label="Usuario">
+            <option value="">Todos los usuarios</option>
+            {% for nombre in usuarios %}
+                <option value="{{ nombre }}" {% if filtros.usuario == nombre %}selected{% endif %}>{{ nombre }}</option>
+            {% endfor %}
+        </select>
+        <label class="filtro-fecha">Desde <input type="date" name="desde" value="{{ filtros.desde }}" class="filter-select"></label>
+        <label class="filtro-fecha">Hasta <input type="date" name="hasta" value="{{ filtros.hasta }}" class="filter-select"></label>
+        <button type="submit" class="btn-action btn-primario">Filtrar</button>
+        {% if hay_filtros %}
+            <a href="{% url 'listar_auditoria' %}" class="btn-action btn-detalle">Limpiar</a>
+        {% endif %}
     </form>
 
     <div class="table-card">
@@ -43,161 +106,214 @@
                 <tr>
                     <th>Fecha y Hora</th>
                     <th>Usuario</th>
-                    <th>Módulo</th>
                     <th>Acción</th>
-                    <th style="text-align: right;">Detalles</th>
+                    <th>Descripción</th>
+                    <th>Origen</th>
+                    <th style="text-align: right;">Detalle</th>
                 </tr>
             </thead>
             <tbody>
                 {% for reg in registros %}
-                    <!-- Inyección segura de los JSON -->
-                    <script id="ant-data-{{ reg.id }}" type="application/json">{{ reg.datos_anteriores|default:"{}"|safe }}</script>
-                    <script id="new-data-{{ reg.id }}" type="application/json">{{ reg.datos_nuevos|default:"{}"|safe }}</script>
-
-                    <tr class="fila-auditoria" data-search="{{ reg.usuario.username|default:'sistema'|lower }} {{ reg.modelo|lower }} {{ reg.descripcion|lower }}">
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 13px;">
-                                <span class="material-symbols-outlined" style="font-size: 16px; color: var(--text-muted);">schedule</span>
-                                {{ reg.fecha_hora|date:"d M • H:i" }} hs
+                <tr class="fila-auditoria nivel-{{ reg.nivel }}">
+                    <td class="celda-fecha">
+                        <strong>{{ reg.fecha_hora|date:"d/m/Y" }}</strong>
+                        <span>{{ reg.fecha_hora|date:"H:i:s" }} hs</span>
+                    </td>
+                    <td>
+                        <div class="user-info">
+                            <div class="user-avatar {% if not reg.usuario %}avatar-anonimo{% endif %}">
+                                {{ reg.actor|first|upper }}
                             </div>
-                        </td>
-                        <td>
-                            <div class="user-info">
-                                <div class="user-avatar" style="{% if not reg.usuario %}background: var(--text-muted);{% endif %}">
-                                    {% if reg.usuario %}{{ reg.usuario.username|first|upper }}{% else %}S{% endif %}
-                                </div>
-                                <div class="user-details">
-                                    <h4>{% if reg.usuario %}{{ reg.usuario.username }}{% else %}Sistema{% endif %}</h4>
-                                    <span>{% if reg.usuario %}{{ reg.usuario.id_perfil.nombre|default:"Usuario" }}{% else %}Automático{% endif %}</span>
-                                </div>
+                            <div class="user-details">
+                                <h4>{{ reg.actor }}</h4>
+                                <span>
+                                    {% if reg.usuario %}{{ reg.usuario.id_perfil.nombre|default:"Usuario" }}
+                                    {% elif reg.usuario_nombre %}No autenticado
+                                    {% else %}Automático{% endif %}
+                                </span>
                             </div>
-                        </td>
-                        <td><span class="badge badge-gray">{{ reg.modelo }}</span></td>
-                        <td>
-                            {% if reg.accion == 'creacion' %}
-                                <span class="badge badge-creacion">Creación</span>
-                            {% elif reg.accion == 'modificacion' %}
-                                <span class="badge badge-modificacion">Modificación</span>
-                            {% else %}
-                                <span class="badge badge-eliminacion">Eliminación</span>
-                            {% endif %}
-                        </td>
-                        <td style="text-align: right;">
-                            <button class="btn-action btn-detalle btn-ver-detalle" 
-                                    data-id="{{ reg.id }}"
-                                    data-fecha="{{ reg.fecha_hora|date:'d/m/Y H:i' }}" 
-                                    data-usuario="{{ reg.usuario.username|default:'Sistema' }}" 
-                                    data-descripcion="{{ reg.descripcion }}">
-                                <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span> Ver detalle
-                            </button>
-                        </td>
-                    </tr>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-accion-{{ reg.accion }}">{{ reg.get_accion_display }}</span>
+                        <div class="sub-badges">
+                            <span class="chip-categoria">{{ reg.get_categoria_display }}</span>
+                            {% if reg.modelo %}<span class="chip-categoria">{{ reg.modelo }}</span>{% endif %}
+                            {% if reg.nivel != 'info' %}<span class="chip-nivel chip-{{ reg.nivel }}">{{ reg.get_nivel_display }}</span>{% endif %}
+                        </div>
+                    </td>
+                    <td class="celda-descripcion">
+                        {{ reg.descripcion|truncatechars:140 }}
+                        {% if reg.cambios %}<span class="chip-cambios">{{ reg.cambios|length }} campo{{ reg.cambios|length|pluralize }}</span>{% endif %}
+                    </td>
+                    <td class="celda-origen">
+                        {% if reg.ip %}<code>{{ reg.ip }}</code>{% else %}<span class="texto-muted">—</span>{% endif %}
+                    </td>
+                    <td style="text-align: right;">
+                        <button type="button" class="btn-action btn-detalle btn-ver-detalle" data-id="{{ reg.id }}">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span> Ver
+                        </button>
+                    </td>
+                </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                        {% if busqueda or accion_seleccionada or modulo_seleccionado %}
-                            No hay actividades que coincidan con los filtros.
-                        {% else %}
-                            No hay registros de auditoría todavía.
-                        {% endif %}
+                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        {% if hay_filtros %}No hay actividades que coincidan con los filtros.{% else %}No hay registros de auditoría todavía.{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        
+
         <div class="pagination">
-            <span class="page-info">Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            <span class="page-info">
+                {{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize }} · página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+            </span>
             <div class="page-buttons">
                 {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda|urlencode }}&accion={{ accion_seleccionada|urlencode }}&modulo={{ modulo_seleccionado|urlencode }}" class="page-btn">Anterior</a>
+                    <a href="?page=1{% if querystring %}&{{ querystring }}{% endif %}" class="page-btn" title="Primera">«</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if querystring %}&{{ querystring }}{% endif %}" class="page-btn">Anterior</a>
                 {% endif %}
-                <a href="#" class="page-btn active">{{ page_obj.number }}</a>
+                <span class="page-btn active">{{ page_obj.number }}</span>
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda|urlencode }}&accion={{ accion_seleccionada|urlencode }}&modulo={{ modulo_seleccionado|urlencode }}" class="page-btn">Siguiente</a>
+                    <a href="?page={{ page_obj.next_page_number }}{% if querystring %}&{{ querystring }}{% endif %}" class="page-btn">Siguiente</a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}{% if querystring %}&{{ querystring }}{% endif %}" class="page-btn" title="Última">»</a>
                 {% endif %}
             </div>
         </div>
     </div>
 
     <!-- MODAL DETALLE -->
-    <div class="modal-overlay" id="modalDetalle">
-        <div class="modal-content" style="width: 600px; max-width: 90%;">
+    <div class="modal-overlay" id="modalDetalle" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+        <div class="modal-content modal-auditoria">
             <div class="modal-header">
-                <h3>Detalle de Actividad</h3>
-                <button class="btn-cerrar-modal" onclick="document.getElementById('modalDetalle').style.display='none'">
+                <h3 id="modal-titulo">Detalle de Actividad <span id="modal-id" class="texto-muted"></span></h3>
+                <button type="button" class="btn-cerrar-modal" data-cerrar-modal aria-label="Cerrar">
                     <span class="material-symbols-outlined">close</span>
                 </button>
             </div>
             <div class="modal-body">
-                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px;">
-                    <div>
-                        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Usuario</div>
-                        <div id="modal-usuario" style="font-weight: 700; font-size: 14px;"></div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Fecha</div>
-                        <div id="modal-fecha" style="font-weight: 700; font-size: 14px;"></div>
-                    </div>
-                </div>
-                
-                <div style="margin-bottom: 15px;">
-                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Descripción</div>
-                    <div class="detail-box" id="modal-descripcion" style="background: var(--bg-body); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); font-weight: 500;"></div>
+                <div class="detalle-grid">
+                    <div><div class="detalle-label">Usuario</div><div class="detalle-valor" id="modal-usuario"></div><div class="texto-muted" id="modal-perfil"></div></div>
+                    <div><div class="detalle-label">Fecha y hora</div><div class="detalle-valor" id="modal-fecha"></div></div>
+                    <div><div class="detalle-label">Acción</div><div class="detalle-valor" id="modal-accion"></div><div id="modal-nivel"></div></div>
+                    <div><div class="detalle-label">Objeto afectado</div><div class="detalle-valor" id="modal-objeto"></div></div>
                 </div>
 
-                <div id="seccion-datos" style="display: none;">
-                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Cambios Registrados (JSON)</div>
-                    <pre id="modal-datos" style="background: #0f172a; color: #10b981; padding: 12px; border-radius: 8px; font-size: 11px; overflow-x: auto; max-height: 200px; white-space: pre-wrap;"></pre>
+                <div>
+                    <div class="detalle-label">Descripción</div>
+                    <div class="detail-box" id="modal-descripcion"></div>
+                </div>
+
+                <div id="seccion-cambios" hidden>
+                    <div class="detalle-label">Cambios registrados</div>
+                    <table class="tabla-cambios">
+                        <thead><tr><th>Campo</th><th>Antes</th><th>Después</th></tr></thead>
+                        <tbody id="modal-cambios"></tbody>
+                    </table>
+                </div>
+
+                <div>
+                    <div class="detalle-label">Origen de la petición</div>
+                    <div class="detalle-origen">
+                        <div><span class="material-symbols-outlined">lan</span> <span id="modal-ip"></span></div>
+                        <div><span class="material-symbols-outlined">route</span> <code id="modal-ruta"></code></div>
+                        <div><span class="material-symbols-outlined">devices</span> <span id="modal-agente"></span></div>
+                    </div>
                 </div>
             </div>
-            <div style="padding: 16px 20px; border-top: 1px solid var(--border-color); text-align: right;">
-                <button type="button" class="btn-action btn-detalle" onclick="document.getElementById('modalDetalle').style.display='none'">Cerrar</button>
+            <div class="modal-footer">
+                <button type="button" class="btn-action btn-detalle" data-cerrar-modal>Cerrar</button>
             </div>
         </div>
     </div>
+
+    {# Datos del modal serializados de forma segura (json_script escapa el contenido). #}
+    {{ detalles|json_script:"auditoria-detalles" }}
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    document.querySelectorAll('.btn-ver-detalle').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const id = this.dataset.id;
-            
-            document.getElementById('modal-usuario').textContent = this.dataset.usuario;
-            document.getElementById('modal-fecha').textContent = this.dataset.fecha;
-            document.getElementById('modal-descripcion').textContent = this.dataset.descripcion;
-            
-            const secDatos = document.getElementById('seccion-datos');
-            const preDatos = document.getElementById('modal-datos');
+(function () {
+    const datos = JSON.parse(document.getElementById('auditoria-detalles').textContent);
+    const porId = new Map(datos.map(d => [String(d.id), d]));
+    const modal = document.getElementById('modalDetalle');
+    const $ = id => document.getElementById(id);
 
-            const antElement = document.getElementById('ant-data-' + id);
-            const newElement = document.getElementById('new-data-' + id);
+    function texto(valor) {
+        if (valor === null || valor === undefined || valor === '') return '—';
+        if (typeof valor === 'boolean') return valor ? 'Sí' : 'No';
+        if (typeof valor === 'object') return JSON.stringify(valor);
+        return String(valor);
+    }
 
-            if (antElement && newElement) {
-                try {
-                    const antData = JSON.parse(antElement.textContent);
-                    const newData = JSON.parse(newElement.textContent);
-
-                    const tieneAnt = antData && Object.keys(antData).length > 0;
-                    const tieneNew = newData && Object.keys(newData).length > 0;
-
-                    if (tieneAnt || tieneNew) {
-                        secDatos.style.display = 'block';
-                        preDatos.textContent = "ANTES:\n" + (tieneAnt ? JSON.stringify(antData, null, 2) : "Sin datos") + "\n\nDESPUÉS:\n" + (tieneNew ? JSON.stringify(newData, null, 2) : "Sin datos");
-                    } else {
-                        secDatos.style.display = 'none';
-                    }
-                } catch (error) {
-                    console.error("Error al parsear JSON:", error);
-                    secDatos.style.display = 'none';
-                }
-            } else {
-                secDatos.style.display = 'none';
+    // Registros viejos (sin "cambios"): se comparan los datos crudos.
+    function cambiosDesdeDatos(antes, despues) {
+        const resultado = {};
+        const claves = new Set([...Object.keys(antes), ...Object.keys(despues)]);
+        claves.forEach(clave => {
+            const a = antes[clave], d = despues[clave];
+            if (JSON.stringify(a) !== JSON.stringify(d)) {
+                resultado[clave] = { campo: clave.replace(/_/g, ' '), antes: a, despues: d };
             }
-
-            document.getElementById('modalDetalle').style.display = 'flex';
         });
+        return resultado;
+    }
+
+    function celda(contenido, clase) {
+        const td = document.createElement('td');
+        td.textContent = contenido;
+        if (clase) td.className = clase;
+        return td;
+    }
+
+    function abrir(id) {
+        const d = porId.get(String(id));
+        if (!d) return;
+        $('modal-id').textContent = '#' + d.id;
+        $('modal-usuario').textContent = d.usuario;
+        $('modal-perfil').textContent = d.perfil;
+        $('modal-fecha').textContent = d.fecha + ' hs';
+        $('modal-accion').textContent = d.accion + ' · ' + d.categoria;
+        $('modal-objeto').textContent = d.objeto ? (d.modulo ? d.modulo + ': ' : '') + d.objeto : (d.modulo || '—');
+        $('modal-descripcion').textContent = d.descripcion;
+
+        const nivel = $('modal-nivel');
+        nivel.textContent = d.nivel === 'info' ? '' : d.nivel_texto;
+        nivel.className = d.nivel === 'info' ? '' : 'chip-nivel chip-' + d.nivel;
+
+        let cambios = d.cambios;
+        if (!Object.keys(cambios).length) cambios = cambiosDesdeDatos(d.datos_anteriores, d.datos_nuevos);
+        const cuerpo = $('modal-cambios');
+        cuerpo.replaceChildren();
+        Object.values(cambios).forEach(c => {
+            const fila = document.createElement('tr');
+            fila.append(
+                celda(texto(c.campo), 'campo'),
+                celda(texto(c.antes), 'valor-antes'),
+                celda(texto(c.despues), 'valor-despues'),
+            );
+            cuerpo.appendChild(fila);
+        });
+        $('seccion-cambios').hidden = cuerpo.children.length === 0;
+
+        $('modal-ip').textContent = d.ip || 'Sin IP (proceso interno)';
+        $('modal-ruta').textContent = d.ruta || '—';
+        $('modal-agente').textContent = d.user_agent || '—';
+
+        modal.style.display = 'flex';
+    }
+
+    function cerrar() { modal.style.display = 'none'; }
+
+    document.getElementById('tabla-auditoria').addEventListener('click', e => {
+        const btn = e.target.closest('.btn-ver-detalle');
+        if (btn) abrir(btn.dataset.id);
     });
+    modal.addEventListener('click', e => {
+        if (e.target === modal || e.target.closest('[data-cerrar-modal]')) cerrar();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrar(); });
+})();
 </script>
 {% endblock %}

@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash, authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import timedelta
@@ -12,6 +13,8 @@ from .models import Usuario, Perfil
 from productos.models import LotesProducto
 from .cache import perfiles_disponibles
 from .utils import requiere_perfil, _solo_letras_y_espacios
+from auditoria.servicios import registrar_evento
+from auditoria.notificaciones import verificar_cajas_abiertas, verificar_limpieza_productos
 
 @login_required
 def home(request):
@@ -22,7 +25,12 @@ def home(request):
 
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
-        
+
+    # Avisos al administrador: cajas abiertas demasiado tiempo y productos
+    # inactivos sin movimientos que se podrían eliminar.
+    verificar_cajas_abiertas()
+    verificar_limpieza_productos()
+
     hoy = timezone.now().date()
     limite = hoy + timedelta(days=30)
     
@@ -49,10 +57,18 @@ def login_usuario(request):
 
         if user_exists:
             if not user_exists.activo:
+                registrar_evento(
+                    'login_fallido', f'Intento de inicio de sesión en la cuenta inactiva "{username}"',
+                    modelo='Usuario', objeto=user_exists, usuario_nombre=username, request=request,
+                )
                 messages.error(request, 'Cuenta inactiva o bloqueada permanentemente. Contacte al administrador.')
                 return redirect('login')
 
             if user_exists.bloqueo_hasta and user_exists.bloqueo_hasta > timezone.now():
+                registrar_evento(
+                    'login_fallido', f'Intento de inicio de sesión en la cuenta bloqueada temporalmente "{username}"',
+                    modelo='Usuario', objeto=user_exists, usuario_nombre=username, request=request,
+                )
                 tiempo_restante = user_exists.bloqueo_hasta - timezone.now()
                 minutos = int(tiempo_restante.total_seconds() // 60)
                 segundos = int(tiempo_restante.total_seconds() % 60)
@@ -76,10 +92,21 @@ def login_usuario(request):
                 
                 if user_exists.intentos_fallidos >= 10:
                     user_exists.activo = False
+                    registrar_evento(
+                        'bloqueo_cuenta',
+                        f'Cuenta "{username}" bloqueada PERMANENTEMENTE tras {user_exists.intentos_fallidos} intentos fallidos',
+                        modelo='Usuario', objeto=user_exists, usuario_nombre=username, request=request,
+                    )
                     messages.error(request, 'Ha excedido el límite máximo de intentos. Su cuenta ha sido bloqueada permanentemente. Contacte al administrador.')
                 
                 elif user_exists.intentos_fallidos == 5:
                     user_exists.bloqueo_hasta = timezone.now() + timedelta(minutes=1)
+                    registrar_evento(
+                        'bloqueo_cuenta',
+                        f'Cuenta "{username}" bloqueada temporalmente (1 minuto) tras 5 intentos fallidos',
+                        modelo='Usuario', objeto=user_exists, usuario_nombre=username, request=request,
+                        nivel='advertencia',
+                    )
                     messages.error(request, 'Demasiados intentos fallidos. Su cuenta ha sido bloqueada temporalmente por 1 minutos.')
                 
                 elif user_exists.intentos_fallidos > 5:
@@ -120,6 +147,7 @@ def cambiar_clave(request):
         request.user.save()
 
         update_session_auth_hash(request, request.user)
+        registrar_evento('cambio_clave', 'Cambió su contraseña', modelo='Usuario', objeto=request.user, request=request)
 
         messages.success(request, 'Contraseña actualizada con éxito.')
         return redirect('consultar')
@@ -189,8 +217,13 @@ def crear_usuario(request):
                 'perfil_id': perfil_id,
             })
 
+        duplicado = None
         if Usuario.objects.filter(dni=dni).exists():
-            messages.error(request, f'Ya existe un usuario registrado con el DNI {dni}.')
+            duplicado = f'Ya existe un usuario registrado con el DNI {dni}.'
+        elif Usuario.objects.filter(correo__iexact=correo).exists():
+            duplicado = f'Ya existe un usuario registrado con el correo {correo}.'
+        if duplicado:
+            messages.error(request, duplicado)
             return render(request, 'usuarios/usuario_form.html', {
                 'perfiles': perfiles_disponibles(),
                 'es_edicion': False,
@@ -227,7 +260,23 @@ def crear_usuario(request):
 def editar_usuario(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
     if request.method == 'POST':
-        usuario.correo = request.POST.get('correo')
+        correo = (request.POST.get('correo') or '').strip()
+        error = None
+        try:
+            validate_email(correo)
+        except ValidationError:
+            error = 'El correo electrónico no es válido.'
+        if not error and Usuario.objects.filter(correo__iexact=correo).exclude(pk=usuario.pk).exists():
+            error = f'Ya existe otro usuario registrado con el correo {correo}.'
+        if error:
+            messages.error(request, error)
+            return render(request, 'usuarios/usuario_form.html', {
+                'usuario': usuario,
+                'perfiles': perfiles_disponibles(),
+                'es_edicion': True,
+            })
+
+        usuario.correo = correo
         perfil_id = request.POST.get('perfil')
         usuario.id_perfil = Perfil.objects.filter(id=perfil_id).first() if perfil_id else None
         usuario.save()
@@ -241,26 +290,43 @@ def editar_usuario(request, dni):
         'es_edicion': True,
     })
 
-@login_required
-@requiere_perfil('Administrador')
-def baja_usuario(request, dni):
-    usuario_destino = get_object_or_404(Usuario, dni=dni)
-    usuario_actual = request.user
-
+def _error_gestion_usuario(usuario_actual, usuario_destino, accion):
+    """
+    Reglas comunes para dar de baja, reactivar o restablecer la clave de otro usuario.
+    Devuelve el mensaje de error, o None si la operación está permitida.
+    """
     if usuario_actual.dni == usuario_destino.dni:
-        messages.error(request, 'No puedes darte de baja a ti mismo.')
-        return redirect('listar_usuarios')
+        return f'No puedes {accion} a ti mismo.'
+    if usuario_actual.is_superuser:
+        return None
 
     rol_actual = usuario_actual.id_perfil.nombre if usuario_actual.id_perfil else ''
     rol_destino = usuario_destino.id_perfil.nombre if usuario_destino.id_perfil else ''
 
     if rol_actual not in ['Administrador', 'Propietario']:
-        messages.error(request, 'No tienes permisos para dar de baja a ningún usuario.')
-        return redirect('listar_usuarios')
+        return f'No tienes permisos para {accion} a ningún usuario.'
+    if usuario_destino.is_superuser or rol_actual == rol_destino:
+        return f'No puedes {accion} a otro usuario con el mismo rango o superior ({rol_destino or "superusuario"}).'
+    return None
 
-    if rol_actual == rol_destino:
-        messages.error(request, f'No puedes dar de baja a otro usuario con el mismo rango ({rol_actual}).')
-        return redirect('listar_usuarios')
+
+def _rechazar_gestion(request, usuario_destino, mensaje):
+    registrar_evento(
+        'acceso_denegado', f'Intento rechazado sobre el usuario "{usuario_destino.username}": {mensaje}',
+        modelo='Usuario', objeto=usuario_destino, request=request,
+    )
+    messages.error(request, mensaje)
+    return redirect('listar_usuarios')
+
+
+@login_required
+@requiere_perfil('Administrador')
+@require_POST
+def baja_usuario(request, dni):
+    usuario_destino = get_object_or_404(Usuario, dni=dni)
+    error = _error_gestion_usuario(request.user, usuario_destino, 'dar de baja')
+    if error:
+        return _rechazar_gestion(request, usuario_destino, error)
 
     usuario_destino.activo = False
     usuario_destino.fecha_baja = timezone.now()
@@ -269,8 +335,14 @@ def baja_usuario(request, dni):
     return redirect('listar_usuarios')
 
 @login_required
+@requiere_perfil('Administrador')
+@require_POST
 def alta_usuario(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
+    error = _error_gestion_usuario(request.user, usuario, 'reactivar')
+    if error:
+        return _rechazar_gestion(request, usuario, error)
+
     usuario.activo = True
     usuario.fecha_baja = None
     usuario.intentos_fallidos = 0
@@ -280,15 +352,26 @@ def alta_usuario(request, dni):
     return redirect('listar_usuarios')
 
 @login_required
+@requiere_perfil('Administrador')
+@require_POST
 def restablecer_clave(request, dni):
-    if request.method == 'POST':
-        usuario = get_object_or_404(Usuario, dni=dni)
-        clave_temporal = str(usuario.dni)
-        usuario.set_password(str(usuario.dni))
-        usuario.debe_cambiar_clave = True
-        usuario.save()
-        messages.success(
-            request, 
-            f'Clave restablecida para {usuario.username}. Nueva clave temporal: {clave_temporal}'
-        )
+    usuario = get_object_or_404(Usuario, dni=dni)
+    error = _error_gestion_usuario(request.user, usuario, 'restablecer la clave')
+    if error:
+        return _rechazar_gestion(request, usuario, error)
+
+    clave_temporal = str(usuario.dni)
+    usuario.set_password(clave_temporal)
+    usuario.debe_cambiar_clave = True
+    usuario.save()
+    # Nunca se registra la clave temporal, solo que se restableció.
+    registrar_evento(
+        'restablecer_clave',
+        f'Restableció la contraseña del usuario "{usuario.username}" (deberá cambiarla al ingresar)',
+        modelo='Usuario', objeto=usuario, request=request,
+    )
+    messages.success(
+        request,
+        f'Clave restablecida para {usuario.username}. Nueva clave temporal: {clave_temporal}'
+    )
     return redirect('listar_usuarios')

@@ -113,3 +113,26 @@ tr:hover { background: var(--bg-body); }
     .apertura-card { padding: 24px 16px; margin: 16px auto; }
     .header-status { width: 100%; }
 }
+
+/* ===== Cajas abiertas por otros usuarios / cierre forzado ===== */
+.otras-cajas-card { background: var(--bg-surface, #fff); border: 1px solid #fde68a; border-left: 4px solid var(--tertiary, #d97706); border-radius: 12px; padding: 16px 20px; margin: 16px 0; }
+.otras-cajas-header { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.otras-cajas-header .material-symbols-outlined { color: var(--tertiary, #d97706); }
+.otras-cajas-header h3 { font-size: 16px; font-weight: 800; }
+.otras-cajas-header p { font-size: 13px; color: var(--text-muted, #64748b); margin-top: 2px; }
+.tabla-otras-cajas { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tabla-otras-cajas th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--text-muted, #64748b); padding: 6px 8px; }
+.tabla-otras-cajas td { padding: 8px; border-top: 1px solid var(--border-color, #e2e8f0); }
+.btn-forzar { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: none; border-radius: 8px; background: var(--danger, #ba1a1a); color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; }
+.btn-forzar:hover { filter: brightness(0.92); }
+.badge-forzado { display: inline-block; margin-top: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--danger-light, #ffdad6); color: var(--danger, #ba1a1a); cursor: help; }
+.filtro-forzados { font-size: 12px; font-weight: 600; color: var(--primary, #1e40af); text-decoration: none; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color, #e2e8f0); }
+.filtro-forzados.activo { background: var(--danger-light, #ffdad6); color: var(--danger, #ba1a1a); border-color: transparent; }
+.modal-forzar { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+.modal-forzar[hidden] { display: none; }
+.modal-forzar-panel { background: #fff; border-radius: 12px; padding: 24px; width: 460px; max-width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.modal-forzar-panel h3 { font-size: 18px; font-weight: 800; }
+.modal-forzar-panel label { font-size: 13px; font-weight: 600; margin-top: 6px; }
+.modal-forzar-ayuda { font-size: 13px; color: var(--text-muted, #64748b); line-height: 1.5; }
+.modal-forzar-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.btn-cancelar { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color, #e2e8f0); background: transparent; cursor: pointer; font-weight: 600; }

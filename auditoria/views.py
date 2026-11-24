@@ -1,59 +1,191 @@
+import csv
 import json
 import os
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Max, Q
+from django.http import HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from .models import Auditoria, Notificacion
+from .servicios import registrar_evento
 from .context_processors import filtro_notificaciones_usuario
 from usuarios.utils import requiere_perfil
+
+# --- Registro de auditoría -------------------------------------------------
+REGISTROS_POR_PAGINA = 25
+
+
+def _fecha_param(valor):
+    try:
+        return date.fromisoformat(valor) if valor else None
+    except ValueError:
+        return None
+
+
+def _filtrar_auditoria(params):
+    """Aplica los filtros del listado. Devuelve (queryset, filtros normalizados)."""
+    filtros = {
+        campo: params.get(campo, '').strip()
+        for campo in ('busqueda', 'categoria', 'accion', 'modulo', 'nivel', 'usuario', 'desde', 'hasta')
+    }
+    registros = Auditoria.objects.select_related('usuario', 'usuario__id_perfil')
+
+    if filtros['busqueda']:
+        texto = filtros['busqueda']
+        condicion = (
+            Q(usuario_nombre__icontains=texto) | Q(usuario__username__icontains=texto)
+            | Q(modelo__icontains=texto) | Q(descripcion__icontains=texto)
+            | Q(objeto_repr__icontains=texto) | Q(ip__icontains=texto)
+        )
+        if 'sistema' in texto.casefold():
+            condicion |= Q(usuario__isnull=True, usuario_nombre='')
+        registros = registros.filter(condicion)
+
+    for campo, opciones in (
+        ('categoria', Auditoria.CATEGORIA_CHOICES),
+        ('accion', Auditoria.ACCIONES_CHOICES),
+        ('nivel', Auditoria.NIVEL_CHOICES),
+    ):
+        if filtros[campo] in dict(opciones):
+            registros = registros.filter(**{campo: filtros[campo]})
+        else:
+            filtros[campo] = ''
+
+    if filtros['modulo']:
+        registros = registros.filter(modelo=filtros['modulo'])
+    if filtros['usuario']:
+        registros = registros.filter(usuario_nombre=filtros['usuario'])
+
+    desde, hasta = _fecha_param(filtros['desde']), _fecha_param(filtros['hasta'])
+    if desde:
+        registros = registros.filter(fecha_hora__date__gte=desde)
+    else:
+        filtros['desde'] = ''
+    if hasta:
+        registros = registros.filter(fecha_hora__date__lte=hasta)
+    else:
+        filtros['hasta'] = ''
+
+    return registros.order_by('-fecha_hora', '-id'), filtros
+
+
+def _detalle_para_modal(reg):
+    if reg.usuario:
+        perfil = getattr(reg.usuario.id_perfil, 'nombre', None) or 'Usuario'
+    elif reg.usuario_nombre:
+        perfil = 'No autenticado'
+    else:
+        perfil = 'Proceso automático'
+    return {
+        'id': reg.id,
+        'fecha': timezone.localtime(reg.fecha_hora).strftime('%d/%m/%Y %H:%M:%S'),
+        'usuario': reg.actor,
+        'perfil': perfil,
+        'accion': reg.get_accion_display(),
+        'categoria': reg.get_categoria_display(),
+        'nivel': reg.nivel,
+        'nivel_texto': reg.get_nivel_display(),
+        'modulo': reg.modelo,
+        'objeto': reg.objeto_repr,
+        'objeto_id': reg.objeto_id or '',
+        'descripcion': reg.descripcion,
+        'cambios': reg.cambios or {},
+        # Los registros anteriores a esta versión no tienen `cambios`: el modal
+        # arma la comparación a partir de los datos crudos.
+        'datos_anteriores': reg.datos_anteriores or {},
+        'datos_nuevos': reg.datos_nuevos or {},
+        'ip': reg.ip or '',
+        'user_agent': reg.user_agent,
+        'ruta': reg.ruta,
+    }
+
 
 @login_required
 @requiere_perfil('Administrador')
 def listar_auditoria(request):
-    busqueda = request.GET.get('busqueda', '').strip()
-    accion = request.GET.get('accion', '').strip()
-    modulo = request.GET.get('modulo', '').strip()
+    registros, filtros = _filtrar_auditoria(request.GET)
+    page_obj = Paginator(registros, REGISTROS_POR_PAGINA).get_page(request.GET.get('page'))
 
-    registros = Auditoria.objects.select_related('usuario').all()
+    ahora = timezone.now()
+    inicio_hoy = timezone.localtime(ahora).replace(hour=0, minute=0, second=0, microsecond=0)
+    hace_24h = ahora - timedelta(hours=24)
+    kpis = Auditoria.objects.aggregate(
+        eventos_hoy=Count('id', filter=Q(fecha_hora__gte=inicio_hoy)),
+        logins_hoy=Count('id', filter=Q(accion='login', fecha_hora__gte=inicio_hoy)),
+        fallidos_24h=Count('id', filter=Q(accion='login_fallido', fecha_hora__gte=hace_24h)),
+        criticos_7d=Count('id', filter=Q(nivel='critico', fecha_hora__gte=ahora - timedelta(days=7))),
+    )
+    # Cuentas con 3 o más intentos fallidos en las últimas 24 h (posible ataque).
+    cuentas_atacadas = (
+        Auditoria.objects.filter(accion='login_fallido', fecha_hora__gte=hace_24h)
+        .values('usuario_nombre').annotate(intentos=Count('id'), ultimo=Max('fecha_hora'))
+        .filter(intentos__gte=3).order_by('-intentos')[:5]
+    )
 
-    if busqueda:
-        busqueda_filtro = (
-            Q(usuario__username__icontains=busqueda)
-            | Q(modelo__icontains=busqueda)
-            | Q(descripcion__icontains=busqueda)
-        )
-        if 'sistema' in busqueda.casefold():
-            busqueda_filtro |= Q(usuario__isnull=True)
-        registros = registros.filter(busqueda_filtro)
-
-    acciones_validas = dict(Auditoria.ACCIONES_CHOICES)
-    if accion in acciones_validas:
-        registros = registros.filter(accion=accion)
-
-    if modulo:
-        registros = registros.filter(modelo=modulo)
-
-    registros = registros.order_by('-fecha_hora')
-    page_obj = Paginator(registros, 20).get_page(request.GET.get('page'))
+    parametros = request.GET.copy()
+    parametros.pop('page', None)
 
     return render(request, 'auditoria/auditoria.html', {
         'registros': page_obj,
         'page_obj': page_obj,
-        'busqueda': busqueda,
-        'accion_seleccionada': accion,
-        'modulo_seleccionado': modulo,
+        'detalles': [_detalle_para_modal(reg) for reg in page_obj],
+        'filtros': filtros,
+        'hay_filtros': any(filtros.values()),
+        'querystring': parametros.urlencode(),
+        'kpis': kpis,
+        'cuentas_atacadas': cuentas_atacadas,
         'acciones': Auditoria.ACCIONES_CHOICES,
-        'modulos': Auditoria.objects.order_by('modelo').values_list('modelo', flat=True).distinct(),
+        'categorias': Auditoria.CATEGORIA_CHOICES,
+        'niveles': Auditoria.NIVEL_CHOICES,
+        'modulos': Auditoria.objects.exclude(modelo='').order_by('modelo')
+                   .values_list('modelo', flat=True).distinct(),
+        'usuarios': Auditoria.objects.exclude(usuario_nombre='').order_by('usuario_nombre')
+                    .values_list('usuario_nombre', flat=True).distinct(),
     })
+
+
+def _celda_csv(valor):
+    # Evita la inyección de fórmulas al abrir el archivo en Excel.
+    if isinstance(valor, str) and valor[:1] in ('=', '+', '-', '@'):
+        return "'" + valor
+    return valor
+
+
+@login_required
+@requiere_perfil('Administrador')
+def exportar_auditoria(request):
+    """Descarga en CSV (compatible con Excel) los registros con los filtros actuales."""
+    registros, _ = _filtrar_auditoria(request.GET)
+    respuesta = HttpResponse(content_type='text/csv; charset=utf-8')
+    respuesta['Content-Disposition'] = f'attachment; filename="auditoria_{timezone.localdate():%Y%m%d}.csv"'
+    respuesta.write('﻿')  # BOM: Excel reconoce los acentos
+
+    escritor = csv.writer(respuesta, delimiter=';')
+    escritor.writerow(['Fecha y hora', 'Usuario', 'Categoría', 'Acción', 'Nivel', 'Módulo',
+                       'Objeto', 'Descripción', 'Cambios', 'IP', 'Navegador', 'Ruta'])
+    cantidad = 0
+    for reg in registros.iterator(chunk_size=500):
+        cambios = ' | '.join(
+            f"{c.get('campo', campo)}: {c.get('antes') or '—'} → {c.get('despues') or '—'}"
+            for campo, c in (reg.cambios or {}).items()
+        )
+        escritor.writerow([_celda_csv(v) for v in (
+            timezone.localtime(reg.fecha_hora).strftime('%d/%m/%Y %H:%M:%S'), reg.actor,
+            reg.get_categoria_display(), reg.get_accion_display(), reg.get_nivel_display(),
+            reg.modelo, reg.objeto_repr, reg.descripcion, cambios, reg.ip or '', reg.user_agent, reg.ruta,
+        )])
+        cantidad += 1
+
+    registrar_evento('exportacion', f'Exportó {cantidad} registro(s) de auditoría a CSV', modelo='Auditoría', request=request)
+    return respuesta
 
 
 @login_required

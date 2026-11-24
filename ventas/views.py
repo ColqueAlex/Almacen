@@ -8,18 +8,17 @@ from django.core.paginator import Paginator
 from django.utils import timezone
 from django.http import HttpResponse
 from datetime import timedelta, date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 import json
-from io import BytesIO
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from .models import Ventas, DetallesVentas, DevolucionVenta, Clientes, Pago
 from productos.cache import categorias_productos
 from productos.models import Productos, LotesProducto
 from caja.models import Caja
-from usuarios.utils import requiere_perfil, _solo_letras_y_espacios, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO
+from .ticket import generar_ticket_pdf
+from usuarios.utils import (
+    requiere_perfil, _solo_letras_y_espacios, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO, normalizar_texto,
+    MONTO_MAXIMO, MONTO_MAXIMO_TEXTO, leer_cantidad, leer_monto,
+)
 
 def _venta_dentro_del_plazo_de_devolucion(venta, ahora=None):
     ahora = ahora or timezone.now()
@@ -110,13 +109,9 @@ def registrar_venta(request):
             id_cliente_post = request.POST.get('id_cliente')
 
             if paga_con:
-                try:
-                    importe_recibido = Decimal(paga_con)
-                except InvalidOperation:
-                    messages.error(request, 'El importe de pago no es válido.')
-                    return redirect('registrar_venta')
-                if not importe_recibido.is_finite() or importe_recibido < 0:
-                    messages.error(request, 'El importe de pago no puede ser negativo.')
+                importe_recibido, error = leer_monto(paga_con, 'El importe con el que paga')
+                if error:
+                    messages.error(request, error)
                     return redirect('registrar_venta')
 
             items = json.loads(cart_data)
@@ -140,14 +135,22 @@ def registrar_venta(request):
 
                 for item in items:
                     producto = get_object_or_404(Productos, pk=item['id'])
-                    cantidad_necesaria = int(item['cantidad'])
-                    precio_unitario = Decimal(str(item['precio']))
+                    cantidad_necesaria, error = leer_cantidad(item.get('cantidad'), f'La cantidad de "{producto.nombre}"')
+                    if error:
+                        raise ValueError(error)
+                    precio_unitario, error = leer_monto(item.get('precio'), f'El precio de "{producto.nombre}"',
+                                                        permitir_cero=False)
+                    if error:
+                        raise ValueError(error)
+                    item['cantidad'], item['precio'] = cantidad_necesaria, precio_unitario
 
                     if producto.stock < cantidad_necesaria:
                         raise ValueError(f'Stock insuficiente para "{producto.nombre}". Disponible: {producto.stock}')
 
                     subtotal = cantidad_necesaria * precio_unitario
                     total_venta += subtotal
+                    if total_venta > MONTO_MAXIMO:
+                        raise ValueError(f'El total de la venta no puede superar {MONTO_MAXIMO_TEXTO}.')
 
                 venta = Ventas.objects.create(
                     id_caja=caja_activa,
@@ -456,14 +459,10 @@ def registrar_pago_cliente(request, id_cliente):
 
         cliente = get_object_or_404(Clientes, pk=id_cliente)
         
-        try:
-            monto_pago = Decimal(request.POST.get('monto', '0.00'))
-            metodo_pago = request.POST.get('metodo_pago', 'efectivo')
-        except Exception:
-            monto_pago = Decimal('0.00')
-
-        if monto_pago <= Decimal('0.00'):
-            messages.error(request, 'El monto a abonar debe ser mayor a 0.')
+        metodo_pago = request.POST.get('metodo_pago', 'efectivo')
+        monto_pago, error = leer_monto(request.POST.get('monto'), 'El monto a abonar', permitir_cero=False)
+        if error:
+            messages.error(request, error)
             return redirect('cuentas_clientes')
             
         if monto_pago > cliente.saldo:
@@ -493,8 +492,8 @@ def registrar_pago_cliente(request, id_cliente):
 @login_required
 def crear_cliente(request):
     if request.method == 'POST':
-        nombre = request.POST.get('nombre', '').strip()
-        apellido = request.POST.get('apellido', '').strip()
+        nombre = normalizar_texto(request.POST.get('nombre'))
+        apellido = normalizar_texto(request.POST.get('apellido'))
         telefono = request.POST.get('telefono', '').strip()
 
         if not nombre:
@@ -524,59 +523,10 @@ def crear_cliente(request):
 
 @login_required
 def generar_comprobante_pdf(request, id_venta):
-    venta = get_object_or_404(Ventas.objects.select_related('id_clientes'), pk=id_venta)
-    detalles = DetallesVentas.objects.filter(venta=venta).select_related('producto')
-
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-    story = []
-    styles = getSampleStyleSheet()
-
-    style_title = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1, spaceAfter=10)
-    style_sub = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=10, alignment=1, spaceAfter=20)
-    style_body = ParagraphStyle('Body', parent=styles['Normal'], fontSize=10, spaceAfter=5)
-
-    story.append(Paragraph("<b>ALMACÉN EL REFUGIO</b>", style_title))
-    story.append(Paragraph(f"Comprobante de Venta #{venta.id_ventas}<br/>Fecha: {venta.fecha.strftime('%d/%m/%Y')} - Hora: {venta.hora.strftime('%H:%M')}", style_sub))
-    
-    cliente_nombre = venta.cliente_info
-    story.append(Paragraph(f"<b>Cliente:</b> {cliente_nombre}", style_body))
-    story.append(Paragraph(f"<b>Estado de Pago:</b> {venta.get_estado_de_pago_display()}", style_body))
-    if venta.metodo_pago:
-        story.append(Paragraph(f"<b>Método de Pago:</b> {venta.get_metodo_pago_display()}", style_body))
-    story.append(Spacer(1, 10))
-
-    data = [["Producto", "Cant.", "P. Unitario", "Subtotal"]]
-    for detalle in detalles:
-        data.append([
-            detalle.producto.nombre,
-            str(detalle.cantidad),
-            f"${detalle.precio_unitario_venta:.2f}",
-            f"${detalle.subtotal:.2f}"
-        ])
-
-    data.append(["", "", "TOTAL:", f"${venta.total:.2f}"])
-
-    table = Table(data, colWidths=[250, 60, 100, 100])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
-        ('GRID', (0, 0), (-1, -2), 0.5, colors.lightgrey),
-        ('FONTNAME', (2, -1), (-1, -1), 'Helvetica-Bold'),
-        ('BACKGROUND', (2, -1), (-1, -1), colors.HexColor('#f8f9fa')),
-    ]))
-
-    story.append(table)
-    story.append(Spacer(1, 20))
-    story.append(Paragraph("¡Gracias por su compra!", style_sub))
-
-    doc.build(story)
-    buffer.seek(0)
-
-    response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="Comprobante_Venta_{venta.id_ventas}.pdf"'
+    """Ticket de la venta para impresora térmica (80 mm por defecto, ver ventas/ticket.py)."""
+    venta = get_object_or_404(
+        Ventas.objects.select_related('id_clientes', 'id_caja__usuario'), pk=id_venta,
+    )
+    response = HttpResponse(generar_ticket_pdf(venta), content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="Ticket_Venta_{venta.id_ventas}.pdf"'
     return response

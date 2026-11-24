@@ -33,6 +33,8 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from auditoria.servicios import registrar_evento
+
 logger = logging.getLogger('auditoria.backup')
 
 TIMEOUT_SEGUNDOS = 30 * 60
@@ -60,10 +62,12 @@ class Command(BaseCommand):
             archivo_zip = self._generar_backup(carpeta)
         except ErrorBackup as error:
             logger.error('Backup de la base de datos FALLIDO: %s', error)
+            registrar_evento('backup', f'Falló la copia de seguridad de la base de datos: {error}', nivel='critico')
             raise CommandError(str(error)) from None
 
         tamano_kb = archivo_zip.stat().st_size / 1024
         logger.info('Backup de la base de datos OK: %s (%.1f KB)', archivo_zip.name, tamano_kb)
+        registrar_evento('backup', f'Copia de seguridad generada: {archivo_zip.name} ({tamano_kb:.1f} KB)')
 
         # La rotación solo corre si el backup de hoy salió bien: si los backups
         # fallaran varios días seguidos, no se borran las últimas copias buenas.

@@ -25,6 +25,11 @@ class UsuarioManager(BaseUserManager):
             base_nombre = nombre.lower().strip()
             primera_letra = base_nombre[:1] if base_nombre else 'x'
             username = f"{base_apellido}{primera_letra}"
+            # Dos personas con el mismo apellido e inicial (perezj, perezj2, ...).
+            base_username, numero = username, 2
+            while self.model._default_manager.filter(username=username).exists():
+                username = f"{base_username}{numero}"
+                numero += 1
         user = self.model(
             dni=dni, apellido=apellido, nombre=nombre, correo=self.normalize_email(correo),
             username=username, id_perfil=id_perfil, debe_cambiar_clave=True,

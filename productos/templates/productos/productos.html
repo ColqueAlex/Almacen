@@ -4,7 +4,7 @@
 {% block title %}Inventario{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/inventario.css' %}">
+    <link rel="stylesheet" href="{% static 'css/inventario.css' %}?v=3">
 {% endblock %}
 
 {% block content %}
@@ -20,7 +20,7 @@
 
     <div class="kpi-grid">
         <div class="kpi-card">
-            <div class="kpi-info"><h3>Total Productos</h3><div class="value">{{ total_productos }}</div><div class="sub"><span class="material-symbols-outlined" style="font-size: 16px;">trending_up</span> En catálogo</div></div>
+            <div class="kpi-info"><h3>Total Productos</h3><div class="value">{{ total_productos }}</div><div class="sub"><span class="material-symbols-outlined" style="font-size: 16px;">trending_up</span> Activos{% if total_inactivos %} · {{ total_inactivos }} inactivo{{ total_inactivos|pluralize }}{% endif %}</div></div>
             <div class="kpi-icon blue"><span class="material-symbols-outlined">inventory_2</span></div>
         </div>
         <div class="kpi-card">
@@ -32,6 +32,17 @@
             <div class="kpi-icon red"><span class="material-symbols-outlined">production_quantity_limits</span></div>
         </div>
     </div>
+
+    {% if cantidad_limpieza and ver_actual != 'limpieza' %}
+    <div class="aviso-limpieza">
+        <span class="material-symbols-outlined">cleaning_services</span>
+        <div>
+            <strong>{{ cantidad_limpieza }} producto{{ cantidad_limpieza|pluralize }} sugerido{{ cantidad_limpieza|pluralize }} para eliminar.</strong>
+            Llevan más de {{ dias_limpieza }} días inactivos y nunca tuvieron ventas, compras ni stock.
+        </div>
+        <a href="?ver=limpieza" class="btn-revisar">Revisar</a>
+    </div>
+    {% endif %}
 
     <div class="toolbar">
         <div class="toolbar-left">
@@ -46,6 +57,12 @@
                         <option value="{{ cat }}" {% if categoria_actual == cat %}selected{% endif %}>{{ cat }}</option>
                     {% endfor %}
                 </select>
+                <select name="ver" class="filter-select" onchange="this.form.submit()" aria-label="Mostrar">
+                    <option value="activos" {% if ver_actual == 'activos' %}selected{% endif %}>Mostrar: Activos</option>
+                    <option value="inactivos" {% if ver_actual == 'inactivos' %}selected{% endif %}>Mostrar: Inactivos{% if total_inactivos %} ({{ total_inactivos }}){% endif %}</option>
+                    <option value="todos" {% if ver_actual == 'todos' %}selected{% endif %}>Mostrar: Todos</option>
+                    <option value="limpieza" {% if ver_actual == 'limpieza' %}selected{% endif %}>Sugeridos para eliminar{% if cantidad_limpieza %} ({{ cantidad_limpieza }}){% endif %}</option>
+                </select>
                 <select name="estado_stock" class="filter-select" onchange="this.form.submit()">
                     <option value="">Todos los Estados</option>
                     <option value="normal" {% if estado_actual == 'normal' %}selected{% endif %}>Stock Normal</option>
@@ -56,20 +73,45 @@
         </div>
     </div>
 
+    {% if ver_actual == 'limpieza' %}
+    <form method="post" action="{% url 'eliminar_seleccionados' %}" class="barra-limpieza" id="formLimpieza">
+        {% csrf_token %}
+        <input type="hidden" name="ver" value="limpieza">
+        <input type="hidden" name="selected_ids" id="selectedIds">
+        <div>
+            <strong>Sugeridos para eliminar</strong>
+            <p>Productos inactivos hace más de {{ dias_limpieza }} días que nunca tuvieron ventas, compras ni stock.
+               Borrarlos no afecta reportes ni historial. El sistema no borra nada solo: elegí cuáles eliminar.</p>
+        </div>
+        <label class="marcar-todos"><input type="checkbox" id="marcarTodos"> Marcar todos</label>
+        <button type="submit" class="btn-eliminar" id="btnEliminar" disabled>
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span> Eliminar seleccionados (<span id="cantSeleccionados">0</span>)
+        </button>
+    </form>
+    {% endif %}
+
     <div class="table-card">
-        <table>
+        <table id="tablaInventario">
             <thead>
                 <tr>
-                    <th>Nombre & SKU</th><th>Categoría</th><th>Proveedor</th><th>Precio / Costo</th><th>Nivel de Stock</th><th style="text-align: right;">Acciones</th>
+                    <th>Nombre & SKU</th><th>Categoría</th><th>Proveedor</th><th>Lotes</th><th>Precio / Costo</th><th>Nivel de Stock</th><th style="text-align: right;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 {% for producto in productos %}
-                <tr>
+                <tr{% if producto.estado == 'inactivo' %} class="fila-inactiva"{% endif %}>
                     <td>
                         <div class="prod-info">
+                            {% if ver_actual == 'limpieza' %}
+                                <input type="checkbox" class="check-limpieza" value="{{ producto.id }}" aria-label="Seleccionar {{ producto.nombre }}">
+                            {% endif %}
                             <div class="prod-avatar">{{ producto.nombre|first|upper }}</div>
-                            <div class="prod-details"><h4>{{ producto.nombre }}</h4><span>#ART-{{ producto.id|stringformat:"05d" }}</span></div>
+                            <div class="prod-details">
+                                <h4>{{ producto.nombre }}</h4><span>#ART-{{ producto.id|stringformat:"05d" }}</span>
+                                {% if producto.estado == 'inactivo' %}
+                                    <div class="badge-inactivo">Inactivo{% if producto.fecha_inactivacion %} desde {{ producto.fecha_inactivacion|date:"d/m/Y" }}{% endif %}</div>
+                                {% endif %}
+                            </div>
                         </div>
                     </td>
                     <td><span class="badge badge-gray">{{ producto.categoria }}</span></td>
@@ -80,6 +122,7 @@
                             <span style="font-size: 12px; color: var(--text-muted); font-style: italic;">Sin asignar</span>
                         {% endfor %}
                     </td>
+                    <td><span class="badge badge-gray">{{ producto.cantidad_lotes }} lote{{ producto.cantidad_lotes|pluralize }}</span></td>
                     <td><div class="price-info"><strong>${{ producto.precio }}</strong></div></td>
                     <td>
                         {% if producto.stock > 10 %}
@@ -89,11 +132,15 @@
                         {% else %}
                             <div class="stock-info"><div class="stock-header out"><span>0 un</span><span>Agotado</span></div><div class="stock-bar-bg"><div class="stock-bar out"></div></div></div>
                         {% endif %}
+                        {% if producto.lotes_vencidos %}
+                            <div class="aviso-vencidos" title="{{ producto.lotes_vencidos }} lote{{ producto.lotes_vencidos|pluralize }} vencido{{ producto.lotes_vencidos|pluralize }} con stock: no se descuentan en ventas">⚠️ Tiene lotes vencidos</div>
+                        {% endif %}
                     </td>
                     <td>
                         <div class="actions">
                             <form action="{% url 'cambiar_estado' producto.id %}" method="post" style="margin: 0;">
                                 {% csrf_token %}
+                                <input type="hidden" name="ver" value="{{ ver_actual }}">
                                 <button type="submit" class="btn-icon" title="Activar/Desactivar">
                                     <span class="material-symbols-outlined" style="font-size: 20px; color: {% if producto.estado == 'activo' %}var(--secondary){% else %}var(--danger){% endif %};">
                                         {% if producto.estado == 'activo' %}toggle_on{% else %}toggle_off{% endif %}
@@ -101,11 +148,46 @@
                                 </button>
                             </form>
                             <a href="{% url 'detalle' producto.id %}" class="btn-icon" title="Editar"><span class="material-symbols-outlined" style="font-size: 20px;">edit</span></a>
+                            <button type="button" class="btn-icon btn-toggle-lotes" title="Ver lotes" aria-expanded="false" aria-controls="lotes-{{ producto.id }}"><span class="material-symbols-outlined" style="font-size: 20px;">expand_more</span></button>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="lotes-row hidden" id="lotes-{{ producto.id }}">
+                    <td colspan="7">
+                        <div class="lotes-content">
+                            {% if producto.lotes.all %}
+                            <table class="lotes-table">
+                                <thead><tr><th>Lote</th><th>Fecha de Vencimiento</th><th>Stock Actual</th><th>Precio de Costo</th><th>Estado</th></tr></thead>
+                                <tbody>
+                                    {% for lote in producto.lotes.all %}
+                                    <tr{% if not lote.activo %} class="lote-inactivo"{% endif %}>
+                                        <td style="font-weight: 600;">{{ lote.lote }}</td>
+                                        <td>{{ lote.fecha_vencimiento|date:"d/m/Y"|default:"Sin vencimiento" }}</td>
+                                        <td>{{ lote.stock_actual }} un</td>
+                                        <td>${{ lote.precio_costo|floatformat:2 }}</td>
+                                        <td>
+                                            {% if not lote.activo %}
+                                                <span class="badge badge-gray">Inactivo</span>
+                                            {% elif lote.fecha_vencimiento and lote.fecha_vencimiento < hoy %}
+                                                <span class="badge badge-vencido">Vencido</span>
+                                            {% elif lote.fecha_vencimiento and lote.fecha_vencimiento < limite_por_vencer %}
+                                                <span class="badge badge-por-vencer">Por vencer</span>
+                                            {% else %}
+                                                <span class="badge badge-ok">OK</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                                <span class="lotes-vacio">Este producto todavía no tiene lotes cargados.</span>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">No se encontraron productos.</td></tr>
+                <tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">{% if ver_actual == 'limpieza' %}No hay productos sugeridos para eliminar.{% elif ver_actual == 'inactivos' %}No hay productos inactivos.{% else %}No se encontraron productos.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -116,11 +198,11 @@
             </span>
             <div class="page-buttons">
                 {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda|urlencode }}&categoria={{ categoria_actual|urlencode }}&estado_stock={{ estado_actual|urlencode }}" class="page-btn">Anterior</a>
+                    <a href="?page={{ page_obj.previous_page_number }}&busqueda={{ busqueda|urlencode }}&categoria={{ categoria_actual|urlencode }}&estado_stock={{ estado_actual|urlencode }}&ver={{ ver_actual }}" class="page-btn">Anterior</a>
                 {% endif %}
                 <a href="#" class="page-btn active" aria-current="page">{{ page_obj.number }}</a>
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda|urlencode }}&categoria={{ categoria_actual|urlencode }}&estado_stock={{ estado_actual|urlencode }}" class="page-btn">Siguiente</a>
+                    <a href="?page={{ page_obj.next_page_number }}&busqueda={{ busqueda|urlencode }}&categoria={{ categoria_actual|urlencode }}&estado_stock={{ estado_actual|urlencode }}&ver={{ ver_actual }}" class="page-btn">Siguiente</a>
                 {% endif %}
             </div>
         </div>
@@ -139,7 +221,7 @@
                     <input type="text" name="nombre" placeholder="Nombre del producto" required style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
                     <input type="text" name="categoria" placeholder="Categoría" required style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
                     <input type="text" name="marca" placeholder="Marca (Opcional)" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
-                    <input type="number" name="precio" step="0.01" placeholder="Precio de venta ($)" required style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
+                    <input type="number" name="precio" min="0.01" max="99999999.99" step="0.01" placeholder="Precio de venta ($)" required style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
                     <label style="font-size: 13px; font-weight: 600;">Proveedores:</label>
                     <select name="proveedores" multiple size="3" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc;">
                         {% for prov in proveedores %}<option value="{{ prov.id }}">{{ prov.nombre }}</option>{% endfor %}
@@ -154,5 +236,42 @@
 
 {% block extra_js %}
 <script>
+    // Selección de productos sugeridos para eliminar (solo en esa vista).
+    (function () {
+        const form = document.getElementById('formLimpieza');
+        if (!form) return;
+        const checks = Array.from(document.querySelectorAll('.check-limpieza'));
+        const todos = document.getElementById('marcarTodos');
+        const boton = document.getElementById('btnEliminar');
+        function actualizar() {
+            const elegidos = checks.filter(c => c.checked);
+            document.getElementById('cantSeleccionados').textContent = elegidos.length;
+            document.getElementById('selectedIds').value = elegidos.map(c => c.value).join(',');
+            boton.disabled = elegidos.length === 0;
+            todos.checked = elegidos.length > 0 && elegidos.length === checks.length;
+        }
+        checks.forEach(c => c.addEventListener('change', actualizar));
+        todos.addEventListener('change', () => { checks.forEach(c => { c.checked = todos.checked; }); actualizar(); });
+        form.addEventListener('submit', e => {
+            const n = checks.filter(c => c.checked).length;
+            if (!confirm(`¿Eliminar definitivamente ${n} producto(s)? Esta acción no se puede deshacer.`)) e.preventDefault();
+        });
+    })();
+
+    // Despliega el detalle de lotes. Encapsulado y limitado a la tabla de
+    // inventario para no interferir con otros scripts de la página.
+    (function () {
+        const tabla = document.getElementById('tablaInventario');
+        if (!tabla) return;
+        tabla.addEventListener('click', function (event) {
+            const btn = event.target.closest('.btn-toggle-lotes');
+            if (!btn || !tabla.contains(btn)) return;
+            const fila = document.getElementById(btn.getAttribute('aria-controls'));
+            if (!fila) return;
+            const abierta = !fila.classList.toggle('hidden');
+            btn.setAttribute('aria-expanded', abierta ? 'true' : 'false');
+            btn.querySelector('span').textContent = abierta ? 'expand_less' : 'expand_more';
+        });
+    })();
 </script>
 {% endblock %}

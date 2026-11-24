@@ -320,3 +320,185 @@ class PanelAnaliticaTests(TestCase):
         self.assertContains(respuesta, 'value="2026-11-01"')
         self.assertContains(respuesta, 'value="2026-11-12"')
         self.assertContains(respuesta, 'del 01/11/2026')
+
+
+# =============================================================================
+# AUDITORÍA DETALLADA: seguridad, cambios campo a campo, vista y exportación
+# =============================================================================
+from auditoria.servicios import registrar_evento
+
+
+class AuditoriaSeguridadTests(TestCase):
+    def setUp(self):
+        self.perfil_admin, _ = Perfil.objects.get_or_create(nombre='Administrador')
+        self.perfil_vendedor, _ = Perfil.objects.get_or_create(nombre='Vendedor')
+        self.usuario = Usuario.objects.create_user(
+            dni='30111222', apellido='Perez', nombre='Ana', correo='ana@example.com',
+            password='clave-correcta', username='perezana', id_perfil=self.perfil_vendedor,
+        )
+        self.usuario.debe_cambiar_clave = False
+        self.usuario.save()
+        Auditoria.objects.all().delete()
+
+    def _login(self, username, password, **extra):
+        datos = {'REMOTE_ADDR': '10.0.0.5', 'HTTP_USER_AGENT': 'NavegadorTest/1.0'}
+        datos.update(extra)
+        return self.client.post(reverse('login'), {'username': username, 'password': password}, **datos)
+
+    def test_login_exitoso_registra_ip_y_navegador(self):
+        self._login('perezana', 'clave-correcta')
+        evento = Auditoria.objects.get(accion='login')
+        self.assertEqual(evento.usuario, self.usuario)
+        self.assertEqual(evento.categoria, 'seguridad')
+        self.assertEqual(evento.ip, '10.0.0.5')
+        self.assertEqual(evento.user_agent, 'NavegadorTest/1.0')
+        self.assertIn('POST /login/', evento.ruta)
+        # Resetear intentos / last_login no debe generar una "modificación" de usuario.
+        self.assertFalse(Auditoria.objects.filter(accion='modificacion').exists())
+
+    def test_login_fallido_con_usuario_existente_e_inexistente(self):
+        self._login('perezana', 'mala')
+        self._login('fantasma', 'mala')
+        fallidos = Auditoria.objects.filter(accion='login_fallido').order_by('id')
+        self.assertEqual(fallidos.count(), 2)
+        self.assertEqual(fallidos[0].usuario_nombre, 'perezana')
+        self.assertEqual(fallidos[0].objeto_id, self.usuario.pk)
+        self.assertEqual(fallidos[0].nivel, 'advertencia')
+        self.assertIsNone(fallidos[0].usuario)
+        self.assertIn('inexistente', fallidos[1].descripcion)
+        self.assertNotIn('mala', ''.join(fallidos.values_list('descripcion', flat=True)))
+
+    def test_cinco_intentos_registran_bloqueo_temporal(self):
+        for _ in range(5):
+            self._login('perezana', 'mala')
+        bloqueo = Auditoria.objects.get(accion='bloqueo_cuenta')
+        self.assertIn('temporalmente', bloqueo.descripcion)
+        # Un nuevo intento con la cuenta bloqueada también queda registrado.
+        self._login('perezana', 'clave-correcta')
+        self.assertTrue(Auditoria.objects.filter(accion='login_fallido', descripcion__icontains='bloqueada').exists())
+        self.assertFalse(Auditoria.objects.filter(accion='login').exists())
+
+    def test_diez_intentos_bloqueo_permanente_critico(self):
+        self.usuario.intentos_fallidos = 9
+        self.usuario.save()
+        self._login('perezana', 'mala')
+        bloqueo = Auditoria.objects.get(accion='bloqueo_cuenta')
+        self.assertEqual(bloqueo.nivel, 'critico')
+        self.assertIn('PERMANENTEMENTE', bloqueo.descripcion)
+
+    def test_logout_y_cambio_de_clave(self):
+        self.client.force_login(self.usuario)
+        self.client.post(reverse('cambiar_clave'), {'nueva_clave': 'otra-clave-123', 'confirmar_clave': 'otra-clave-123'})
+        self.client.post(reverse('logout'))
+        self.assertTrue(Auditoria.objects.filter(accion='cambio_clave', usuario=self.usuario).exists())
+        self.assertTrue(Auditoria.objects.filter(accion='logout', usuario=self.usuario).exists())
+
+    def test_acceso_denegado(self):
+        self.client.force_login(self.usuario)
+        self.client.get(reverse('listar_auditoria'))
+        evento = Auditoria.objects.get(accion='acceso_denegado')
+        self.assertEqual(evento.usuario, self.usuario)
+        self.assertIn('/auditoria/', evento.descripcion)
+
+    def test_la_contrasena_nunca_se_guarda(self):
+        nuevo = Usuario.objects.create_user(dni='30999888', apellido='Gomez', nombre='Luis',
+                                            correo='luis@example.com', password='secreta')
+        alta = Auditoria.objects.get(accion='creacion', modelo='Usuario', objeto_id=nuevo.pk)
+        self.assertNotIn('password', alta.datos_nuevos)
+        self.assertNotIn('password', alta.cambios or {})
+
+    def test_ip_falsificada_por_cabecera_se_ignora(self):
+        self._login('perezana', 'clave-correcta', HTTP_X_FORWARDED_FOR='1.2.3.4')
+        self.assertEqual(Auditoria.objects.get(accion='login').ip, '10.0.0.5')
+
+
+class AuditoriaCambiosTests(TestCase):
+    def setUp(self):
+        Auditoria.objects.all().delete()
+
+    def test_modificacion_guarda_antes_y_despues_legibles(self):
+        producto = Productos.objects.create(nombre='Yerba', categoria='Almacen', precio=Decimal('100'))
+        producto.precio = '150.50'   # como llega desde un formulario
+        producto.estado = 'inactivo'
+        producto.save()
+        evento = Auditoria.objects.get(accion='modificacion', modelo='Producto')
+        self.assertEqual(evento.cambios['precio'], {'campo': 'Precio', 'antes': '100.00', 'despues': '150.50'})
+        self.assertEqual(evento.cambios['estado']['despues'], 'Inactivo')
+        self.assertEqual(evento.objeto_repr, 'Yerba')
+
+    def test_guardar_sin_cambios_no_registra(self):
+        producto = Productos.objects.create(nombre='Yerba', categoria='Almacen', precio=Decimal('100'))
+        producto.precio = '100.00'
+        producto.save()
+        self.assertFalse(Auditoria.objects.filter(accion='modificacion').exists())
+
+    def test_descuento_de_stock_por_venta_no_ensucia_la_auditoria(self):
+        producto = Productos.objects.create(nombre='Yerba', categoria='Almacen', precio=Decimal('100'))
+        lote = LotesProducto.objects.create(id_producto=producto, lote='L1', stock_actual=10, precio_costo=Decimal('50'))
+        lote.stock_actual = 7
+        lote.save(update_fields=['stock_actual'])
+        self.assertFalse(Auditoria.objects.filter(modelo='Lote', accion='modificacion').exists())
+
+    def test_anulacion_de_venta(self):
+        cajero = Usuario.objects.create_user(dni='30555444', apellido='Caja', nombre='Pepe',
+                                             correo='c@example.com', password='x')
+        caja = Caja.objects.create(usuario=cajero, monto_inicial=Decimal('1000'))
+        venta = Ventas.objects.create(id_caja=caja, total=Decimal('250'), fecha=date.today(), hora=datetime.now().time())
+        venta.estado_de_pago = 'anulado'
+        venta.save()
+        evento = Auditoria.objects.get(accion='anulacion')
+        self.assertEqual(evento.modelo, 'Venta')
+        self.assertEqual(evento.nivel, 'advertencia')
+        self.assertTrue(Auditoria.objects.filter(accion='creacion', modelo='Caja', descripcion__icontains='Abrió').exists())
+
+    def test_eliminacion_guarda_los_datos(self):
+        producto = Productos.objects.create(nombre='Fideos', categoria='Almacen', precio=Decimal('80'))
+        producto.delete()
+        evento = Auditoria.objects.get(accion='eliminacion')
+        self.assertEqual(evento.cambios['nombre']['antes'], 'Fideos')
+        self.assertIsNone(evento.cambios['nombre']['despues'])
+
+
+class AuditoriaVistaTests(TestCase):
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(
+            dni='20111222', apellido='Admin', nombre='Root', correo='root@example.com',
+            password='x', username='rootadmin',
+        )
+        self.admin.is_superuser = True
+        self.admin.debe_cambiar_clave = False
+        self.admin.save()
+        self.client.force_login(self.admin)
+        Auditoria.objects.all().delete()   # incluye el login de force_login
+
+    def test_kpis_y_filtro_por_categoria(self):
+        registrar_evento('login_fallido', 'Intento 1', usuario_nombre='x')
+        registrar_evento('bloqueo_cuenta', 'Bloqueo', usuario_nombre='x')
+        registrar_evento('creacion', 'Alta de algo', modelo='Producto')
+        respuesta = self.client.get(reverse('listar_auditoria'), {'categoria': 'seguridad'})
+        self.assertEqual(respuesta.status_code, 200)
+        descripciones = {r.descripcion for r in respuesta.context['registros']}
+        self.assertEqual(descripciones, {'Intento 1', 'Bloqueo'})
+        self.assertEqual(respuesta.context['kpis']['fallidos_24h'], 1)
+        self.assertEqual(respuesta.context['kpis']['criticos_7d'], 1)
+
+    def test_descripcion_maliciosa_no_rompe_el_html(self):
+        registrar_evento('creacion', '</script><script>alert(1)</script>', modelo='Producto')
+        respuesta = self.client.get(reverse('listar_auditoria'))
+        self.assertNotContains(respuesta, '<script>alert(1)</script>')
+
+    def test_exportar_csv_respeta_filtros_y_neutraliza_formulas(self):
+        registrar_evento('creacion', '=HYPERLINK("http://malo")', modelo='Producto')
+        registrar_evento('login', 'Inició sesión', usuario_nombre='otro')
+        respuesta = self.client.get(reverse('exportar_auditoria'), {'modulo': 'Producto'})
+        self.assertEqual(respuesta.status_code, 200)
+        contenido = respuesta.content.decode('utf-8-sig')
+        self.assertIn("'=HYPERLINK", contenido)
+        self.assertNotIn('Inició sesión', contenido)
+        self.assertTrue(Auditoria.objects.filter(accion='exportacion', usuario=self.admin).exists())
+
+    def test_registros_de_auditoria_son_solo_lectura_en_admin(self):
+        from django.contrib.admin.sites import site
+        modelo_admin = site._registry[Auditoria]
+        self.assertFalse(modelo_admin.has_change_permission(None))
+        self.assertFalse(modelo_admin.has_delete_permission(None))

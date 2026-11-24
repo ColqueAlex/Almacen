@@ -90,3 +90,77 @@ tr:hover { background: var(--bg-body); }
 .detail-box { background: var(--bg-body); padding: 12px; border-radius: 8px; font-size: 14px; line-height: 1.5; color: var(--text-main); border: 1px solid var(--border-color); }
 .btn-cerrar-modal { background: transparent; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; }
 .btn-cerrar-modal:hover { color: var(--danger); }
+/* ===================== AUDITORÍA DETALLADA ===================== */
+.audit-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+.btn-primario { background: var(--primary); color: white; padding: 9px 14px; font-size: 13px; }
+.btn-primario:hover { background: #1e3a8a; }
+.texto-muted { color: var(--text-muted); font-size: 12px; font-weight: 500; }
+
+/* KPIs */
+.audit-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.audit-kpi { background: var(--bg-surface); border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 14px; color: inherit; text-decoration: none; border: 1px solid transparent; }
+.audit-kpi-link:hover { border-color: var(--border-color); transform: translateY(-1px); transition: 0.15s; }
+.audit-kpi h3 { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.audit-kpi .value { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 24px; font-weight: 800; }
+.kpi-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.kpi-azul { background: var(--primary-light); color: var(--primary); }
+.kpi-verde { background: var(--secondary-light); color: var(--secondary); }
+.kpi-naranja { background: var(--tertiary-light); color: var(--tertiary); }
+.kpi-rojo { background: var(--danger-light); color: var(--danger); }
+
+/* Alerta de actividad sospechosa */
+.audit-alerta { display: flex; gap: 12px; background: #fff1f0; border: 1px solid #ffc9c2; color: #7f1d1d; border-radius: 12px; padding: 14px 16px; font-size: 13px; }
+.audit-alerta ul { margin: 6px 0 0 18px; line-height: 1.7; }
+.audit-alerta a { color: var(--danger); font-weight: 700; }
+
+/* Filtros */
+.audit-filtros { justify-content: flex-start; }
+.audit-filtros .search-box { flex-basis: 100%; }
+.filtro-fecha { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+
+/* Tabla */
+.fila-auditoria td { vertical-align: top; }
+.fila-auditoria.nivel-advertencia td:first-child { box-shadow: inset 3px 0 0 var(--tertiary); }
+.fila-auditoria.nivel-critico td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.fila-auditoria.nivel-critico { background: #fffafa; }
+.celda-fecha strong { display: block; font-size: 13px; }
+.celda-fecha span { font-size: 12px; color: var(--text-muted); }
+.celda-descripcion { font-size: 13px; line-height: 1.45; max-width: 420px; }
+.celda-origen code, .detalle-origen code { font-size: 12px; background: var(--bg-body); border: 1px solid var(--border-color); padding: 2px 6px; border-radius: 4px; }
+.avatar-anonimo { background: var(--text-muted); }
+.sub-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chip-categoria, .chip-nivel, .chip-cambios { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 4px; background: var(--bg-body); color: var(--text-muted); border: 1px solid var(--border-color); }
+.chip-cambios { margin-left: 6px; white-space: nowrap; }
+.chip-advertencia { background: var(--tertiary-light); color: var(--tertiary); border-color: #fde68a; }
+.chip-critico { background: var(--danger-light); color: var(--danger); border-color: #ffb4a9; }
+
+/* Badges por acción */
+.badge-accion-creacion, .badge-accion-login { background: var(--secondary-light); color: var(--secondary); }
+.badge-accion-modificacion, .badge-accion-cambio_clave { background: var(--tertiary-light); color: var(--tertiary); }
+.badge-accion-eliminacion, .badge-accion-anulacion, .badge-accion-cierre_forzado, .badge-accion-bloqueo_cuenta { background: var(--danger-light); color: var(--danger); }
+.badge-accion-login_fallido, .badge-accion-acceso_denegado, .badge-accion-restablecer_clave { background: #fff7ed; color: #c2410c; }
+.badge-accion-logout, .badge-accion-backup, .badge-accion-exportacion { background: var(--primary-light); color: var(--primary); }
+
+/* Modal */
+.modal-auditoria { width: 760px; max-width: 94vw; max-height: 90vh; display: flex; flex-direction: column; }
+.modal-auditoria .modal-body { overflow-y: auto; gap: 16px; }
+.modal-footer { padding: 14px 20px; border-top: 1px solid var(--border-color); text-align: right; }
+.detalle-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border-color); }
+.detalle-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.4px; margin-bottom: 4px; }
+.detalle-valor { font-weight: 700; font-size: 14px; word-break: break-word; }
+#modal-nivel { margin-top: 4px; display: inline-block; }
+.tabla-cambios { width: 100%; min-width: 0; border: 1px solid var(--border-color); border-radius: 8px; border-collapse: separate; border-spacing: 0; overflow: hidden; }
+.tabla-cambios th { padding: 8px 12px; font-size: 10px; }
+.tabla-cambios td { padding: 8px 12px; font-size: 13px; vertical-align: top; word-break: break-word; }
+.tabla-cambios td.campo { font-weight: 600; width: 28%; }
+.tabla-cambios td.valor-antes { color: #9f1239; background: #fff1f2; text-decoration: line-through; text-decoration-color: rgba(159,18,57,0.35); }
+.tabla-cambios td.valor-despues { color: #065f46; background: #f0fdf4; font-weight: 600; }
+.detalle-origen { display: flex; flex-direction: column; gap: 6px; font-size: 13px; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; }
+.detalle-origen > div { display: flex; align-items: flex-start; gap: 8px; word-break: break-all; }
+.detalle-origen .material-symbols-outlined { font-size: 16px; color: var(--text-muted); }
+
+@media (max-width: 640px) {
+    .detalle-grid { grid-template-columns: 1fr; }
+    .audit-filtros .filter-select, .filtro-fecha { flex: 1 1 100%; }
+}

@@ -10,7 +10,7 @@ una vez por día. Las alertas no leídas de un mismo lote no se duplican.
 """
 from django.core.management.base import BaseCommand, CommandError
 
-from auditoria.notificaciones import verificar_vencimientos
+from auditoria.notificaciones import verificar_cajas_abiertas, verificar_limpieza_productos, verificar_vencimientos
 
 
 class Command(BaseCommand):
@@ -28,3 +28,7 @@ class Command(BaseCommand):
             raise CommandError('--dias debe ser un número positivo.')
         creadas = verificar_vencimientos(dias)
         self.stdout.write(self.style.SUCCESS(f'Alertas de vencimiento generadas: {creadas}'))
+        cajas = verificar_cajas_abiertas()
+        self.stdout.write(self.style.SUCCESS(f'Alertas de cajas abiertas demasiado tiempo: {cajas}'))
+        candidatos = verificar_limpieza_productos()
+        self.stdout.write(self.style.SUCCESS(f'Productos sugeridos para eliminar: {candidatos}'))

@@ -13,4 +13,10 @@ class Caja(models.Model):
     fecha_cierre = models.DateTimeField(null=True, blank=True)
     estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='abierta', db_index=True)
     observaciones = models.TextField(blank=True, null=True)
+    # Cierre hecho por un administrador porque el dueño de la caja no la cerró.
+    cierre_forzado = models.BooleanField(default=False, db_index=True)
+    cerrada_por = models.ForeignKey(
+        Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name='cajas_cerradas_forzadamente',
+    )
+    motivo_cierre_forzado = models.TextField(blank=True, default='')
     def __str__(self): return f"Caja #{self.id_caja} ({self.get_estado_display()}) - {self.usuario.username}"

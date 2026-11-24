@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static l10n %}
 
 {% block title %}Procesar Venta{% endblock %}
 
@@ -36,7 +36,7 @@
             <div class="product-grid" id="product-list" data-page-size="12">
                 {% for prod in productos %}
                     {% if prod.stock > 0 %}
-                    <article class="product-card" data-id="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-precio="{{ prod.precio }}" data-stock="{{ prod.stock }}" data-categoria="{{ prod.categoria }}">
+                    <article class="product-card" data-id="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-precio="{{ prod.precio|unlocalize }}" data-stock="{{ prod.stock|unlocalize }}" data-categoria="{{ prod.categoria }}">
                         <div>
                             <span class="stock-badge">Stock: {{ prod.stock }}</span>
                             <h3 class="product-name">{{ prod.nombre }}</h3>
@@ -106,7 +106,7 @@
                     <div class="cash-calc">
                         <div>
                             <label style="font-size: 12px; font-weight: 600;">Paga con ($)</label>
-                            <input type="number" id="paga-con" name="paga_con" class="cash-input" min="0" step="0.01" placeholder="0.00">
+                            <input type="number" id="paga-con" name="paga_con" class="cash-input" min="0" max="99999999.99" step="0.01" placeholder="0.00">
                         </div>
                         <div>
                             <label style="font-size: 12px; font-weight: 600;">Vuelto</label>

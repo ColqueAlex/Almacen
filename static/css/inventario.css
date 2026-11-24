@@ -112,3 +112,34 @@ tr:hover { background: var(--bg-body); }
     .kpi-grid { grid-template-columns: 1fr; }
     .kpi-info .value { font-size: 26px; }
 }
+
+/* DETALLE DE LOTES (FILA DESPLEGABLE) */
+.badge-ok { background: var(--secondary-light); color: var(--secondary); }
+.badge-por-vencer { background: var(--tertiary-light); color: var(--tertiary); }
+.badge-vencido { background: var(--danger-light); color: var(--danger); }
+.lotes-row.hidden { display: none; }
+.lotes-row > td { background: #f8fafc; padding: 0; border-bottom: 2px solid var(--border-color); }
+.lotes-content { padding: 16px 20px; overflow-x: auto; }
+.lotes-table { width: 100%; border-collapse: collapse; background: white; border: 1px solid var(--border-color); border-radius: 8px; }
+.lotes-table th { background: white; border-bottom: 1px solid var(--border-color); font-size: 10px; padding: 10px 14px; text-align: left; }
+.lotes-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border-color); }
+.lotes-table tr:last-child td { border-bottom: none; }
+.lotes-table tr.lote-inactivo td { color: var(--text-muted); }
+.lotes-vacio { font-size: 13px; color: var(--text-muted); font-style: italic; }
+.aviso-vencidos { margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--danger); }
+
+/* LIMPIEZA DE CATÁLOGO / PRODUCTOS INACTIVOS */
+.aviso-limpieza { display: flex; align-items: center; gap: 12px; background: var(--primary-light); color: var(--text-main); border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 16px; font-size: 13px; }
+.aviso-limpieza .material-symbols-outlined { color: var(--primary); }
+.aviso-limpieza > div { flex: 1; }
+.btn-revisar { background: var(--primary); color: white; text-decoration: none; font-weight: 700; font-size: 12px; padding: 8px 14px; border-radius: 8px; white-space: nowrap; }
+.barra-limpieza { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--bg-surface, #fff); border: 1px solid var(--border-color); border-left: 4px solid var(--danger); border-radius: 12px; padding: 14px 18px; }
+.barra-limpieza > div { flex: 1; min-width: 260px; }
+.barra-limpieza p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.marcar-todos { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-eliminar { display: inline-flex; align-items: center; gap: 6px; background: var(--danger); color: white; border: none; border-radius: 8px; padding: 9px 14px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.btn-eliminar:disabled { opacity: 0.45; cursor: not-allowed; }
+.check-limpieza { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
+.fila-inactiva .prod-avatar { filter: grayscale(1); opacity: 0.6; }
+.fila-inactiva .prod-details h4 { color: var(--text-muted); }
+.badge-inactivo { display: inline-block; margin-top: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--bg-body); color: var(--text-muted); border: 1px solid var(--border-color); }

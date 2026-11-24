@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
@@ -45,6 +47,22 @@ class ProductosQuerySet(models.QuerySet):
             stock_vigente=Coalesce(Subquery(stock_lotes, output_field=models.IntegerField()), 0)
         )
 
+    def sin_movimientos(self):
+        """Productos que nunca tuvieron ventas, compras ni lotes (stock)."""
+        return self.filter(
+            detalles_ventas__isnull=True,   # ventas
+            detallescompra__isnull=True,    # compras
+            lotes__isnull=True,             # stock ingresado por cualquier vía
+        )
+
+    def candidatos_limpieza(self, dias):
+        """
+        Inactivos hace más de `dias` y sin ningún movimiento: se pueden borrar
+        sin perder historial. Nunca se borran solos, solo se sugieren.
+        """
+        limite = timezone.now() - timedelta(days=dias)
+        return self.filter(estado='inactivo', fecha_inactivacion__lte=limite).sin_movimientos()
+
 
 class Productos(models.Model):
     ESTADO_CHOICES = [('activo', 'Activo'), ('inactivo', 'Inactivo')]
@@ -54,10 +72,22 @@ class Productos(models.Model):
     precio = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='activo', db_index=True)
     proveedores = models.ManyToManyField(Proveedor, blank=True, related_name='productos_que_suministra')
+    # Desde cuándo está inactivo (se completa y limpia solo al cambiar el estado).
+    fecha_inactivacion = models.DateTimeField(null=True, blank=True, db_index=True)
 
     objects = ProductosQuerySet.as_manager()
 
     def __str__(self): return f"{self.nombre} ({self.marca}) - ${self.precio}"
+
+    def save(self, *args, **kwargs):
+        if self.estado == 'inactivo' and self.fecha_inactivacion is None:
+            self.fecha_inactivacion = timezone.now()
+        elif self.estado != 'inactivo':
+            self.fecha_inactivacion = None
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'estado' in update_fields:
+            kwargs['update_fields'] = set(update_fields) | {'fecha_inactivacion'}
+        super().save(*args, **kwargs)
 
     def lotes_vigentes(self):
         return self.lotes.filter(filtro_lotes_vigentes())

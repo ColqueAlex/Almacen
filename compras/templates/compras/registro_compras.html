@@ -1,4 +1,4 @@
-{% load static %}
+{% load static l10n %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -107,7 +107,7 @@
                                 <select id="producto-select" class="form-control">
                                     <option value="" disabled selected>Seleccione producto...</option>
                                     {% for prod in productos %}
-                                        <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-marca="{{ prod.marca }}" data-precio="{{ prod.precio }}">
+                                        <option value="{{ prod.id }}" data-nombre="{{ prod.nombre }}" data-marca="{{ prod.marca }}" data-precio="{{ prod.precio|unlocalize }}">
                                             {{ prod.nombre }} ({{ prod.marca }}) - Venta: ${{ prod.precio }}
                                         </option>
                                     {% endfor %}

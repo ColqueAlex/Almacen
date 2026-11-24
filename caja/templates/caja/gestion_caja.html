@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static l10n %}
 
 {% block title %}Gestión de Caja{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/caja.css' %}">
+    <link rel="stylesheet" href="{% static 'css/caja.css' %}?v=2">
 {% endblock %}
 
 {% block content %}
@@ -25,6 +25,51 @@
         </div>
         {% endif %}
     </div>
+
+    {% if cajas_de_otros %}
+    <!-- CAJAS ABIERTAS POR OTROS USUARIOS -->
+    <div class="otras-cajas-card">
+        <div class="otras-cajas-header">
+            <span class="material-symbols-outlined">warning</span>
+            <div>
+                <h3>Cajas abiertas por otros usuarios</h3>
+                {% if es_admin %}
+                    <p>Mientras haya una caja abierta no se puede abrir otra. Si el vendedor olvidó cerrarla, podés forzar el cierre contando el dinero.</p>
+                {% else %}
+                    <p>Mientras esta caja siga abierta no se puede abrir otra. Pedile a un administrador que la cierre.</p>
+                {% endif %}
+            </div>
+        </div>
+        <table class="tabla-otras-cajas">
+            <thead><tr><th>Caja</th><th>Usuario</th><th>Abierta desde</th><th>Tiempo abierta</th>{% if es_admin %}<th></th>{% endif %}</tr></thead>
+            <tbody>
+                {% for item in cajas_de_otros %}
+                <tr>
+                    <td><strong>#{{ item.caja.id_caja }}</strong></td>
+                    <td>{{ item.caja.usuario.username }}</td>
+                    <td>{{ item.caja.fecha_apertura|date:"d/m/Y H:i" }} hs</td>
+                    <td>
+                        {% if item.demorada %}
+                            <span class="badge badge-faltante" title="Supera el límite de {{ horas_alerta }} horas">{{ item.horas }} h · posible olvido</span>
+                        {% else %}
+                            {{ item.horas }} h
+                        {% endif %}
+                    </td>
+                    {% if es_admin %}
+                    <td style="text-align: right;">
+                        <button type="button" class="btn-forzar"
+                                data-url="{% url 'forzar_cierre_caja' item.caja.id_caja %}"
+                                data-caja="{{ item.caja.id_caja }}" data-usuario="{{ item.caja.usuario.username }}">
+                            <span class="material-symbols-outlined" style="font-size: 18px;">lock_clock</span> Forzar cierre
+                        </button>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 
     {% if caja_activa %}
         <!-- KPIs -->
@@ -60,7 +105,7 @@
                     <div><h2 style="font-size: 16px; font-weight: 700;">Arqueo y Cierre</h2></div>
                 </div>
                 <label>Monto Real Contado ($) <span style="font-weight: 400; color: var(--text-muted);">(efectivo en caja + transferencias recibidas)</span></label>
-                <input type="number" min="0" step="0.01" name="monto_real" id="inputEfectivoReal" class="form-control" placeholder="0.00" required value="{{ monto_esperado|floatformat:2 }}">
+                <input type="number" min="0" max="99999999.99" step="0.01" name="monto_real" id="inputEfectivoReal" class="form-control" placeholder="0.00" required value="{{ monto_esperado|floatformat:"2u" }}">
             </div>
             <div class="input-group">
                 <label>Diferencia</label>
@@ -85,7 +130,7 @@
                 {% csrf_token %}
                 <div class="input-group" style="text-align: left;">
                     <label>Monto Inicial ($)</label>
-                    <input type="number" min="0" step="0.01" name="monto_inicial" class="form-control" required value="0.00" style="font-size: 20px; text-align: center;">
+                    <input type="number" min="0" max="99999999.99" step="0.01" name="monto_inicial" class="form-control" required value="0.00" style="font-size: 20px; text-align: center;">
                 </div>
                 <button type="submit" class="btn-abrir" style="width: 100%; margin-top: 16px;">Abrir Caja</button>
             </form>
@@ -94,8 +139,13 @@
 
     <!-- HISTORIAL -->
     <div class="table-card" style="margin-top: 20px;">
-        <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
+        <div style="padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
             <h3 style="font-size: 18px; font-weight: 800;">Historial de Cierres</h3>
+            {% if solo_forzados %}
+                <a href="{% url 'gestion_caja' %}" class="filtro-forzados activo">Mostrando solo cierres forzados · Ver todos</a>
+            {% else %}
+                <a href="?forzados=1" class="filtro-forzados">Ver solo cierres forzados</a>
+            {% endif %}
         </div>
         <table>
             <thead>
@@ -106,19 +156,19 @@
                 <tr>
                     <td><span style="padding: 4px 8px; background: var(--bg-body); border-radius: 4px; font-family: monospace; font-weight: 700;">#{{ c.id_caja }}</span></td>
                     <td><div style="font-weight: 600;">{{ c.fecha_apertura|date:"d M • H:i" }}</div><div style="font-size: 11px; color: var(--text-muted);">{{ c.usuario.username }}</div></td>
-                    <td>{% if c.fecha_cierre %}<div style="font-weight: 600;">{{ c.fecha_cierre|date:"d M • H:i" }}</div>{% else %}<span style="color: var(--secondary); font-weight: 600;">En curso</span>{% endif %}</td>
+                    <td>{% if c.fecha_cierre %}<div style="font-weight: 600;">{{ c.fecha_cierre|date:"d M • H:i" }}</div>{% if c.cierre_forzado %}<span class="badge-forzado" title="Motivo: {{ c.motivo_cierre_forzado }}">Forzado por {{ c.cerrada_por.username|default:"administrador" }}</span>{% endif %}{% else %}<span style="color: var(--secondary); font-weight: 600;">En curso</span>{% endif %}</td>
                     <td style="text-align: right; font-family: monospace;">${{ c.monto_inicial }}</td>
                     <td style="text-align: right; font-family: monospace;">${{ c.monto_final_esperado|default:"-" }}</td>
                     <td style="text-align: right; font-family: monospace; font-weight: 700;">${{ c.monto_final_real|default:"-" }}</td>
                     <td style="text-align: center;">
                         {% if c.estado == 'abierta' %}<span class="badge badge-ok" style="background: transparent; border: 1px dashed var(--border-color); color: var(--text-muted);">Abierta</span>
                         {% elif c.diferencia > 0 %}<span class="badge badge-sobrante">+ ${{ c.diferencia }} (Sobrante)</span>
-                        {% elif c.diferencia < 0 %}<span class="badge badge-faltante">- ${{ c.diferencia }} (Faltante)</span>
+                        {% elif c.diferencia < 0 %}<span class="badge badge-faltante">- ${{ c.diferencia|cut:"-" }} (Faltante)</span>
                         {% else %}<span class="badge badge-ok"><span class="material-symbols-outlined" style="font-size: 14px;">check</span> $0.00 (Ok)</span>{% endif %}
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">No hay registros de caja.</td></tr>
+                <tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">{% if solo_forzados %}No hay cierres forzados.{% else %}No hay registros de caja.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -128,22 +178,65 @@
             </span>
             <div class="page-buttons">
                 {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}" class="page-btn">Anterior</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if solo_forzados %}&forzados=1{% endif %}" class="page-btn">Anterior</a>
                 {% endif %}
                 <a href="#" class="page-btn active" aria-current="page">{{ page_obj.number }}</a>
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}" class="page-btn">Siguiente</a>
+                    <a href="?page={{ page_obj.next_page_number }}{% if solo_forzados %}&forzados=1{% endif %}" class="page-btn">Siguiente</a>
                 {% endif %}
             </div>
         </div>
     </div>
+
+    {% if es_admin and cajas_de_otros %}
+    <!-- MODAL CIERRE FORZADO -->
+    <div class="modal-forzar" id="modalForzar" role="dialog" aria-modal="true" aria-labelledby="tituloForzar" hidden>
+        <form method="POST" class="modal-forzar-panel" id="formForzar">
+            {% csrf_token %}
+            <h3 id="tituloForzar">Forzar cierre de la caja <span id="forzarCaja"></span></h3>
+            <p class="modal-forzar-ayuda">
+                Caja de <strong id="forzarUsuario"></strong>. Contá el dinero real (efectivo en el cajón + transferencias recibidas)
+                <strong>sin mirar el sistema</strong>: la diferencia con lo esperado se calcula al confirmar y queda registrada.
+            </p>
+            <label>Monto real contado ($)</label>
+            <input type="number" name="monto_real" min="0" max="99999999.99" step="0.01" required class="form-control" placeholder="0.00">
+            <label>Motivo del cierre forzado</label>
+            <textarea name="motivo" required minlength="{{ motivo_minimo }}" class="form-control" placeholder="Ej: el vendedor se retiró sin cerrar el turno"></textarea>
+            <div class="modal-forzar-acciones">
+                <button type="button" class="btn-cancelar" data-cerrar-forzar>Cancelar</button>
+                <button type="submit" class="btn-cerrar"><span class="material-symbols-outlined">lock</span> Confirmar cierre forzado</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    (function () {
+        const modal = document.getElementById('modalForzar');
+        if (!modal) return;
+        const form = document.getElementById('formForzar');
+        document.querySelectorAll('.btn-forzar').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                form.reset();
+                form.action = btn.dataset.url;
+                document.getElementById('forzarCaja').textContent = '#' + btn.dataset.caja;
+                document.getElementById('forzarUsuario').textContent = btn.dataset.usuario;
+                modal.hidden = false;
+                form.querySelector('[name="monto_real"]').focus();
+            });
+        });
+        function cerrar() { modal.hidden = true; }
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal || e.target.closest('[data-cerrar-forzar]')) cerrar();
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+    })();
+
     const inputReal = document.getElementById('inputEfectivoReal');
     if (inputReal) {
-        const montoEsperado = parseFloat("{{ monto_esperado }}");
+        const montoEsperado = parseFloat("{{ monto_esperado|unlocalize }}");
         const diffBanner = document.getElementById('diffBanner');
         const diffTitle = document.getElementById('diffTitle');
         const diffSubtitle = document.getElementById('diffSubtitle');
