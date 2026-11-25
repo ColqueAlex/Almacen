@@ -112,11 +112,15 @@ def gestion_caja(request):
         'motivo_minimo': MOTIVO_MINIMO,
     })
 
+def _hay_caja_abierta():
+    return Caja.objects.filter(estado='abierta').exists()
+
+
 @login_required
 @requiere_perfil('Administrador', 'Vendedor')
 def abrir_caja(request):
     if request.method == 'POST':
-        if Caja.objects.filter(estado='abierta').exists():
+        if _hay_caja_abierta():
             messages.warning(request, 'Ya existe una caja abierta en el sistema.')
             return redirect('gestion_caja')
 
@@ -125,11 +129,20 @@ def abrir_caja(request):
             messages.error(request, error)
             return redirect('gestion_caja')
 
-        Caja.objects.create(
+        caja = Caja.objects.create(
             usuario=request.user,
             monto_inicial=monto_inicial,
             estado='abierta'
         )
+
+        # Si dos personas abrieron caja en el mismo instante, ambas pasaron el
+        # control de arriba. Ya confirmadas las dos, se queda la primera y la
+        # otra se descarta (recién creada, todavía no tiene movimientos).
+        primera = Caja.objects.filter(estado='abierta').order_by('pk').first()
+        if primera.pk != caja.pk:
+            caja.delete()
+            messages.warning(request, 'Ya existe una caja abierta en el sistema.')
+            return redirect('gestion_caja')
 
         messages.success(request, f'Caja abierta con un monto inicial de ${monto_inicial:.2f}')
 
@@ -139,12 +152,6 @@ def abrir_caja(request):
 @requiere_perfil('Administrador', 'Vendedor')
 def cerrar_caja(request):
     if request.method == 'POST':
-        caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
-
-        if not caja_activa:
-            messages.error(request, 'No hay ninguna caja abierta para cerrar.')
-            return redirect('gestion_caja')
-
         monto_real, error = leer_monto(request.POST.get('monto_real'), 'El monto contado')
         if error:
             messages.error(request, error)
@@ -152,17 +159,28 @@ def cerrar_caja(request):
 
         observaciones = request.POST.get('observaciones', '').strip()
 
-        resumen = _resumen_caja(caja_activa)
-        monto_esperado = _monto_esperado(caja_activa, resumen)
-        diferencia = monto_real - monto_esperado
+        with transaction.atomic():
+            # Bloquea la caja: si un administrador la está cerrando de forma
+            # forzada al mismo tiempo, uno espera al otro y no se pisan.
+            caja_activa = Caja.objects.select_for_update().filter(
+                estado='abierta', usuario=request.user,
+            ).order_by('pk').last()
 
-        caja_activa.monto_final_esperado = monto_esperado
-        caja_activa.monto_final_real = monto_real
-        caja_activa.diferencia = diferencia
-        caja_activa.fecha_cierre = timezone.now()
-        caja_activa.estado = 'cerrada'
-        caja_activa.observaciones = observaciones
-        caja_activa.save()
+            if not caja_activa:
+                messages.error(request, 'No hay ninguna caja abierta para cerrar.')
+                return redirect('gestion_caja')
+
+            resumen = _resumen_caja(caja_activa)
+            monto_esperado = _monto_esperado(caja_activa, resumen)
+            diferencia = monto_real - monto_esperado
+
+            caja_activa.monto_final_esperado = monto_esperado
+            caja_activa.monto_final_real = monto_real
+            caja_activa.diferencia = diferencia
+            caja_activa.fecha_cierre = timezone.now()
+            caja_activa.estado = 'cerrada'
+            caja_activa.observaciones = observaciones
+            caja_activa.save()
 
         if diferencia == Decimal('0.00'):
             messages.success(request, 'Caja cerrada correctamente sin diferencias.')

@@ -297,3 +297,26 @@ class AlertaCajaAbiertaTests(TestCase):
         notificacion = Notificacion.objects.get(tipo='caja_abierta')
         self.assertIn('olvidadizo', notificacion.mensaje)
         self.assertEqual(notificacion.destino_perfil.nombre, 'Administrador')
+
+
+# =============================================================================
+# Apertura simultánea de cajas
+# =============================================================================
+class AperturaSimultaneaTests(TestCase):
+    def test_si_ya_hay_otra_caja_abierta_la_nueva_se_descarta(self):
+        from unittest.mock import patch
+        perfil, _ = Perfil.objects.get_or_create(nombre='Vendedor')
+        uno = Usuario.objects.create_user(dni='50000001', apellido='A', nombre='A', correo='a1@example.com',
+                                          password='x', username='uno', id_perfil=perfil)
+        dos = Usuario.objects.create_user(dni='50000002', apellido='B', nombre='B', correo='b2@example.com',
+                                          password='x', username='dos', id_perfil=perfil)
+        for usuario in (uno, dos):
+            usuario.debe_cambiar_clave = False
+            usuario.save()
+        Caja.objects.create(usuario=uno, monto_inicial=Decimal('0'))
+        self.client.force_login(dos)
+        # Simula la carrera: el control previo todavía no ve la caja de "uno".
+        with patch('caja.views._hay_caja_abierta', return_value=False):
+            self.client.post(reverse('abrir_caja'), {'monto_inicial': '100'})
+        self.assertEqual(Caja.objects.filter(estado='abierta').count(), 1)
+        self.assertEqual(Caja.objects.get(estado='abierta').usuario, uno)

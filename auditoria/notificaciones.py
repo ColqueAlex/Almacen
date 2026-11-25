@@ -11,7 +11,11 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from urllib.parse import urlencode
+
 from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 
 from usuarios.models import Perfil
@@ -56,17 +60,54 @@ def crear_notificacion(tipo, mensaje, perfil_nombre=PERFIL_ADMIN, prefijo_unico=
     return Notificacion.objects.create(tipo=tipo, mensaje=mensaje, destino_perfil=perfil), True
 
 
-def enviar_correo_alerta(asunto, mensaje):
-    """Envía un correo de alerta al destinatario configurado. Nunca lanza excepciones."""
+# Color y etiqueta del correo según el tipo de alerta: (color, fondo, etiqueta).
+ESTILO_CORREO = {
+    'stock_bajo': ('#d97706', '#fffbeb', 'Stock bajo'),
+    'vencimiento': ('#ba1a1a', '#ffdad6', 'Vencimiento'),
+    'caja_abierta': ('#ba1a1a', '#ffdad6', 'Caja abierta'),
+    'limite_credito': ('#7c3aed', '#f5f3ff', 'Límite de crédito'),
+}
+ESTILO_CORREO_GENERAL = ('#1e40af', '#eff6ff', 'Aviso')
+
+
+def url_sistema(nombre_url, **parametros):
+    """URL absoluta a una pantalla del sistema (para los botones del correo)."""
+    url = settings.SITIO_URL.rstrip('/') + reverse(nombre_url)
+    return f'{url}?{urlencode(parametros)}' if parametros else url
+
+
+def enviar_correo_alerta(asunto, mensaje, *, tipo='', titulo=None, detalles=None, enlace=None, texto_enlace='Abrir en el sistema'):
+    """
+    Envía un correo de alerta al destinatario configurado, en HTML con una
+    versión de texto plano para los programas que no muestran HTML.
+    `detalles` es una lista de (etiqueta, valor) que se muestra como tabla.
+    Nunca lanza excepciones.
+    """
     destinatario = getattr(settings, 'ALERTAS_EMAIL_DESTINATARIO', '')
     if not destinatario:
         logger.info('ALERTAS_EMAIL_DESTINATARIO no configurado; no se envía correo.')
         return False
     destinatarios = [d.strip() for d in destinatario.split(',') if d.strip()]
+
+    color, color_fondo, etiqueta = ESTILO_CORREO.get(tipo, ESTILO_CORREO_GENERAL)
+    detalles = [(str(e), str(v)) for e, v in (detalles or [])]
+    contexto = {
+        'titulo': titulo or asunto, 'mensaje': mensaje, 'detalles': detalles,
+        'enlace': enlace, 'texto_enlace': texto_enlace,
+        'color': color, 'color_fondo': color_fondo, 'etiqueta': etiqueta,
+        'fecha': timezone.localtime().strftime('%d/%m/%Y %H:%M'),
+    }
+    texto_plano = '\n'.join(
+        [titulo or asunto, '', mensaje, '']
+        + [f'{e}: {v}' for e, v in detalles]
+        + ([f'\n{texto_enlace}: {enlace}'] if enlace else [])
+        + ['', f'Aviso automático de Almacén El Refugio ({contexto["fecha"]} hs).']
+    )
     try:
         send_mail(
             subject=f'[El Refugio] {asunto}',
-            message=mensaje,
+            message=texto_plano,
+            html_message=render_to_string('auditoria/email/alerta.html', contexto),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=destinatarios,
             fail_silently=False,
@@ -93,7 +134,18 @@ def verificar_stock_bajo(productos):
         if creada:
             # Solo se envía correo la primera vez; mientras la alerta siga sin leer
             # se actualiza el mensaje sin volver a mandar mails.
-            enviar_correo_alerta(f'Stock bajo de {producto.nombre}', mensaje)
+            enviar_correo_alerta(
+                f'Stock bajo de {producto.nombre}', mensaje, tipo='stock_bajo',
+                titulo=f'Quedan pocas unidades de {producto.nombre}',
+                detalles=[
+                    ('Producto', f'{producto.nombre} ({producto.marca})'),
+                    ('Código', f'#ART-{producto.pk:05d}'),
+                    ('Stock disponible', f'{stock} unidad(es)'),
+                    ('Límite crítico', f'{limite} unidad(es)'),
+                ],
+                enlace=url_sistema('consultar', busqueda=producto.nombre),
+                texto_enlace='Ver en el inventario',
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +226,18 @@ def verificar_cajas_abiertas():
                    f'Si el vendedor olvidó cerrarla, un administrador puede forzar el cierre desde Gestión de Caja.')
         _, creada = crear_notificacion('caja_abierta', mensaje, prefijo_unico=prefijo)
         if creada:
-            enviar_correo_alerta(f'Caja #{caja.pk} abierta hace {abierta_hace} horas', mensaje)
+            enviar_correo_alerta(
+                f'Caja #{caja.pk} abierta hace {abierta_hace} horas', mensaje, tipo='caja_abierta',
+                titulo=f'La caja #{caja.pk} sigue abierta',
+                detalles=[
+                    ('Caja', f'#{caja.pk}'),
+                    ('Usuario', caja.usuario.username),
+                    ('Abierta desde', f'{timezone.localtime(caja.fecha_apertura):%d/%m/%Y %H:%M} hs'),
+                    ('Tiempo abierta', f'{abierta_hace} hora(s)'),
+                ],
+                enlace=url_sistema('gestion_caja'),
+                texto_enlace='Ir a Gestión de Caja',
+            )
         creadas += int(creada)
     return creadas
 

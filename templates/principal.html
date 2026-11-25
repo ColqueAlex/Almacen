@@ -19,7 +19,9 @@
                     <span class="material-symbols-outlined" style="color: #b45309;">warning</span>
                     Alertas de Vencimientos
                 </div>
+                {% if request.user.is_superuser or request.user.id_perfil.nombre == 'Administrador' %}
                 <a href="{% url 'consultar' %}" style="font-size: 12px; color: var(--primary); text-decoration: none; font-weight: 600;">Ver todas ></a>
+                {% endif %}
             </div>
 
             <div class="alerts-grid">

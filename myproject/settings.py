@@ -184,6 +184,8 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = f'El Refugio <{EMAIL_HOST_USER}>'
 ALERTAS_EMAIL_DESTINATARIO = config('ALERTAS_EMAIL_DESTINATARIO', default='')
+# Dirección del sistema para los botones de los correos (ej: http://192.168.0.10:8000).
+SITIO_URL = config('SITIO_URL', default='http://localhost:8000')
 
 
 

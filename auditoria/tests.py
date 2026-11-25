@@ -502,3 +502,42 @@ class AuditoriaVistaTests(TestCase):
         modelo_admin = site._registry[Auditoria]
         self.assertFalse(modelo_admin.has_change_permission(None))
         self.assertFalse(modelo_admin.has_delete_permission(None))
+
+
+# =============================================================================
+# Correos de alerta en HTML
+# =============================================================================
+from auditoria.notificaciones import enviar_correo_alerta
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+                   ALERTAS_EMAIL_DESTINATARIO='alertas@example.com', SITIO_URL='http://almacen.local:8000')
+class CorreoAlertaHtmlTests(TestCase):
+    def test_correo_tiene_html_y_texto_plano(self):
+        enviar_correo_alerta(
+            'Stock bajo de Yerba', 'Quedan 3 unidades.', tipo='stock_bajo', titulo='Quedan pocas unidades',
+            detalles=[('Stock disponible', '3 unidad(es)')], enlace='http://almacen.local:8000/productos',
+        )
+        correo = mail.outbox[0]
+        self.assertEqual(correo.subject, '[El Refugio] Stock bajo de Yerba')
+        self.assertIn('Stock disponible: 3 unidad(es)', correo.body)        # texto plano
+        html, tipo = correo.alternatives[0]
+        self.assertEqual(tipo, 'text/html')
+        self.assertIn('Quedan pocas unidades', html)
+        self.assertIn('#d97706', html)                                      # color de stock bajo
+        self.assertIn('href="http://almacen.local:8000/productos"', html)
+
+    def test_los_datos_se_escapan_en_el_html(self):
+        enviar_correo_alerta('Prueba', 'Producto <script>alert(1)</script>', detalles=[('Producto', '<b>x</b>')])
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertNotIn('<script>alert(1)</script>', html)
+        self.assertNotIn('<b>x</b>', html)
+
+    def test_stock_bajo_envia_correo_con_boton_al_inventario(self):
+        Perfil.objects.get_or_create(nombre='Administrador')
+        producto = Productos.objects.create(nombre='Pepsi cola 3L', categoria='Bebidas', precio=Decimal('3000'))
+        from auditoria.notificaciones import verificar_stock_bajo
+        verificar_stock_bajo([producto])
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn('Pepsi cola 3L', html)
+        self.assertIn('http://almacen.local:8000/productos?busqueda=Pepsi+cola+3L', html)

@@ -133,3 +133,76 @@ class UsuariosDuplicadosTests(TestCase):
                                            correo='mar@example.com', password='x')
         respuesta = self.client.post(reverse('editar_usuario', args=[otro.dni]), {'correo': 'mar@example.com'})
         self.assertRedirects(respuesta, reverse('listar_usuarios'), fetch_redirect_response=False)
+
+
+# =============================================================================
+# Cambio de clave, cambio de rol y mensajes del login
+# =============================================================================
+class CorreccionesUsuariosTests(TestCase):
+    def setUp(self):
+        self.admin_perfil, _ = Perfil.objects.get_or_create(nombre='Administrador')
+        self.vendedor_perfil, _ = Perfil.objects.get_or_create(nombre='Vendedor')
+
+    def _usuario(self, dni, username, perfil):
+        usuario = Usuario.objects.create_user(dni=dni, apellido='X', nombre='Y', correo=f'{username}@example.com',
+                                              password='clave-vieja', username=username, id_perfil=perfil)
+        usuario.debe_cambiar_clave = False
+        usuario.save()
+        return usuario
+
+    def test_vendedor_vuelve_al_inicio_tras_cambiar_la_clave(self):
+        vendedor = self._usuario('40000001', 'vende', self.vendedor_perfil)
+        self.client.force_login(vendedor)
+        respuesta = self.client.post(reverse('cambiar_clave'), {'nueva_clave': 'otra-clave', 'confirmar_clave': 'otra-clave'})
+        self.assertRedirects(respuesta, reverse('inicio'), fetch_redirect_response=False)
+
+    def test_admin_no_puede_cambiar_el_rol_de_otro_admin(self):
+        admin = self._usuario('40000002', 'admin1', self.admin_perfil)
+        otro = self._usuario('40000003', 'admin2', self.admin_perfil)
+        self.client.force_login(admin)
+        self.client.post(reverse('editar_usuario', args=[otro.dni]),
+                         {'correo': otro.correo, 'perfil': self.vendedor_perfil.pk})
+        otro.refresh_from_db()
+        self.assertEqual(otro.id_perfil, self.admin_perfil)
+
+    def test_admin_no_puede_cambiarse_su_propio_rol(self):
+        admin = self._usuario('40000004', 'admin3', self.admin_perfil)
+        self.client.force_login(admin)
+        self.client.post(reverse('editar_usuario', args=[admin.dni]),
+                         {'correo': admin.correo, 'perfil': self.vendedor_perfil.pk})
+        admin.refresh_from_db()
+        self.assertEqual(admin.id_perfil, self.admin_perfil)
+
+    def test_editar_cambia_correo_y_perfil_pero_no_nombre_ni_dni(self):
+        admin = self._usuario('40000005', 'admin4', self.admin_perfil)
+        vendedor = self._usuario('40000006', 'vende2', self.vendedor_perfil)
+        self.client.force_login(admin)
+        self.client.post(reverse('editar_usuario', args=[vendedor.dni]), {
+            'correo': 'nuevo@example.com', 'perfil': self.admin_perfil.pk,
+            'nombre': 'Otro', 'apellido': 'Distinto', 'dni': '99999999',
+        })
+        vendedor.refresh_from_db()
+        self.assertEqual(vendedor.correo, 'nuevo@example.com')
+        self.assertEqual(vendedor.id_perfil, self.admin_perfil)
+        self.assertEqual((vendedor.nombre, vendedor.apellido, vendedor.dni), ('Y', 'X', '40000006'))
+
+    def test_formulario_muestra_el_perfil_editable_solo_si_la_jerarquia_lo_permite(self):
+        admin = self._usuario('40000008', 'admin5', self.admin_perfil)
+        vendedor = self._usuario('40000009', 'vende3', self.vendedor_perfil)
+        self.client.force_login(admin)
+        de_vendedor = self.client.get(reverse('editar_usuario', args=[vendedor.dni]))
+        self.assertContains(de_vendedor, 'name="perfil"')
+        propio = self.client.get(reverse('editar_usuario', args=[admin.dni]))
+        self.assertNotContains(propio, 'name="perfil"')
+        self.assertContains(propio, 'No puedes cambiarle el rol a ti mismo.')
+        for respuesta in (de_vendedor, propio):
+            self.assertContains(respuesta, 'name="correo"')
+            self.assertNotContains(respuesta, 'name="nombre"')
+            self.assertNotContains(respuesta, 'name="apellido"')
+
+    def test_login_fallido_no_revela_si_el_usuario_existe(self):
+        self._usuario('40000007', 'existe', self.vendedor_perfil)
+        existente = self.client.post(reverse('login'), {'username': 'existe', 'password': 'mal'}, follow=True)
+        inexistente = self.client.post(reverse('login'), {'username': 'noexiste', 'password': 'mal'}, follow=True)
+        mensajes = lambda r: [str(m) for m in r.context['messages']]
+        self.assertEqual(mensajes(existente), mensajes(inexistente))

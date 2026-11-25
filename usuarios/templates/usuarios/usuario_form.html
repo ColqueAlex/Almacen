@@ -30,27 +30,57 @@
                     </div>
                 </div>
 
+                {% if es_edicion %}
+                {# En la edición se cambian el correo y el perfil: el resto se muestra sin "name" y no se envía. #}
                 <div class="form-row">
                     <div class="input-group">
                         <label>Apellido</label>
-                        <input type="text" name="apellido" class="form-control" pattern="[\p{L} ]+" title="Use solo letras y espacios." required value="{% if usuario %}{{ usuario.apellido }}{% else %}{{ apellido|default:'' }}{% endif %}">
+                        <input type="text" class="form-control" value="{{ usuario.apellido }}" readonly tabindex="-1" style="background:#e2e8f0; cursor:not-allowed;">
                     </div>
                     <div class="input-group">
                         <label>Nombre</label>
-                        <input type="text" name="nombre" class="form-control" pattern="[\p{L} ]+" title="Use solo letras y espacios." required value="{% if usuario %}{{ usuario.nombre }}{% else %}{{ nombre|default:'' }}{% endif %}">
+                        <input type="text" class="form-control" value="{{ usuario.nombre }}" readonly tabindex="-1" style="background:#e2e8f0; cursor:not-allowed;">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Perfil de Acceso</label>
+                    {% if motivo_rol_bloqueado %}
+                    <input type="text" class="form-control" value="{{ usuario.id_perfil.nombre|default:'Sin perfil' }}" readonly tabindex="-1" style="background:#e2e8f0; cursor:not-allowed;">
+                    <span class="help-text">{{ motivo_rol_bloqueado }}</span>
+                    {% else %}
+                    <select name="perfil" class="form-control" required>
+                        {% if not usuario.id_perfil %}<option value="" disabled selected>Seleccione un perfil...</option>{% endif %}
+                        {% for p in perfiles %}
+                            <option value="{{ p.id }}" {% if usuario.id_perfil_id == p.id %}selected{% endif %}>{{ p.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="help-text">El perfil define a qué módulos puede acceder el usuario.</span>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Apellido</label>
+                        <input type="text" name="apellido" class="form-control" pattern="[\p{L} ]+" title="Use solo letras y espacios." required value="{{ apellido|default:'' }}">
+                    </div>
+                    <div class="input-group">
+                        <label>Nombre</label>
+                        <input type="text" name="nombre" class="form-control" pattern="[\p{L} ]+" title="Use solo letras y espacios." required value="{{ nombre|default:'' }}">
                     </div>
                 </div>
 
                 <div class="input-group">
                     <label>Perfil de Acceso</label>
                     <select name="perfil" class="form-control" required>
-                        <option value="" disabled {% if not es_edicion %}selected{% endif %}>Seleccione un perfil...</option>
+                        <option value="" disabled {% if not perfil_id %}selected{% endif %}>Seleccione un perfil...</option>
                         {% for p in perfiles %}
-                            <option value="{{ p.id }}" {% if es_edicion and usuario.id_perfil.id == p.id %}selected{% endif %}>{{ p.nombre }}</option>
+                            <option value="{{ p.id }}" {% if perfil_id == p.id|stringformat:'s' %}selected{% endif %}>{{ p.nombre }}</option>
                         {% endfor %}
                     </select>
                     <span class="help-text">El perfil define a qué módulos puede acceder el usuario.</span>
                 </div>
+                {% endif %}
 
                 {% if not es_edicion %}
                 <div class="input-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border-color);">

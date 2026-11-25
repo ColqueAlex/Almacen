@@ -16,6 +16,11 @@ from .utils import requiere_perfil, _solo_letras_y_espacios
 from auditoria.servicios import registrar_evento
 from auditoria.notificaciones import verificar_cajas_abiertas, verificar_limpieza_productos
 
+MENSAJE_LOGIN_INCORRECTO = (
+    'Usuario o contraseña incorrectos. Tras 5 intentos fallidos la cuenta se bloquea por 1 minuto '
+    'y tras 10, de forma permanente.'
+)
+
 @login_required
 def home(request):
     if not request.user.activo:
@@ -31,14 +36,17 @@ def home(request):
     verificar_cajas_abiertas()
     verificar_limpieza_productos()
 
-    hoy = timezone.now().date()
+    hoy = timezone.localdate()
     limite = hoy + timedelta(days=30)
-    
+
+    # Lotes que vencen en los próximos 30 días (los ya vencidos no se venden y
+    # se ven en el inventario), solo de productos activos.
     alertas = LotesProducto.objects.select_related('id_producto').filter(
-        activo=True, 
-        stock_actual__gt=0, 
-        fecha_vencimiento__isnull=False,
-        fecha_vencimiento__lte=limite
+        activo=True,
+        stock_actual__gt=0,
+        id_producto__estado='activo',
+        fecha_vencimiento__gte=hoy,
+        fecha_vencimiento__lte=limite,
     ).order_by('fecha_vencimiento')[:3]
 
     return render(request, "principal.html", {
@@ -109,17 +117,14 @@ def login_usuario(request):
                     )
                     messages.error(request, 'Demasiados intentos fallidos. Su cuenta ha sido bloqueada temporalmente por 1 minutos.')
                 
-                elif user_exists.intentos_fallidos > 5:
-                    intentos_restantes = 10 - user_exists.intentos_fallidos
-                    messages.error(request, f'Usuario o contraseña incorrectos. ATENCIÓN: Le quedan {intentos_restantes} intentos antes del bloqueo PERMANENTE de la cuenta.')
-                
                 else:
-                    intentos_restantes = 5 - user_exists.intentos_fallidos
-                    messages.error(request, f'Usuario o contraseña incorrectos. Le quedan {intentos_restantes} intentos antes del bloqueo temporal.')
-                
+                    # Mismo mensaje que para un usuario inexistente: así no se
+                    # puede averiguar qué nombres de usuario existen.
+                    messages.error(request, MENSAJE_LOGIN_INCORRECTO)
+
                 user_exists.save()
             else:
-                messages.error(request, 'Usuario o contraseña incorrectos.')
+                messages.error(request, MENSAJE_LOGIN_INCORRECTO)
 
             return redirect('login')
 
@@ -150,7 +155,8 @@ def cambiar_clave(request):
         registrar_evento('cambio_clave', 'Cambió su contraseña', modelo='Usuario', objeto=request.user, request=request)
 
         messages.success(request, 'Contraseña actualizada con éxito.')
-        return redirect('consultar')
+        # Al inicio y no a Productos: un vendedor no tiene acceso al inventario.
+        return redirect('inicio')
 
     return render(request, 'cambiar_clave.html')
 
@@ -274,12 +280,26 @@ def editar_usuario(request, dni):
                 'usuario': usuario,
                 'perfiles': perfiles_disponibles(),
                 'es_edicion': True,
+                'motivo_rol_bloqueado': _error_gestion_usuario(request.user, usuario, 'cambiarle el rol'),
             })
 
-        usuario.correo = correo
+        # Se editan solo el correo y el perfil: DNI, nombre y apellido no se
+        # tocan aunque lleguen en el POST.
+        campos = ['correo']
         perfil_id = request.POST.get('perfil')
-        usuario.id_perfil = Perfil.objects.filter(id=perfil_id).first() if perfil_id else None
-        usuario.save()
+        if perfil_id is not None:
+            nuevo_perfil = Perfil.objects.filter(id=perfil_id).first() if perfil_id else None
+            if nuevo_perfil != usuario.id_perfil:
+                # Cambiar el rol sigue las mismas reglas que dar de baja: no a uno
+                # mismo ni a alguien del mismo rango o superior.
+                error = _error_gestion_usuario(request.user, usuario, 'cambiarle el rol')
+                if error:
+                    return _rechazar_gestion(request, usuario, error)
+                usuario.id_perfil = nuevo_perfil
+                campos.append('id_perfil')
+
+        usuario.correo = correo
+        usuario.save(update_fields=campos)
         messages.success(request, 'Usuario actualizado correctamente.')
         return redirect('listar_usuarios')
 
@@ -288,6 +308,8 @@ def editar_usuario(request, dni):
         'usuario': usuario,
         'perfiles': perfiles,
         'es_edicion': True,
+        # Si no se le puede cambiar el rol, el selector se muestra bloqueado con el motivo.
+        'motivo_rol_bloqueado': _error_gestion_usuario(request.user, usuario, 'cambiarle el rol'),
     })
 
 def _error_gestion_usuario(usuario_actual, usuario_destino, accion):

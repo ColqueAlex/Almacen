@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ titulo }}</title>
+</head>
+{# Correo HTML: estilos inline y maquetación con tablas para que se vea bien en Gmail y Outlook. #}
+<body style="margin:0; padding:0; background-color:#f1f5f9; font-family:Arial, Helvetica, sans-serif; color:#0f172a;">
+    <span style="display:none; max-height:0; overflow:hidden; opacity:0;">{{ mensaje }}</span>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f5f9;">
+        <tr>
+            <td align="center" style="padding:24px 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; background-color:#ffffff; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0;">
+
+                    <!-- Encabezado -->
+                    <tr>
+                        <td style="background-color:#1e40af; padding:20px 28px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td style="font-size:20px; font-weight:bold; color:#ffffff; letter-spacing:0.3px;">Almacén El Refugio</td>
+                                    <td align="right" style="font-size:12px; color:#bfdbfe;">Alerta del sistema</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Franja de color según el tipo de alerta -->
+                    <tr><td style="height:4px; background-color:{{ color }}; line-height:4px; font-size:0;">&nbsp;</td></tr>
+
+                    <!-- Contenido -->
+                    <tr>
+                        <td style="padding:28px;">
+                            <span style="display:inline-block; background-color:{{ color_fondo }}; color:{{ color }}; font-size:11px; font-weight:bold; text-transform:uppercase; letter-spacing:0.6px; padding:5px 10px; border-radius:20px;">{{ etiqueta }}</span>
+                            <h1 style="margin:14px 0 8px; font-size:22px; line-height:1.3; color:#0f172a;">{{ titulo }}</h1>
+                            <p style="margin:0 0 20px; font-size:15px; line-height:1.6; color:#334155;">{{ mensaje }}</p>
+
+                            {% if detalles %}
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e2e8f0; border-radius:8px; border-collapse:separate; overflow:hidden;">
+                                {% for etiqueta_detalle, valor in detalles %}
+                                <tr>
+                                    <td style="padding:11px 14px; font-size:13px; color:#64748b; background-color:#f8fafc; width:42%;{% if not forloop.last %} border-bottom:1px solid #e2e8f0;{% endif %}">{{ etiqueta_detalle }}</td>
+                                    <td style="padding:11px 14px; font-size:14px; font-weight:bold; color:#0f172a;{% if not forloop.last %} border-bottom:1px solid #e2e8f0;{% endif %}">{{ valor }}</td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                            {% endif %}
+
+                            {% if enlace %}
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
+                                <tr>
+                                    <td style="border-radius:8px; background-color:#1e40af;">
+                                        <a href="{{ enlace }}" target="_blank" style="display:inline-block; padding:12px 22px; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">{{ texto_enlace }}</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            {% endif %}
+                        </td>
+                    </tr>
+
+                    <!-- Pie -->
+                    <tr>
+                        <td style="padding:16px 28px; background-color:#f8fafc; border-top:1px solid #e2e8f0; font-size:12px; line-height:1.5; color:#94a3b8;">
+                            Aviso automático generado el {{ fecha }} hs. No respondas este correo.<br>
+                            Mientras la alerta siga sin leer en el sistema no se vuelve a enviar.
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

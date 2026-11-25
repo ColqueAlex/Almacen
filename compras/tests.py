@@ -190,3 +190,48 @@ class CompraConCostoMayorAlPrecioVentaTests(TestCase):
         self.assertTrue(
             LotesProducto.objects.filter(id_producto=otro_producto, lote='LOTE-1').exists()
         )
+
+
+# =============================================================================
+# Anulación de compras
+# =============================================================================
+class AnularCompraTests(TestCase):
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(dni='60000001', apellido='C', nombre='A', correo='anula@example.com',
+                                                   password='x', username='anula')
+        self.usuario.is_superuser = True
+        self.usuario.debe_cambiar_clave = False
+        self.usuario.save()
+        self.client.force_login(self.usuario)
+        self.producto = Productos.objects.create(nombre='Arroz', categoria='Almacen', precio=1000)
+        self.compra = Compras.objects.create(id_usuario=self.usuario, total=5000)
+        DetallesCompra.objects.create(id_compra=self.compra, id_producto=self.producto, lote='A1', cantidad=10,
+                                      precio_unitario_compra=500, subtotal=5000)
+        self.lote = LotesProducto.objects.create(id_producto=self.producto, lote='A1', stock_actual=10, precio_costo=500)
+
+    def _anular(self):
+        return self.client.post(reverse('anular_compra', args=[self.compra.pk]), {'motivo': 'Error de carga'})
+
+    def test_anula_y_descuenta_el_stock(self):
+        self._anular()
+        self.compra.refresh_from_db()
+        self.lote.refresh_from_db()
+        self.assertEqual(self.compra.estado, 'Anulado')
+        self.assertEqual(self.lote.stock_actual, 0)
+
+    def test_no_anula_si_ya_se_vendieron_unidades(self):
+        self.lote.stock_actual = 4
+        self.lote.save()
+        self._anular()
+        self.compra.refresh_from_db()
+        self.lote.refresh_from_db()
+        self.assertNotEqual(self.compra.estado, 'Anulado')
+        self.assertEqual(self.lote.stock_actual, 4)
+
+    def test_anular_dos_veces_no_descuenta_dos_veces(self):
+        self.lote.stock_actual = 25
+        self.lote.save()
+        self._anular()
+        self._anular()
+        self.lote.refresh_from_db()
+        self.assertEqual(self.lote.stock_actual, 15)

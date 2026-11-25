@@ -7,6 +7,7 @@ from django.db.models.functions import Coalesce
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.http import HttpResponse
+from django.views.decorators.http import require_POST
 from datetime import timedelta, date, datetime
 from decimal import Decimal
 import json
@@ -17,8 +18,11 @@ from caja.models import Caja
 from .ticket import generar_ticket_pdf
 from usuarios.utils import (
     requiere_perfil, _solo_letras_y_espacios, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO, normalizar_texto,
-    MONTO_MAXIMO, MONTO_MAXIMO_TEXTO, leer_cantidad, leer_monto,
+    MONTO_MAXIMO, MONTO_MAXIMO_TEXTO, leer_cantidad, leer_monto, clave_comparacion,
 )
+
+METODOS_PAGO_VALIDOS = ('efectivo', 'transferencia')
+
 
 def _venta_dentro_del_plazo_de_devolucion(venta, ahora=None):
     ahora = ahora or timezone.now()
@@ -38,7 +42,7 @@ def ventas(request):
     if request.user.debe_cambiar_clave:
         return redirect('cambiar_clave')
 
-    hoy = timezone.now().date()
+    hoy = timezone.localdate()
     periodo = request.GET.get('filtro', 'todos')
 
     detalles_qs = DetallesVentas.objects.select_related('producto', 'lote').prefetch_related('devoluciones')
@@ -108,6 +112,10 @@ def registrar_venta(request):
             paga_con = request.POST.get('paga_con', '').strip()
             id_cliente_post = request.POST.get('id_cliente')
 
+            if not fiado and metodo_pago not in METODOS_PAGO_VALIDOS:
+                messages.error(request, 'Seleccioná un método de pago válido (efectivo o transferencia).')
+                return redirect('registrar_venta')
+
             if paga_con:
                 importe_recibido, error = leer_monto(paga_con, 'El importe con el que paga')
                 if error:
@@ -130,7 +138,7 @@ def registrar_venta(request):
             with transaction.atomic():
                 estado_pago = 'fiado' if fiado else 'pagado'
                 metodo_final = None if fiado else metodo_pago
-                ahora = datetime.now()
+                ahora = timezone.localtime()
                 total_venta = Decimal('0.00')
 
                 for item in items:
@@ -138,10 +146,13 @@ def registrar_venta(request):
                     cantidad_necesaria, error = leer_cantidad(item.get('cantidad'), f'La cantidad de "{producto.nombre}"')
                     if error:
                         raise ValueError(error)
-                    precio_unitario, error = leer_monto(item.get('precio'), f'El precio de "{producto.nombre}"',
-                                                        permitir_cero=False)
-                    if error:
-                        raise ValueError(error)
+                    # El precio sale siempre de la base de datos: el que manda el
+                    # navegador se ignora para que no se pueda vender a otro precio.
+                    if producto.estado != 'activo':
+                        raise ValueError(f'"{producto.nombre}" está inactivo y no se puede vender.')
+                    precio_unitario = producto.precio
+                    if not precio_unitario or precio_unitario <= 0:
+                        raise ValueError(f'"{producto.nombre}" no tiene un precio de venta válido.')
                     item['cantidad'], item['precio'] = cantidad_necesaria, precio_unitario
 
                     if producto.stock < cantidad_necesaria:
@@ -155,8 +166,8 @@ def registrar_venta(request):
                 venta = Ventas.objects.create(
                     id_caja=caja_activa,
                     total=total_venta,
-                    fecha=date.today(),
-                    hora=ahora.time(),
+                    fecha=ahora.date(),
+                    hora=ahora.time().replace(tzinfo=None),
                     id_clientes=cliente,
                     estado_de_pago=estado_pago,
                     metodo_pago=metodo_final
@@ -228,26 +239,23 @@ def registrar_venta(request):
         'caja_activa': caja_activa
     })
 
-@login_required
-def cambiar_estado_venta(request, id_venta):
-    if request.method != 'POST':
-        return redirect('ventas')
+def _error_saldo_cliente_insuficiente(cliente, monto):
+    """
+    Al anular o devolver una venta fiada se descuenta su importe del saldo.
+    Si el cliente ya pagó parte de esa deuda, el saldo quedaría negativo
+    (dinero que el almacén le debe y que la caja no registra): se rechaza.
+    """
+    if cliente.saldo < monto:
+        return (
+            f'{cliente.nombre} ya pagó parte de su deuda: su saldo actual es ${cliente.saldo:.2f} y la operación '
+            f'descontaría ${monto:.2f}. El saldo quedaría negativo, así que no se puede realizar.'
+        )
+    return None
 
-    venta = get_object_or_404(Ventas, pk=id_venta)
-    nuevo_estado = request.POST.get('estado_de_pago', '').strip()
-    estados_validos = ['pagado', 'fiado']
-
-    if nuevo_estado not in estados_validos:
-        messages.error(request, 'Estado de pago no válido.')
-        return redirect('ventas')
-
-    venta.estado_de_pago = nuevo_estado
-    venta.save()
-    messages.success(request, f'Venta #{id_venta} actualizada a "{nuevo_estado.capitalize()}".')
-    return redirect('ventas')
 
 @login_required
 @requiere_perfil('Administrador', 'Vendedor')
+@require_POST
 def anular_venta(request, id_venta):
     caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
     if not caja_activa:
@@ -284,8 +292,12 @@ def anular_venta(request, id_venta):
                 return redirect('ventas')
 
             estado_pago_original = venta.estado_de_pago
-            if venta.id_clientes and estado_pago_original == 'fiado':
-                cliente = venta.id_clientes
+            if venta.id_clientes_id and estado_pago_original == 'fiado':
+                cliente = Clientes.objects.select_for_update().get(pk=venta.id_clientes_id)
+                error = _error_saldo_cliente_insuficiente(cliente, venta.total)
+                if error:
+                    messages.error(request, error)
+                    return redirect('ventas')
                 cliente.saldo -= venta.total
                 cliente.save(update_fields=['saldo'])
 
@@ -385,6 +397,15 @@ def devolver_detalle_venta(request, id_detalle):
 
         monto = detalle.precio_unitario_venta * cantidad_a_devolver
 
+        # Se valida antes de tocar el stock: un return dentro del atomic confirma lo ya guardado.
+        cliente = None
+        if metodo_reintegro == 'fiado':
+            cliente = Clientes.objects.select_for_update().get(pk=venta.id_clientes_id)
+            error = _error_saldo_cliente_insuficiente(cliente, monto)
+            if error:
+                messages.error(request, error)
+                return redirect('ventas')
+
         if detalle.lote_id:
             lote = LotesProducto.objects.select_for_update().get(pk=detalle.lote_id)
         else:
@@ -402,8 +423,7 @@ def devolver_detalle_venta(request, id_detalle):
         lote.activo = True
         lote.save(update_fields=['stock_actual', 'activo'])
 
-        if metodo_reintegro == 'fiado':
-            cliente = Clientes.objects.select_for_update().get(pk=venta.id_clientes_id)
+        if cliente is not None:
             cliente.saldo -= monto
             cliente.save(update_fields=['saldo'])
 
@@ -457,20 +477,28 @@ def registrar_pago_cliente(request, id_cliente):
             messages.error(request, 'No se puede recibir un pago porque la caja está cerrada. Debe abrir la caja primero.')
             return redirect('cuentas_clientes')
 
-        cliente = get_object_or_404(Clientes, pk=id_cliente)
-        
+        get_object_or_404(Clientes, pk=id_cliente)
+
         metodo_pago = request.POST.get('metodo_pago', 'efectivo')
+        if metodo_pago not in METODOS_PAGO_VALIDOS:
+            messages.error(request, 'Seleccioná un método de pago válido (efectivo o transferencia).')
+            return redirect('cuentas_clientes')
         monto_pago, error = leer_monto(request.POST.get('monto'), 'El monto a abonar', permitir_cero=False)
         if error:
             messages.error(request, error)
             return redirect('cuentas_clientes')
-            
-        if monto_pago > cliente.saldo:
-            messages.warning(request, f'El cliente solo debe ${cliente.saldo:.2f}. Se registrará el pago completo y el saldo quedará en 0.')
-            monto_pago = cliente.saldo
 
         try:
             with transaction.atomic():
+                # Bloquea al cliente: dos cobros simultáneos no pueden pisarse el saldo.
+                cliente = Clientes.objects.select_for_update().get(pk=id_cliente)
+                if cliente.saldo <= 0:
+                    messages.error(request, f'{cliente.nombre} no tiene deuda pendiente; no hay nada que cobrar.')
+                    return redirect('cuentas_clientes')
+                if monto_pago > cliente.saldo:
+                    messages.warning(request, f'El cliente solo debe ${cliente.saldo:.2f}. Se registrará el pago completo y el saldo quedará en 0.')
+                    monto_pago = cliente.saldo
+
                 Pago.objects.create(
                     cliente=cliente,
                     id_caja=caja_activa,
@@ -480,7 +508,7 @@ def registrar_pago_cliente(request, id_cliente):
                 )
                 
                 cliente.saldo -= monto_pago
-                cliente.save()
+                cliente.save(update_fields=['saldo'])
 
                 messages.success(request, f'Se registró el pago de ${monto_pago:.2f} para {cliente.nombre}. Nuevo saldo: ${cliente.saldo:.2f}')
 
@@ -488,6 +516,20 @@ def registrar_pago_cliente(request, id_cliente):
             messages.error(request, f'Error al registrar el pago: {str(e)}')
 
     return redirect('cuentas_clientes')
+
+def _cliente_con_mismo_nombre(nombre, apellido, excluir_pk=None):
+    """
+    Cliente cuyo nombre completo coincide sin distinguir mayúsculas, acentos,
+    comillas ni espacios de más. Se compara nombre + apellido juntos, así
+    "Rodrigo" + "Rojas" choca con un cliente cargado como "Rodrigo Rojas" sin apellido.
+    """
+    buscado = clave_comparacion(f'{nombre} {apellido or ""}')
+    clientes = Clientes.objects.exclude(pk=excluir_pk) if excluir_pk is not None else Clientes.objects.all()
+    for pk, nom, ape in clientes.values_list('pk', 'nombre', 'apellido'):
+        if clave_comparacion(f'{nom} {ape or ""}') == buscado:
+            return Clientes.objects.get(pk=pk)
+    return None
+
 
 @login_required
 def crear_cliente(request):
@@ -510,6 +552,14 @@ def crear_cliente(request):
             return redirect('cuentas_clientes')
         if telefono and Clientes.objects.filter(telefono=telefono).exists():
             messages.error(request, f'Ya existe un cliente registrado con el teléfono {telefono}.')
+            return redirect('cuentas_clientes')
+        existente = _cliente_con_mismo_nombre(nombre, apellido)
+        if existente:
+            messages.error(
+                request,
+                f'Ya existe el cliente "{" ".join(filter(None, [existente.nombre, existente.apellido]))}" '
+                f'(Cuenta #{existente.pk:04d}). Usá esa cuenta o agregá el apellido para diferenciarlo.',
+            )
             return redirect('cuentas_clientes')
         cliente = Clientes.objects.create(
             nombre=nombre,

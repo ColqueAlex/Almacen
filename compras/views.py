@@ -230,25 +230,44 @@ def anular_compra(request, id_compra):
 
         try:
             with transaction.atomic():
+                # Bloquea la compra: dos anulaciones simultáneas no descuentan el stock dos veces.
+                compra = Compras.objects.select_for_update().get(pk=compra.pk)
+                if compra.estado == 'Anulado':
+                    raise ValueError('Esta compra ya fue anulada anteriormente.')
+
+                # Primero se verifica todo; si un lote ya no tiene las unidades
+                # compradas (se vendieron), no se anula nada.
+                # Varios renglones "Sin lote" pueden ir al mismo lote: se acumula por lote.
+                a_descontar = {}
+                for detalle in DetallesCompra.objects.select_related('id_producto').filter(id_compra=compra):
+                    lote = LotesProducto.objects.select_for_update().filter(
+                        id_producto=detalle.id_producto,
+                        lote=detalle.lote,
+                        fecha_vencimiento=detalle.fecha_vencimiento
+                    ).first()
+                    if lote is None:
+                        raise ValueError(
+                            f'el lote "{detalle.lote}" de "{detalle.id_producto.nombre}" ya no existe.'
+                        )
+                    _, cantidad_previa = a_descontar.get(lote.pk, (lote, 0))
+                    cantidad = cantidad_previa + detalle.cantidad
+                    if lote.stock_actual < cantidad:
+                        raise ValueError(
+                            f'en el lote "{detalle.lote}" de "{detalle.id_producto.nombre}" se compraron '
+                            f'{cantidad} unidades pero solo quedan {lote.stock_actual} (el resto ya se vendió). '
+                            'Anularla dejaría el stock incorrecto.'
+                        )
+                    a_descontar[lote.pk] = (lote, cantidad)
+
+                for lote, cantidad in a_descontar.values():
+                    lote.stock_actual -= cantidad
+                    lote.save(update_fields=['stock_actual'])
+
                 compra.estado = 'Anulado'
                 compra.motivo_anulacion = motivo
                 compra.fecha_anulacion = timezone.now()
                 compra.usuario_anulacion = request.user
                 compra.save()
-
-                detalles = DetallesCompra.objects.filter(id_compra=compra)
-                for detalle in detalles:
-                    lote = LotesProducto.objects.filter(
-                        id_producto=detalle.id_producto,
-                        lote=detalle.lote,
-                        fecha_vencimiento=detalle.fecha_vencimiento
-                    ).first()
-                    
-                    if lote:
-                        lote.stock_actual -= detalle.cantidad
-                        if lote.stock_actual < 0:
-                            lote.stock_actual = 0
-                        lote.save()
 
             messages.success(request, f'Compra #{compra.id} anulada correctamente. El stock fue revertido.')
         except Exception as e:

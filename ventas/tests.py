@@ -416,6 +416,21 @@ class ClienteTelefonoUnicoTests(TestCase):
         self.client.post(reverse('crear_cliente'), {'nombre': 'Dos', 'telefono': ''})
         self.assertEqual(Clientes.objects.filter(telefono__isnull=True).count(), 2)
 
+    def test_rechaza_nombre_duplicado_sin_importar_mayusculas_acentos_ni_espacios(self):
+        Clientes.objects.create(nombre='Rodrigo', apellido='Rojas', telefono='3892154589')
+        for datos in ({'nombre': 'Rodrigo', 'apellido': 'Rojas'},
+                      {'nombre': '  rodrigo ', 'apellido': 'ROJAS'},
+                      {'nombre': 'Rodrigo Rojas', 'apellido': ''},
+                      {'nombre': 'Rodrigó', 'apellido': '"Rojas"'}):
+            respuesta = self.client.post(reverse('crear_cliente'), datos, follow=True)
+            self.assertContains(respuesta, 'Ya existe el cliente')
+        self.assertEqual(Clientes.objects.count(), 1)
+
+    def test_permite_mismo_nombre_con_otro_apellido(self):
+        Clientes.objects.create(nombre='Rodrigo', apellido='Rojas')
+        self.client.post(reverse('crear_cliente'), {'nombre': 'Rodrigo', 'apellido': 'Perez'})
+        self.assertEqual(Clientes.objects.filter(nombre='Rodrigo').count(), 2)
+
 
 # =============================================================================
 # Ticket de venta (impresora térmica)
@@ -498,3 +513,88 @@ class TicketVentaTests(TestCase):
         self.assertEqual(len(renglones), 1)
         self.assertEqual(renglones[0]['cantidad'], 5)
         self.assertEqual(renglones[0]['subtotal'], Decimal('7500'))
+
+
+# =============================================================================
+# Correcciones de seguridad e integridad en ventas
+# =============================================================================
+from caja.models import Caja as _Caja
+from usuarios.models import Perfil
+from .models import Pago
+
+
+class VentasIntegridadTests(TestCase):
+    def setUp(self):
+        perfil, _ = Perfil.objects.get_or_create(nombre='Vendedor')
+        self.usuario = Usuario.objects.create_user(dni='30000001', apellido='V', nombre='V', correo='v@example.com',
+                                                   password='x', username='vend', id_perfil=perfil)
+        self.usuario.debe_cambiar_clave = False
+        self.usuario.save()
+        self.client.force_login(self.usuario)
+        self.caja = _Caja.objects.create(usuario=self.usuario, monto_inicial=Decimal('0'))
+        self.producto = Productos.objects.create(nombre='Yerba', categoria='Almacen', precio=Decimal('5000'))
+        LotesProducto.objects.create(id_producto=self.producto, lote='L1', stock_actual=10, precio_costo=Decimal('3000'))
+
+    def _vender(self, precio='5000', **extra):
+        datos = {'cart_data': json.dumps([{'id': self.producto.pk, 'cantidad': 1, 'precio': precio}]),
+                 'metodo_pago': 'efectivo'}
+        datos.update(extra)
+        return self.client.post(reverse('registrar_venta'), datos)
+
+    def test_el_precio_del_navegador_se_ignora(self):
+        self._vender(precio='1')
+        venta = Ventas.objects.get()
+        self.assertEqual(venta.total, Decimal('5000'))
+        self.assertEqual(venta.detalles.get().precio_unitario_venta, Decimal('5000'))
+
+    def test_metodo_de_pago_invalido_se_rechaza(self):
+        self._vender(metodo_pago='bitcoin')
+        self.assertFalse(Ventas.objects.exists())
+
+    def test_anular_por_get_no_hace_nada(self):
+        self._vender()
+        venta = Ventas.objects.get()
+        respuesta = self.client.get(reverse('anular_venta', args=[venta.pk]))
+        self.assertEqual(respuesta.status_code, 405)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado_de_pago, 'pagado')
+
+    def test_ya_no_existe_cambiar_estado_de_venta(self):
+        from django.urls import NoReverseMatch
+        with self.assertRaises(NoReverseMatch):
+            reverse('cambiar_estado_venta', args=[1])
+
+    def test_no_se_registra_pago_a_cliente_sin_deuda(self):
+        cliente = Clientes.objects.create(nombre='Beto')
+        self.client.post(reverse('registrar_pago_cliente', args=[cliente.pk]), {'monto': '100', 'metodo_pago': 'efectivo'})
+        self.assertFalse(Pago.objects.exists())
+
+    def test_pago_con_metodo_invalido_se_rechaza(self):
+        cliente = Clientes.objects.create(nombre='Beto', saldo=Decimal('500'))
+        self.client.post(reverse('registrar_pago_cliente', args=[cliente.pk]), {'monto': '100', 'metodo_pago': 'cheque'})
+        self.assertFalse(Pago.objects.exists())
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.saldo, Decimal('500'))
+
+    def test_anular_fiado_ya_pagado_no_deja_saldo_negativo(self):
+        cliente = Clientes.objects.create(nombre='Ana')
+        self._vender(fiado='true', id_cliente=cliente.pk)
+        self.client.post(reverse('registrar_pago_cliente', args=[cliente.pk]), {'monto': '3000', 'metodo_pago': 'efectivo'})
+        venta = Ventas.objects.get()
+        self.client.post(reverse('anular_venta', args=[venta.pk]))
+        venta.refresh_from_db()
+        cliente.refresh_from_db()
+        self.assertEqual(venta.estado_de_pago, 'fiado')
+        self.assertEqual(cliente.saldo, Decimal('2000'))
+        self.assertEqual(self.producto.stock, 9)
+
+    def test_devolucion_fiada_que_dejaria_saldo_negativo_no_toca_el_stock(self):
+        cliente = Clientes.objects.create(nombre='Ana')
+        self._vender(fiado='true', id_cliente=cliente.pk)
+        self.client.post(reverse('registrar_pago_cliente', args=[cliente.pk]), {'monto': '5000', 'metodo_pago': 'efectivo'})
+        detalle = DetallesVentas.objects.get()
+        self.client.post(reverse('devolver_detalle_venta', args=[detalle.pk]), {'cantidad': '1'})
+        self.assertFalse(DevolucionVenta.objects.exists())
+        self.assertEqual(self.producto.stock, 9)
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.saldo, Decimal('0'))
