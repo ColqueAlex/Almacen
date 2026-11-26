@@ -1,5 +1,11 @@
+import csv
+import io
+import json
+from datetime import timedelta
+
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from auditoria.models import Auditoria
 from usuarios.models import Usuario
@@ -496,6 +502,83 @@ class AuditoriaVistaTests(TestCase):
         self.assertIn("'=HYPERLINK", contenido)
         self.assertNotIn('Inició sesión', contenido)
         self.assertTrue(Auditoria.objects.filter(accion='exportacion', usuario=self.admin).exists())
+
+    def _crear_registro_con_antiguedad(self, dias):
+        registro = Auditoria.objects.create(
+            accion='creacion',
+            modelo='Producto',
+            descripcion='Registro de prueba',
+            cambios={'stock': {'campo': 'Stock', 'antes': 1, 'despues': 2}},
+            datos_anteriores={'stock': 1},
+            datos_nuevos={'stock': 2},
+        )
+        Auditoria.objects.filter(pk=registro.pk).update(
+            fecha_hora=timezone.now() - timedelta(days=dias),
+        )
+        registro.refresh_from_db()
+        return registro
+
+    def test_depurar_muestra_solo_registros_mayores_a_dos_anos(self):
+        antiguo = self._crear_registro_con_antiguedad(731)
+        reciente = self._crear_registro_con_antiguedad(729)
+
+        respuesta = self.client.get(reverse('listar_auditoria'), {'depurar': 'antiguos'})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context['cantidad_antigua'], 1)
+        self.assertEqual([registro.id for registro in respuesta.context['registros']], [antiguo.id])
+        self.assertNotContains(respuesta, f'value="{reciente.id}"')
+
+    def test_borrado_exige_exportar_primero_la_misma_seleccion(self):
+        antiguo = self._crear_registro_con_antiguedad(731)
+        reciente = self._crear_registro_con_antiguedad(729)
+        url_exportar = reverse('exportar_auditoria_antigua')
+        url_eliminar = reverse('eliminar_auditoria_antigua')
+
+        sin_exportar = self.client.post(url_eliminar, {'registro_ids': [antiguo.id]})
+        self.assertEqual(sin_exportar.status_code, 302)
+        self.assertTrue(Auditoria.objects.filter(pk=antiguo.pk).exists())
+
+        exportacion = self.client.post(url_exportar, {'registro_ids': [antiguo.id]})
+        self.assertEqual(exportacion.status_code, 200)
+        contenido = exportacion.content.decode('utf-8-sig')
+        filas = list(csv.reader(io.StringIO(contenido), delimiter=';'))
+        self.assertIn('Datos anteriores', filas[0])
+        self.assertEqual(json.loads(filas[1][13]), {'stock': 1})
+
+        seleccion_distinta = self.client.post(url_eliminar, {'registro_ids': [antiguo.id, reciente.id]})
+        self.assertEqual(seleccion_distinta.status_code, 302)
+        self.assertTrue(Auditoria.objects.filter(pk=antiguo.pk).exists())
+
+        self.client.post(url_exportar, {'registro_ids': [antiguo.id]})
+        borrado = self.client.post(url_eliminar, {'registro_ids': [antiguo.id]})
+        self.assertEqual(borrado.status_code, 302)
+        self.assertFalse(Auditoria.objects.filter(pk=antiguo.pk).exists())
+        self.assertTrue(Auditoria.objects.filter(
+            accion='eliminacion', modelo='Auditoría',
+            descripcion__contains='1 registro(s) de auditoría',
+        ).exists())
+        self.assertTrue(Auditoria.objects.filter(pk=reciente.pk).exists())
+
+    def test_depurar_auditoria_requiere_administrador(self):
+        antiguo = self._crear_registro_con_antiguedad(731)
+        usuario = Usuario.objects.create_user(
+            dni='30999881',
+            apellido='Vendedor',
+            nombre='Prueba',
+            correo='vendedor@example.com',
+            password='test-password',
+        )
+        self.client.force_login(usuario)
+
+        respuesta = self.client.post(
+            reverse('exportar_auditoria_antigua'),
+            {'registro_ids': [antiguo.id]},
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(respuesta.url, reverse('inicio'))
+        self.assertTrue(Auditoria.objects.filter(pk=antiguo.pk).exists())
 
     def test_registros_de_auditoria_son_solo_lectura_en_admin(self):
         from django.contrib.admin.sites import site

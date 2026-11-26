@@ -4,7 +4,7 @@
 {% block title %}Inventario{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/inventario.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'css/inventario.css' %}?v=4">
 {% endblock %}
 
 {% block content %}
@@ -44,6 +44,22 @@
     </div>
     {% endif %}
 
+    {% if cantidad_lotes_antiguos and ver_actual != 'lotes_vencidos' %}
+    <div class="aviso-limpieza">
+        <span class="material-symbols-outlined">delete_sweep</span>
+        <div>
+            <strong>{{ cantidad_lotes_eliminables }} lote{{ cantidad_lotes_eliminables|pluralize }} elegible{{ cantidad_lotes_eliminables|pluralize }} para depurar.</strong>
+            Vencieron hace más de 365 días y no tienen ventas asociadas. Se eliminará el stock que aún figure en el sistema.
+            {% if cantidad_lotes_antiguos > cantidad_lotes_eliminables %}
+                {{ cantidad_lotes_protegidos }} lote(s) con ventas asociadas se conservarán.
+            {% endif %}
+        </div>
+        {% if cantidad_lotes_eliminables %}
+            <a href="?ver=lotes_vencidos" class="btn-revisar">Revisar</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="toolbar">
         <div class="toolbar-left">
             <form method="GET" action="{% url 'consultar' %}" style="display: flex; gap: 12px; flex: 1; flex-wrap: wrap;">
@@ -62,6 +78,7 @@
                     <option value="inactivos" {% if ver_actual == 'inactivos' %}selected{% endif %}>Mostrar: Inactivos{% if total_inactivos %} ({{ total_inactivos }}){% endif %}</option>
                     <option value="todos" {% if ver_actual == 'todos' %}selected{% endif %}>Mostrar: Todos</option>
                     <option value="limpieza" {% if ver_actual == 'limpieza' %}selected{% endif %}>Sugeridos para eliminar{% if cantidad_limpieza %} ({{ cantidad_limpieza }}){% endif %}</option>
+                    <option value="lotes_vencidos" {% if ver_actual == 'lotes_vencidos' %}selected{% endif %}>Lotes vencidos hace más de un año{% if cantidad_lotes_eliminables %} ({{ cantidad_lotes_eliminables }}){% endif %}</option>
                 </select>
                 <select name="estado_stock" class="filter-select" onchange="this.form.submit()">
                     <option value="">Todos los Estados</option>
@@ -72,6 +89,34 @@
             </form>
         </div>
     </div>
+
+    {% if ver_actual == 'lotes_vencidos' and cantidad_lotes_eliminables %}
+    <form method="post" action="{% url 'eliminar_lotes_vencidos' %}" class="barra-limpieza" id="formLimpiezaLotes"
+          onsubmit="return confirm('Se eliminarán los lotes seleccionados, incluso si aún muestran stock. Confirma que esos productos vencidos fueron descartados físicamente. Las ventas asociadas no se pueden borrar. ¿Continuar?');">
+        {% csrf_token %}
+        <input type="hidden" name="selected_ids" id="selectedLotesIds">
+        <input type="hidden" name="ver" value="lotes_vencidos">
+        <div>
+            <strong>Lotes vencidos elegibles</strong>
+            <p>Solo se puede borrar un lote vencido hace más de 365 días y sin ventas asociadas. Si todavía figura stock, eliminarlo lo quitará del inventario. La operación es manual y queda auditada.</p>
+        </div>
+        <label class="marcar-todos"><input type="checkbox" id="marcarTodosLotes"> Marcar todos de esta página</label>
+        <button type="submit" class="btn-eliminar" id="btnEliminarLotes" disabled>
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+            Eliminar lotes (<span id="cantLotesSeleccionados">0</span>)
+        </button>
+    </form>
+    {% elif ver_actual == 'lotes_vencidos' and cantidad_lotes_antiguos %}
+    <div class="aviso-limpieza">
+        <span class="material-symbols-outlined">info</span>
+        <div>No hay lotes elegibles: los vencidos hace más de un año que aún están asociados a ventas se conservan para no perder la trazabilidad.</div>
+    </div>
+    {% elif ver_actual == 'lotes_vencidos' %}
+    <div class="aviso-limpieza">
+        <span class="material-symbols-outlined">info</span>
+        <div>No hay lotes vencidos hace más de 365 días para depurar.</div>
+    </div>
+    {% endif %}
 
     {% if ver_actual == 'limpieza' %}
     <form method="post" action="{% url 'eliminar_seleccionados' %}" class="barra-limpieza" id="formLimpieza">
@@ -157,10 +202,19 @@
                         <div class="lotes-content">
                             {% if producto.lotes.all %}
                             <table class="lotes-table">
-                                <thead><tr><th>Lote</th><th>Fecha de Vencimiento</th><th>Stock Actual</th><th>Precio de Costo</th><th>Estado</th></tr></thead>
+                                <thead><tr>{% if ver_actual == 'lotes_vencidos' %}<th>Seleccionar</th>{% endif %}<th>Lote</th><th>Fecha de Vencimiento</th><th>Stock Actual</th><th>Precio de Costo</th><th>Estado</th></tr></thead>
                                 <tbody>
                                     {% for lote in producto.lotes.all %}
                                     <tr{% if not lote.activo %} class="lote-inactivo"{% endif %}>
+                                        {% if ver_actual == 'lotes_vencidos' %}
+                                        <td>
+                                            {% if lote.fecha_vencimiento and lote.fecha_vencimiento < limite_limpieza_lotes and not lote.tiene_ventas %}
+                                                <input type="checkbox" class="check-lote-vencido" value="{{ lote.id }}" aria-label="Seleccionar lote {{ lote.lote }}">
+                                            {% elif lote.fecha_vencimiento and lote.fecha_vencimiento < limite_limpieza_lotes and lote.tiene_ventas %}
+                                                <span class="lote-conservado" title="Tiene ventas asociadas">Con ventas</span>
+                                            {% endif %}
+                                        </td>
+                                        {% endif %}
                                         <td style="font-weight: 600;">{{ lote.lote }}</td>
                                         <td>{{ lote.fecha_vencimiento|date:"d/m/Y"|default:"Sin vencimiento" }}</td>
                                         <td>{{ lote.stock_actual }} un</td>
@@ -187,7 +241,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">{% if ver_actual == 'limpieza' %}No hay productos sugeridos para eliminar.{% elif ver_actual == 'inactivos' %}No hay productos inactivos.{% else %}No se encontraron productos.{% endif %}</td></tr>
+                <tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">{% if ver_actual == 'limpieza' %}No hay productos sugeridos para eliminar.{% elif ver_actual == 'lotes_vencidos' %}No hay lotes vencidos elegibles para mostrar.{% elif ver_actual == 'inactivos' %}No hay productos inactivos.{% else %}No se encontraron productos.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -255,6 +309,32 @@
         form.addEventListener('submit', e => {
             const n = checks.filter(c => c.checked).length;
             if (!confirm(`¿Eliminar definitivamente ${n} producto(s)? Esta acción no se puede deshacer.`)) e.preventDefault();
+        });
+    })();
+
+    (function () {
+        const form = document.getElementById('formLimpiezaLotes');
+        if (!form) return;
+        const checks = Array.from(document.querySelectorAll('.check-lote-vencido'));
+        const todos = document.getElementById('marcarTodosLotes');
+        const boton = document.getElementById('btnEliminarLotes');
+        const ids = document.getElementById('selectedLotesIds');
+        const cantidad = document.getElementById('cantLotesSeleccionados');
+        function actualizar() {
+            const elegidos = checks.filter(check => check.checked);
+            ids.value = elegidos.map(check => check.value).join(',');
+            cantidad.textContent = elegidos.length;
+            boton.disabled = elegidos.length === 0;
+            todos.checked = checks.length > 0 && elegidos.length === checks.length;
+        }
+        checks.forEach(check => check.addEventListener('change', actualizar));
+        todos.addEventListener('change', function () {
+            checks.forEach(check => { check.checked = this.checked; });
+            actualizar();
+        });
+        form.addEventListener('submit', function (event) {
+            actualizar();
+            if (!ids.value) event.preventDefault();
         });
     })();
 

@@ -1,5 +1,9 @@
 from django.db.models import Q
 
+from usuarios.utils import _tiene_perfil
+from .almacenamiento import (
+    UMBRAL_ALMACENAMIENTO_BD_BYTES, UMBRAL_ALMACENAMIENTO_BD_GB, tamano_base_datos_bytes,
+)
 from .models import Notificacion
 
 
@@ -19,3 +23,18 @@ def notificaciones(request):
         return {}
     cantidad = Notificacion.objects.filter(filtro_notificaciones_usuario(user), leida=False).count()
     return {'notificaciones_no_leidas': cantidad}
+
+
+def almacenamiento(request):
+    user = getattr(request, 'user', None)
+    if not user or not _tiene_perfil(user, 'Administrador'):
+        return {}
+
+    tamano_bytes = tamano_base_datos_bytes()
+    if tamano_bytes is None:
+        return {}
+    return {
+        'almacenamiento_bd_gb': tamano_bytes / 1000 ** 3,
+        'umbral_almacenamiento_bd_gb': UMBRAL_ALMACENAMIENTO_BD_GB,
+        'alerta_almacenamiento_bd': tamano_bytes >= UMBRAL_ALMACENAMIENTO_BD_BYTES,
+    }

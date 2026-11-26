@@ -173,3 +173,11 @@ python manage.py test
 ```
 
 El usuario de MySQL necesita permiso para crear la base de pruebas (`test_<DB_NAME>`).
+
+
+
+docker compose exec web python manage.py createsuperuser
+
+docker compose exec web python manage.py shell -c "from usuarios.models import Perfil; Perfil.objects.get_or_create(nombre='Administrador'); Perfil.objects.get_or_create(nombre='Vendedor')"
+
+docker compose restart web

@@ -58,6 +58,7 @@ class InventarioPaginacionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context['proveedores']), 7)
+        self.assertContains(response, 'img/logo.png')
         self.assertContains(response, '?page=2&busqueda=Proveedor')
 
 
@@ -369,3 +370,123 @@ class DecimalesSinLocalizarTests(TestCase):
         respuesta = self.client.get(reverse('gestion_caja'))
         self.assertContains(respuesta, 'value="1234.56"')
         self.assertContains(respuesta, 'parseFloat("1234.56")')
+
+
+class LotesVencidosTests(TestCase):
+    def setUp(self):
+        perfil, _ = Perfil.objects.get_or_create(nombre='Administrador')
+        self.admin = Usuario.objects.create_user(
+            dni='13000001', apellido='Lote', nombre='Admin', correo='lotes@example.com',
+            password='x', username='lotes-admin', id_perfil=perfil,
+        )
+        self.admin.debe_cambiar_clave = False
+        self.admin.save()
+        self.client.force_login(self.admin)
+        self.caja = Caja.objects.create(usuario=self.admin, monto_inicial=Decimal('0'))
+        self.producto = Productos.objects.create(
+            nombre='Alimento vencido', categoria='Alimentos', precio=Decimal('10'),
+        )
+
+    def _lote(self, nombre, vencido_hace_dias, stock=5):
+        return LotesProducto.objects.create(
+            id_producto=self.producto,
+            lote=nombre,
+            fecha_vencimiento=timezone.localdate() - timedelta(days=vencido_hace_dias),
+            stock_actual=stock,
+            precio_costo=Decimal('5'),
+        )
+
+    def _asociar_a_venta(self, lote):
+        venta = Ventas.objects.create(
+            id_caja=self.caja,
+            total=Decimal('10'),
+            fecha=timezone.localdate() - timedelta(days=400),
+            hora=timezone.localtime().time().replace(tzinfo=None),
+        )
+        return DetallesVentas.objects.create(
+            venta=venta,
+            producto=self.producto,
+            lote=lote,
+            cantidad=1,
+            precio_unitario_venta=Decimal('10'),
+            subtotal=Decimal('10'),
+        )
+
+    def test_sugiere_solo_lotes_vencidos_hace_un_ano_sin_ventas(self):
+        elegible = self._lote('Lote antiguo', 366)
+        vendido = self._lote('Lote vendido', 500)
+        self._asociar_a_venta(vendido)
+        limite = self._lote('Límite exacto', 365)
+
+        respuesta = self.client.get(reverse('consultar'), {'ver': 'lotes_vencidos'})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context['cantidad_lotes_antiguos'], 2)
+        self.assertEqual(respuesta.context['cantidad_lotes_eliminables'], 1)
+        self.assertContains(respuesta, f'value="{elegible.pk}"')
+        self.assertContains(respuesta, 'Con ventas')
+        self.assertNotContains(respuesta, f'value="{limite.pk}"')
+
+    def test_borra_lote_antiguo_aunque_tenga_stock_pero_preserva_los_vinculados_a_ventas(self):
+        elegible = self._lote('Lote descartado', 500, stock=8)
+        vendido = self._lote('Lote con historial', 500)
+        detalle = self._asociar_a_venta(vendido)
+        reciente = self._lote('Lote reciente', 100)
+
+        respuesta = self.client.post(
+            reverse('eliminar_lotes_vencidos'),
+            {'selected_ids': ','.join(map(str, (elegible.pk, vendido.pk, reciente.pk)))},
+        )
+
+        self.assertRedirects(
+            respuesta, reverse('consultar') + '?ver=lotes_vencidos', fetch_redirect_response=False,
+        )
+        self.assertFalse(LotesProducto.objects.filter(pk=elegible.pk).exists())
+        self.assertEqual(LotesProducto.objects.filter(pk__in=(vendido.pk, reciente.pk)).count(), 2)
+        detalle.refresh_from_db()
+        self.assertEqual(detalle.lote_id, vendido.pk)
+        self.assertTrue(Auditoria.objects.filter(
+            accion='eliminacion', modelo='Lote', objeto_id=str(elegible.pk),
+        ).exists())
+
+    def test_lote_vuelve_a_ser_elegible_si_la_venta_que_lo_referenciaba_ya_no_existe(self):
+        lote = self._lote('Lote venta eliminada', 500)
+        detalle = self._asociar_a_venta(lote)
+        venta_id = detalle.venta_id
+        Ventas.objects.get(pk=venta_id).delete()
+
+        respuesta = self.client.post(
+            reverse('eliminar_lotes_vencidos'),
+            {'selected_ids': str(lote.pk)},
+        )
+
+        self.assertRedirects(
+            respuesta, reverse('consultar') + '?ver=lotes_vencidos', fetch_redirect_response=False,
+        )
+        self.assertFalse(LotesProducto.objects.filter(pk=lote.pk).exists())
+
+    def test_umbral_de_almacenamiento_se_avisa_en_el_inventario(self):
+        from unittest.mock import patch
+
+        with patch('auditoria.context_processors.tamano_base_datos_bytes', return_value=10_000_000_000):
+            respuesta = self.client.get(reverse('consultar'))
+
+        self.assertContains(respuesta, 'alcanzó el umbral de 10 GB')
+        self.assertContains(respuesta, 'no se borran registros automáticamente')
+
+    def test_eliminacion_de_lote_es_solo_post_y_solo_administrador(self):
+        lote = self._lote('Lote protegido', 500)
+        url = reverse('eliminar_lotes_vencidos')
+        self.assertEqual(self.client.get(url).status_code, 405)
+
+        vendedor_perfil, _ = Perfil.objects.get_or_create(nombre='Vendedor')
+        vendedor = Usuario.objects.create_user(
+            dni='13000002', apellido='Lote', nombre='Vendedor', correo='vendedor-lote@example.com',
+            password='x', username='lotes-vendedor', id_perfil=vendedor_perfil,
+        )
+        vendedor.debe_cambiar_clave = False
+        vendedor.save()
+        self.client.force_login(vendedor)
+        self.client.post(url, {'selected_ids': str(lote.pk)})
+
+        self.assertTrue(LotesProducto.objects.filter(pk=lote.pk).exists())

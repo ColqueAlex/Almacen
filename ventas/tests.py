@@ -598,3 +598,113 @@ class VentasIntegridadTests(TestCase):
         self.assertEqual(self.producto.stock, 9)
         cliente.refresh_from_db()
         self.assertEqual(cliente.saldo, Decimal('0'))
+
+
+class VentasAntiguasTests(TestCase):
+    def setUp(self):
+        perfil, _ = Perfil.objects.get_or_create(nombre='Administrador')
+        self.admin = Usuario.objects.create_user(
+            dni='40000001', apellido='Admin', nombre='A', correo='admin-ventas@example.com',
+            password='x', username='admin-ventas', id_perfil=perfil,
+        )
+        self.admin.debe_cambiar_clave = False
+        self.admin.save()
+        self.client.force_login(self.admin)
+        self.caja = Caja.objects.create(usuario=self.admin, monto_inicial=Decimal('0'))
+        self.producto = Productos.objects.create(
+            nombre='Producto histórico', categoria='Varios', precio=Decimal('10'),
+        )
+
+    def _venta(self, fecha, *, estado='pagado', con_devolucion=False):
+        venta = Ventas.objects.create(
+            id_caja=self.caja,
+            total=Decimal('10'),
+            fecha=fecha,
+            hora=timezone.localtime().time().replace(tzinfo=None),
+            estado_de_pago=estado,
+        )
+        detalle = DetallesVentas.objects.create(
+            venta=venta,
+            producto=self.producto,
+            cantidad=1,
+            precio_unitario_venta=Decimal('10'),
+            subtotal=Decimal('10'),
+        )
+        if con_devolucion:
+            DevolucionVenta.objects.create(
+                detalle=detalle,
+                caja=self.caja,
+                usuario=self.admin,
+                cantidad=1,
+                monto=Decimal('10'),
+                metodo_reintegro='efectivo',
+            )
+        return venta
+
+    def test_historial_separa_ventas_antiguas_eliminables_de_las_protegidas(self):
+        fecha_antigua = timezone.localdate() - timedelta(days=366)
+        eliminable = self._venta(fecha_antigua)
+        self._venta(fecha_antigua, estado='fiado')
+        self._venta(fecha_antigua, con_devolucion=True)
+        limite_exacto = self._venta(timezone.localdate() - timedelta(days=365))
+        reciente = self._venta(timezone.localdate() - timedelta(days=100))
+
+        respuesta = self.client.get(reverse('ventas'), {'filtro': 'antiguas'})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context['cantidad_ventas_antiguas'], 3)
+        self.assertEqual(respuesta.context['cantidad_ventas_eliminables'], 1)
+        self.assertEqual([venta.pk for venta in respuesta.context['ventas']], [eliminable.pk])
+        self.assertNotIn(limite_exacto.pk, [venta.pk for venta in respuesta.context['ventas']])
+        self.assertTrue(Ventas.objects.filter(pk=reciente.pk).exists())
+
+    def test_eliminar_venta_antigua_borra_detalles_y_rechaza_ids_no_elegibles(self):
+        fecha_antigua = timezone.localdate() - timedelta(days=366)
+        eliminable = self._venta(fecha_antigua)
+        fiada = self._venta(fecha_antigua, estado='fiado')
+        devuelta = self._venta(fecha_antigua, con_devolucion=True)
+        reciente = self._venta(timezone.localdate() - timedelta(days=100))
+
+        respuesta = self.client.post(
+            reverse('eliminar_ventas_antiguas'),
+            {'selected_ids': ','.join(map(str, (eliminable.pk, fiada.pk, devuelta.pk, reciente.pk)))},
+        )
+
+        self.assertRedirects(
+            respuesta, reverse('ventas') + '?filtro=antiguas', fetch_redirect_response=False,
+        )
+        self.assertFalse(Ventas.objects.filter(pk=eliminable.pk).exists())
+        self.assertFalse(DetallesVentas.objects.filter(venta_id=eliminable.pk).exists())
+        self.assertEqual(Ventas.objects.filter(pk__in=(fiada.pk, devuelta.pk, reciente.pk)).count(), 3)
+        self.assertTrue(DevolucionVenta.objects.filter(detalle__venta=devuelta).exists())
+
+    def test_eliminacion_es_solo_post_y_solo_administrador(self):
+        venta = self._venta(timezone.localdate() - timedelta(days=366))
+        url = reverse('eliminar_ventas_antiguas')
+
+        self.assertEqual(self.client.get(url).status_code, 405)
+        vendedor_perfil, _ = Perfil.objects.get_or_create(nombre='Vendedor')
+        vendedor = Usuario.objects.create_user(
+            dni='40000002', apellido='V', nombre='V', correo='vendedor-ventas@example.com',
+            password='x', username='vendedor-ventas', id_perfil=vendedor_perfil,
+        )
+        vendedor.debe_cambiar_clave = False
+        vendedor.save()
+        self.client.force_login(vendedor)
+
+        respuesta = self.client.post(url, {'selected_ids': str(venta.pk)})
+
+        self.assertRedirects(respuesta, reverse('inicio'), fetch_redirect_response=False)
+        self.assertTrue(Ventas.objects.filter(pk=venta.pk).exists())
+
+    def test_umbral_de_almacenamiento_solo_advierte_y_no_borra_ventas(self):
+        from unittest.mock import patch
+
+        venta = self._venta(timezone.localdate() - timedelta(days=366))
+        with patch('auditoria.context_processors.tamano_base_datos_bytes', return_value=10_000_000_000):
+            respuesta = self.client.get(reverse('ventas'), {'filtro': 'antiguas'})
+
+        self.assertTrue(respuesta.context['alerta_almacenamiento_bd'])
+        self.assertContains(respuesta, 'alcanzó el umbral de 10 GB')
+        self.assertContains(respuesta, 'no se borran registros automáticamente')
+        self.assertTrue(Ventas.objects.filter(pk=venta.pk).exists())

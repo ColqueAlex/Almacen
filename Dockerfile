@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Instalar dependencias del sistema necesarias para mysqlclient
 RUN apt-get update && apt-get install -y \

@@ -2,15 +2,36 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Exists, OuterRef, Q
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
+from django.urls import reverse
 from django.utils import timezone
-from datetime import date, datetime
+from django.views.decorators.http import require_POST
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 import json
 from .models import Compras, DetallesCompra
 from productos.models import Productos, Proveedor, LotesProducto
 from usuarios.utils import MONTO_MAXIMO, MONTO_MAXIMO_TEXTO, leer_cantidad, leer_monto, requiere_perfil
+
+
+def _compras_elegibles_para_limpieza(fecha_limite):
+    lotes_no_elegibles = LotesProducto.objects.filter(
+        id_producto_id=OuterRef('id_producto_id'),
+        lote=OuterRef('lote'),
+    ).filter(
+        Q(fecha_vencimiento__isnull=True) | Q(fecha_vencimiento__gte=fecha_limite)
+    )
+    detalles_bloqueantes = DetallesCompra.objects.filter(
+        id_compra_id=OuterRef('pk'),
+    ).annotate(
+        lote_no_elegible=Exists(lotes_no_elegibles),
+    ).filter(lote_no_elegible=True)
+    return Compras.objects.filter(fecha__lt=fecha_limite).annotate(
+        tiene_lote_no_elegible=Exists(detalles_bloqueantes),
+    ).filter(tiene_lote_no_elegible=False)
+
 
 @login_required
 @requiere_perfil('Administrador')
@@ -206,12 +227,96 @@ def registro_compras(request):
 @login_required
 @requiere_perfil('Administrador')
 def listar_compras(request):
-    compras = Compras.objects.prefetch_related('detalles__id_producto').order_by('-id')
+    periodo = 'antiguas' if request.GET.get('filtro') == 'antiguas' else 'todos'
+    fecha_limite = timezone.localdate() - timedelta(days=365)
+    compras = Compras.objects.select_related('id_proveedor', 'id_usuario').prefetch_related(
+        'detalles__id_producto'
+    ).order_by('-id')
+    if periodo == 'antiguas':
+        compras = compras.filter(pk__in=_compras_elegibles_para_limpieza(fecha_limite).values('pk'))
     page_obj = Paginator(compras, 7).get_page(request.GET.get('page'))
+    cantidad_compras_antiguas = Compras.objects.filter(fecha__lt=fecha_limite).count()
+    cantidad_compras_eliminables = _compras_elegibles_para_limpieza(fecha_limite).count()
     return render(request, 'compras/compras_list.html', {
         'compras': page_obj,
         'page_obj': page_obj,
+        'periodo': periodo,
+        'fecha_limite': fecha_limite,
+        'cantidad_compras_antiguas': cantidad_compras_antiguas,
+        'cantidad_compras_eliminables': cantidad_compras_eliminables,
+        'cantidad_compras_conservadas': max(
+            0, cantidad_compras_antiguas - cantidad_compras_eliminables,
+        ),
     })
+
+
+@login_required
+@requiere_perfil('Administrador')
+@require_POST
+def eliminar_compras_antiguas(request):
+    fecha_limite = timezone.localdate() - timedelta(days=365)
+    ids = {
+        int(item.strip())
+        for item in request.POST.get('selected_ids', '').split(',')
+        if item.strip().isdigit()
+    }
+    destino = f"{reverse('listar_compras')}?filtro=antiguas"
+    if not ids:
+        messages.warning(request, 'No hay compras marcadas para eliminar.')
+        return redirect(destino)
+
+    eliminadas = 0
+    with transaction.atomic():
+        compras = list(
+            Compras.objects.filter(pk__in=ids).select_for_update().order_by('pk')
+        )
+        rechazadas = len(ids) - len(compras)
+        for compra in compras:
+            if compra.fecha >= fecha_limite:
+                rechazadas += 1
+                continue
+
+            detalles = list(
+                DetallesCompra.objects.select_for_update()
+                .filter(id_compra=compra)
+                .values_list('id_producto_id', 'lote')
+                .distinct()
+            )
+            lote_no_elegible = False
+            for producto_id, nombre_lote in detalles:
+                lote = LotesProducto.objects.select_for_update().filter(
+                    id_producto_id=producto_id,
+                    lote=nombre_lote,
+                ).first()
+                if lote and (
+                    lote.fecha_vencimiento is None or lote.fecha_vencimiento >= fecha_limite
+                ):
+                    lote_no_elegible = True
+                    break
+
+            if lote_no_elegible:
+                rechazadas += 1
+                continue
+
+            compra.delete()
+            eliminadas += 1
+
+    if eliminadas:
+        messages.success(
+            request,
+            f'Se eliminaron {eliminadas} compra(s) antigua(s) y sus detalles. '
+            'Los lotes y el stock no se modificaron.',
+        )
+    if rechazadas:
+        messages.warning(
+            request,
+            f'{rechazadas} compra(s) no se eliminaron. Solo se borran compras de más de 365 días '
+            'cuyos lotes asociados ya no están registrados o vencieron hace más de 365 días.',
+        )
+    if not eliminadas and not rechazadas:
+        messages.warning(request, 'No se encontró ninguna compra elegible para eliminar.')
+    return redirect(destino)
+
 
 @login_required
 @requiere_perfil('Administrador')

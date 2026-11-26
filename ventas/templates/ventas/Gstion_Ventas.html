@@ -4,7 +4,7 @@
 {% block title %}Historial de Ventas{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/historiales.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'css/historiales.css' %}?v=5">
 {% endblock %}
 
 {% block content %}
@@ -12,6 +12,25 @@
         <div><span class="subtitle-badge">Registro de Operaciones</span><h1 class="page-title">Historial de Ventas</h1></div>
         <a href="{% url 'registrar_venta' %}" class="btn-primary"><span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nueva Venta</a>
     </div>
+
+    {% if cantidad_ventas_antiguas and periodo != 'antiguas' %}
+    <div class="aviso-limpieza">
+        <span class="material-symbols-outlined">history</span>
+        <div>
+            <strong>{{ cantidad_ventas_antiguas }} venta{{ cantidad_ventas_antiguas|pluralize }} con más de un año.</strong>
+            {% if puede_eliminar_ventas and cantidad_ventas_eliminables %}
+                Se pueden revisar y borrar las ventas sin devoluciones ni deuda fiada.
+            {% elif puede_eliminar_ventas %}
+                No hay ventas que puedan borrarse; las ventas con devoluciones o deuda fiada se conservan.
+            {% else %}
+                La eliminación de ventas antiguas está disponible solo para el Administrador.
+            {% endif %}
+        </div>
+        {% if puede_eliminar_ventas and cantidad_ventas_eliminables %}
+            <a href="?filtro=antiguas" class="btn-revisar">Revisar</a>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <div class="toolbar">
         <div class="search-box"><span class="material-symbols-outlined">search</span><input type="text" id="search-venta" placeholder="Buscar por N° Venta o Cliente..."></div>
@@ -21,16 +40,42 @@
                 <option value="semana" {% if periodo == 'semana' %}selected{% endif %}>Última semana</option>
                 <option value="mes" {% if periodo == 'mes' %}selected{% endif %}>Último mes</option>
                 <option value="año" {% if periodo == 'año' %}selected{% endif %}>Este año</option>
+                <option value="antiguas" {% if periodo == 'antiguas' %}selected{% endif %}>Más de un año{% if cantidad_ventas_eliminables %} ({{ cantidad_ventas_eliminables }}){% endif %}</option>
             </select>
         </form>
     </div>
 
+    {% if periodo == 'antiguas' and puede_eliminar_ventas %}
+    <form method="post" action="{% url 'eliminar_ventas_antiguas' %}" class="barra-limpieza" id="formLimpiezaVentas"
+          onsubmit="return confirm('¿Eliminar las ventas seleccionadas y todos sus detalles? Esta acción no se puede deshacer.');">
+        {% csrf_token %}
+        <input type="hidden" name="selected_ids" id="selectedVentaIds">
+        <div>
+            <strong>Ventas antiguas elegibles</strong>
+            <p>Solo se muestran ventas de más de 365 días sin devoluciones ni deuda fiada. Sus detalles se borran junto con la venta. Se recomienda hacerlo solo si el almacenamiento está por encima de los 10 GB, con respaldo verificado y tras confirmar que se puede eliminar ese historial.</p>
+        </div>
+        <label class="marcar-todos"><input type="checkbox" id="marcarTodasVentas"> Marcar todas</label>
+        <button type="submit" class="btn-eliminar" id="btnEliminarVentas" disabled>
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+            Eliminar seleccionadas (<span id="cantVentasSeleccionadas">0</span>)
+        </button>
+    </form>
+    {% elif periodo == 'antiguas' and cantidad_ventas_antiguas %}
+    <div class="aviso-limpieza">
+        <span class="material-symbols-outlined">info</span>
+        <div>Las ventas con devoluciones asociadas o deuda fiada se conservan para proteger el historial y las cuentas.</div>
+    </div>
+    {% endif %}
+
     <div class="table-card">
         <table>
-            <thead><tr><th>N° Venta</th><th>Caja</th><th>Total</th><th>Fecha / Hora</th><th>Cliente</th><th>Estado</th><th style="text-align: right;">Acciones</th></tr></thead>
+            <thead><tr>{% if periodo == 'antiguas' and puede_eliminar_ventas %}<th></th>{% endif %}<th>N° Venta</th><th>Caja</th><th>Total</th><th>Fecha / Hora</th><th>Cliente</th><th>Estado</th><th style="text-align: right;">Acciones</th></tr></thead>
             <tbody>
                 {% for venta in ventas %}
                 <tr class="main-row fila-venta" data-search="{{ venta.id_ventas }} {{ venta.cliente_info|lower }}">
+                    {% if periodo == 'antiguas' and puede_eliminar_ventas %}
+                    <td><input type="checkbox" class="check-venta-antigua" value="{{ venta.id_ventas }}" aria-label="Seleccionar venta {{ venta.id_ventas }}"></td>
+                    {% endif %}
                     <td style="font-weight: 700;">#{{ venta.id_ventas }}</td>
                     <td>Caja {{ venta.id_caja.id_caja }}</td>
                     <td style="font-weight: 800;">${{ venta.total_neto|floatformat:2 }}</td>
@@ -59,7 +104,7 @@
                     </td>
                 </tr>
                 <tr class="detail-row hidden">
-                    <td colspan="7">
+                    <td colspan="{% if periodo == 'antiguas' and puede_eliminar_ventas %}8{% else %}7{% endif %}">
                         <div class="detail-content">
                             <table class="detail-table">
                                 <thead><tr><th>Producto</th><th>Lote</th><th>Vendidos</th><th>Devueltos</th><th>Precio Unit.</th><th>Subtotal original</th><th>Devolución</th></tr></thead>
@@ -103,7 +148,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">No hay ventas registradas.</td></tr>
+                <tr><td colspan="{% if periodo == 'antiguas' and puede_eliminar_ventas %}8{% else %}7{% endif %}" style="text-align: center; padding: 30px; color: var(--text-muted);">{% if periodo == 'antiguas' %}No hay ventas antiguas elegibles para eliminar.{% else %}No hay ventas registradas.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -155,5 +200,30 @@
             }
         });
     });
+
+    const formLimpiezaVentas = document.getElementById('formLimpiezaVentas');
+    if (formLimpiezaVentas) {
+        const checks = Array.from(document.querySelectorAll('.check-venta-antigua'));
+        const marcarTodas = document.getElementById('marcarTodasVentas');
+        const boton = document.getElementById('btnEliminarVentas');
+        const ids = document.getElementById('selectedVentaIds');
+        const cantidad = document.getElementById('cantVentasSeleccionadas');
+        function actualizarSeleccionVentas() {
+            const seleccionadas = checks.filter(check => check.checked);
+            ids.value = seleccionadas.map(check => check.value).join(',');
+            cantidad.textContent = seleccionadas.length;
+            boton.disabled = seleccionadas.length === 0;
+            marcarTodas.checked = checks.length > 0 && seleccionadas.length === checks.length;
+        }
+        checks.forEach(check => check.addEventListener('change', actualizarSeleccionVentas));
+        marcarTodas.addEventListener('change', function () {
+            checks.forEach(check => { check.checked = this.checked; });
+            actualizarSeleccionVentas();
+        });
+        formLimpiezaVentas.addEventListener('submit', function (event) {
+            actualizarSeleccionVentas();
+            if (!ids.value) event.preventDefault();
+        });
+    }
 </script>
 {% endblock %}

@@ -4,7 +4,7 @@
 {% block title %}Auditoría{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/auditoria.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'css/auditoria.css' %}?v=3">
 {% endblock %}
 
 {% block content %}
@@ -14,10 +14,49 @@
             <h1 class="page-title">Registro de Actividades</h1>
             <p class="page-subtitle">Trazabilidad completa de operaciones, accesos y eventos del sistema.</p>
         </div>
-        <a href="{% url 'exportar_auditoria' %}{% if querystring %}?{{ querystring }}{% endif %}" class="btn-action btn-primario">
-            <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Exportar CSV
-        </a>
+        <div class="audit-header-acciones">
+            {% if depurar_antiguos %}
+                <a href="{% url 'listar_auditoria' %}" class="btn-action btn-detalle">Volver al historial</a>
+            {% else %}
+                <a href="{% url 'exportar_auditoria' %}{% if querystring %}?{{ querystring }}{% endif %}" class="btn-action btn-primario">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Exportar CSV
+                </a>
+            {% endif %}
+        </div>
     </div>
+
+    {% if cantidad_antigua %}
+    <div class="audit-retencion">
+        <span class="material-symbols-outlined">archive</span>
+        <div>
+            <strong>{{ cantidad_antigua }} registro{{ cantidad_antigua|pluralize }} con más de 2 años</strong>
+            <p>La depuración es manual. Conserva una copia CSV antes de borrar; se recomienda hacerlo cuando el almacenamiento esté por encima de los 10 GB.</p>
+        </div>
+        {% if not depurar_antiguos %}
+            <a href="{% url 'listar_auditoria' %}?depurar=antiguos" class="btn-action btn-detalle">Revisar registros</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if depurar_antiguos %}
+    <div class="audit-retencion audit-retencion-depuracion">
+        <div>
+            <strong>Depuración protegida: primero exporta, luego elimina</strong>
+            <p>Selecciona los registros antiguos de esta página. El CSV conserva los datos completos. La descarga habilita la eliminación de esa misma selección durante 30 minutos.</p>
+        </div>
+        <form id="form-depuracion-auditoria" method="post" action="{% url 'exportar_auditoria_antigua' %}">
+            {% csrf_token %}
+            <div id="ids-auditoria-seleccionados"></div>
+            <button type="submit" id="btn-exportar-antiguos" class="btn-action btn-primario" disabled>
+                <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Exportar selección CSV
+            </button>
+            <button type="submit" id="btn-eliminar-antiguos" class="btn-action btn-peligro" formaction="{% url 'eliminar_auditoria_antigua' %}" disabled>
+                <span class="material-symbols-outlined" style="font-size: 18px;">delete</span> Eliminar exportados
+            </button>
+            <span id="contador-seleccion-auditoria" class="texto-muted">Ningún registro seleccionado</span>
+        </form>
+    </div>
+    {% endif %}
 
     <!-- KPIs -->
     <div class="audit-kpis">
@@ -58,6 +97,7 @@
 
     <!-- FILTROS -->
     <form method="get" class="toolbar audit-filtros">
+        {% if depurar_antiguos %}<input type="hidden" name="depurar" value="antiguos">{% endif %}
         <div class="search-box">
             <span class="material-symbols-outlined">search</span>
             <input type="text" name="busqueda" value="{{ filtros.busqueda }}" placeholder="Buscar por usuario, descripción, objeto o IP...">
@@ -104,6 +144,7 @@
         <table id="tabla-auditoria">
             <thead>
                 <tr>
+                    {% if depurar_antiguos %}<th><input type="checkbox" id="seleccionar-todos-antiguos" aria-label="Seleccionar registros de esta página"></th>{% endif %}
                     <th>Fecha y Hora</th>
                     <th>Usuario</th>
                     <th>Acción</th>
@@ -115,6 +156,7 @@
             <tbody>
                 {% for reg in registros %}
                 <tr class="fila-auditoria nivel-{{ reg.nivel }}">
+                    {% if depurar_antiguos %}<td><input type="checkbox" class="seleccion-auditoria-antigua" value="{{ reg.id }}" aria-label="Seleccionar registro {{ reg.id }}"></td>{% endif %}
                     <td class="celda-fecha">
                         <strong>{{ reg.fecha_hora|date:"d/m/Y" }}</strong>
                         <span>{{ reg.fecha_hora|date:"H:i:s" }} hs</span>
@@ -157,8 +199,8 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                        {% if hay_filtros %}No hay actividades que coincidan con los filtros.{% else %}No hay registros de auditoría todavía.{% endif %}
+                    <td colspan="{% if depurar_antiguos %}7{% else %}6{% endif %}" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        {% if depurar_antiguos %}No hay registros antiguos que coincidan con los filtros.{% elif hay_filtros %}No hay actividades que coincidan con los filtros.{% else %}No hay registros de auditoría todavía.{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -316,4 +358,101 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrar(); });
 })();
 </script>
+{% if depurar_antiguos %}
+<script>
+(function () {
+    const form = document.getElementById('form-depuracion-auditoria');
+    const checks = Array.from(document.querySelectorAll('.seleccion-auditoria-antigua'));
+    const selectAll = document.getElementById('seleccionar-todos-antiguos');
+    const hiddenIds = document.getElementById('ids-auditoria-seleccionados');
+    const exportButton = document.getElementById('btn-exportar-antiguos');
+    const deleteButton = document.getElementById('btn-eliminar-antiguos');
+    const counter = document.getElementById('contador-seleccion-auditoria');
+    let exportadaSeleccion = '';
+
+    function idsSeleccionados() {
+        return checks.filter(check => check.checked).map(check => check.value).sort();
+    }
+
+    function actualizarSeleccion() {
+        const ids = idsSeleccionados();
+        hiddenIds.replaceChildren();
+        ids.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'registro_ids';
+            input.value = id;
+            hiddenIds.appendChild(input);
+        });
+        counter.textContent = ids.length
+            ? ids.length + ' registro(s) seleccionado(s)'
+            : 'Ningún registro seleccionado';
+        exportButton.disabled = ids.length === 0;
+        deleteButton.disabled = ids.length === 0 || ids.join(',') !== exportadaSeleccion;
+        if (selectAll) {
+            selectAll.checked = ids.length > 0 && ids.length === checks.length;
+            selectAll.indeterminate = ids.length > 0 && ids.length < checks.length;
+        }
+    }
+
+    checks.forEach(check => check.addEventListener('change', function () {
+        exportadaSeleccion = '';
+        actualizarSeleccion();
+    }));
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checks.forEach(check => { check.checked = selectAll.checked; });
+            exportadaSeleccion = '';
+            actualizarSeleccion();
+        });
+    }
+
+    form.addEventListener('submit', function (event) {
+        if (event.submitter === exportButton) {
+            event.preventDefault();
+            const ids = idsSeleccionados();
+            if (!ids.length) return;
+            exportButton.disabled = true;
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin'
+            }).then(function (response) {
+                const tipo = response.headers.get('Content-Type') || '';
+                if (!response.ok || tipo.indexOf('text/csv') === -1) {
+                    throw new Error('El servidor no pudo generar el CSV.');
+                }
+                const disposicion = response.headers.get('Content-Disposition') || '';
+                const coincidencia = disposicion.match(/filename="([^"]+)"/);
+                return response.blob().then(function (archivo) {
+                    return { archivo: archivo, nombre: coincidencia ? coincidencia[1] : 'auditoria_antigua.csv' };
+                });
+            }).then(function (resultado) {
+                const enlace = document.createElement('a');
+                const url = URL.createObjectURL(resultado.archivo);
+                enlace.href = url;
+                enlace.download = resultado.nombre;
+                document.body.appendChild(enlace);
+                enlace.click();
+                enlace.remove();
+                setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+                exportadaSeleccion = ids.join(',');
+                actualizarSeleccion();
+            }).catch(function () {
+                alert('No se pudo exportar la selección. No se habilitó su eliminación.');
+            }).finally(function () {
+                exportButton.disabled = false;
+                actualizarSeleccion();
+            });
+        } else if (event.submitter === deleteButton) {
+            if (deleteButton.disabled || !confirm('¿Confirmas eliminar estos registros? Asegúrate de haber guardado el CSV descargado.')) {
+                event.preventDefault();
+            }
+        }
+    });
+
+    actualizarSeleccion();
+})();
+</script>
+{% endif %}
 {% endblock %}

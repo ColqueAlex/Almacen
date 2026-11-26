@@ -5,13 +5,14 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from datetime import timedelta
-from django.db.models import Count, F, Prefetch, ProtectedError, Q
+from django.db.models import Count, Exists, F, OuterRef, Prefetch, ProtectedError, Q
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .cache import categorias_productos
 from auditoria.notificaciones import dias_inactivo_para_limpieza
 from .models import LotesProducto, Productos, Proveedor, filtro_lotes_vigentes
+from ventas.models import DetallesVentas
 from usuarios.utils import (
     requiere_perfil, _contiene_letras, _es_telefono_numerico, MENSAJE_TELEFONO_INVALIDO,
     buscar_duplicado, leer_monto, normalizar_texto,
@@ -22,7 +23,14 @@ STOCK_BAJO_MAXIMO = 10
 # Un lote que vence dentro de esta cantidad de días se marca "Por vencer".
 DIAS_POR_VENCER = 30
 # Opciones del filtro "Mostrar" del inventario.
-VISTAS_INVENTARIO = ('activos', 'inactivos', 'todos', 'limpieza')
+VISTAS_INVENTARIO = ('activos', 'inactivos', 'todos', 'limpieza', 'lotes_vencidos')
+
+
+def _lotes_elegibles_para_limpieza(fecha_limite):
+    return (
+        LotesProducto.objects.filter(fecha_vencimiento__lt=fecha_limite)
+        .exclude(detalles_ventas__isnull=False)
+    )
 
 
 def _error_producto_duplicado(nombre, marca, excluir_pk=None):
@@ -53,6 +61,9 @@ def consultar(request):
     ver = request.GET.get('ver', 'activos')
     if ver not in VISTAS_INVENTARIO:
         ver = 'activos'
+    hoy = timezone.localdate()
+    limite_limpieza_lotes = hoy - timedelta(days=365)
+    lotes_elegibles = _lotes_elegibles_para_limpieza(limite_limpieza_lotes)
 
     productos_qs = Productos.objects.all()
     if busqueda:
@@ -80,6 +91,8 @@ def consultar(request):
         productos_qs = productos_qs.filter(estado='inactivo')
     elif ver == 'limpieza':
         productos_qs = productos_qs.candidatos_limpieza(dias_limpieza)
+    elif ver == 'lotes_vencidos':
+        productos_qs = productos_qs.filter(lotes__in=lotes_elegibles).distinct()
 
     if estado_filtro == 'bajo':
         productos_qs = productos_qs.filter(stock_vigente__gt=0, stock_vigente__lte=STOCK_BAJO_MAXIMO)
@@ -90,7 +103,6 @@ def consultar(request):
 
     # Lotes con existencias: vigentes (se pueden vender) y vencidos (siguen activos
     # con stock pero quedan fuera del stock vendible).
-    hoy = timezone.localdate()
     productos_qs = productos_qs.annotate(
         cantidad_lotes=Count(
             'lotes',
@@ -106,12 +118,17 @@ def consultar(request):
 
     # Los lotes se precargan en una sola consulta para el detalle desplegable,
     # ordenados igual que el FEFO de ventas (primero los que vencen antes).
-    lotes_ordenados = LotesProducto.objects.order_by(F('fecha_vencimiento').asc(nulls_last=True), 'id')
+    lotes_ordenados = LotesProducto.objects.annotate(
+        tiene_ventas=Exists(DetallesVentas.objects.filter(lote_id=OuterRef('pk')))
+    ).order_by(F('fecha_vencimiento').asc(nulls_last=True), 'id')
     productos_qs = productos_qs.prefetch_related(
         'proveedores', Prefetch('lotes', queryset=lotes_ordenados)
     ).order_by('nombre', 'id')
     page_obj = Paginator(productos_qs, 7).get_page(request.GET.get('page'))
-
+    cantidad_lotes_antiguos = LotesProducto.objects.filter(
+        fecha_vencimiento__lt=limite_limpieza_lotes
+    ).count()
+    cantidad_lotes_eliminables = lotes_elegibles.count()
     return render(request, "productos/productos.html", {
         'productos': page_obj,
         'page_obj': page_obj,
@@ -126,6 +143,10 @@ def consultar(request):
         'total_inactivos': kpis['inactivos'],
         'ver_actual': ver,
         'dias_limpieza': dias_limpieza,
+        'cantidad_lotes_antiguos': cantidad_lotes_antiguos,
+        'cantidad_lotes_eliminables': cantidad_lotes_eliminables,
+        'cantidad_lotes_protegidos': cantidad_lotes_antiguos - cantidad_lotes_eliminables,
+        'limite_limpieza_lotes': limite_limpieza_lotes,
         # Sugerencia general (sin filtros de búsqueda) para el aviso de limpieza.
         'cantidad_limpieza': Productos.objects.candidatos_limpieza(dias_limpieza).count(),
         'proveedores': Proveedor.objects.filter(activo=True).order_by('nombre'),
@@ -238,6 +259,45 @@ def eliminar_seleccionados(request):
             f'tuvieron ventas, compras ni stock; los demás se conservan inactivos para no perder el historial.'
         )
     return redirect(_url_inventario(request))
+
+
+@login_required
+@requiere_perfil('Administrador')
+@require_POST
+def eliminar_lotes_vencidos(request):
+    ids = {
+        int(item.strip())
+        for item in request.POST.get('selected_ids', '').split(',')
+        if item.strip().isdigit()
+    }
+    if not ids:
+        messages.warning(request, 'No hay lotes marcados para eliminar.')
+        return redirect(f"{reverse('consultar')}?ver=lotes_vencidos")
+
+    fecha_limite = timezone.localdate() - timedelta(days=365)
+    lotes_elegibles = _lotes_elegibles_para_limpieza(fecha_limite)
+    eliminados = 0
+    rechazados = 0
+
+    with transaction.atomic():
+        seleccionados = list(lotes_elegibles.filter(pk__in=ids).select_for_update())
+        rechazados = len(ids) - len(seleccionados)
+        for lote in seleccionados:
+            lote.delete()
+            eliminados += 1
+
+    if eliminados:
+        messages.success(
+            request,
+            f'Se eliminaron {eliminados} lote(s) vencido(s) hace más de un año y sin ventas asociadas.',
+        )
+    if rechazados:
+        messages.warning(
+            request,
+            f'{rechazados} lote(s) no se eliminaron: solo se permiten lotes vencidos hace más de 365 días '
+            'y sin ventas asociadas.',
+        )
+    return redirect(f"{reverse('consultar')}?ver=lotes_vencidos")
 
 
 def _url_inventario(request):

@@ -105,3 +105,17 @@ tr:hover { background: var(--bg-body); }
 .btn-action { padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .btn-cancelar { background: var(--bg-surface); color: var(--text-main); border: 1px solid var(--border-color); }
 .btn-confirmar { background: var(--danger); color: white; }
+
+/* LIMPIEZA DE VENTAS ANTIGUAS */
+.aviso-limpieza { display: flex; align-items: center; gap: 12px; background: var(--primary-light); color: var(--text-main); border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 16px; font-size: 13px; }
+.aviso-limpieza .material-symbols-outlined { color: var(--primary); }
+.aviso-limpieza > div { flex: 1; }
+.btn-revisar { background: var(--primary); color: white; text-decoration: none; font-weight: 700; font-size: 12px; padding: 8px 14px; border-radius: 8px; white-space: nowrap; }
+.barra-limpieza { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--bg-surface); border: 1px solid var(--border-color); border-left: 4px solid var(--danger); border-radius: 12px; padding: 14px 18px; }
+.barra-limpieza > div { flex: 1; min-width: 260px; }
+.barra-limpieza p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.marcar-todos { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-eliminar { display: inline-flex; align-items: center; gap: 6px; background: var(--danger); color: white; border: none; border-radius: 8px; padding: 9px 14px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.btn-eliminar:disabled { opacity: 0.45; cursor: not-allowed; }
+.check-venta-antigua { width: 18px; height: 18px; cursor: pointer; }
+.check-compra-antigua { width: 18px; height: 18px; cursor: pointer; }

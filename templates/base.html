@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap">
     
     <!-- CSS Base (Layout, Sidebar, Header) -->
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=2">
     
     <!-- Bloque para CSS específico de cada página -->
     {% block extra_css %}{% endblock %}
@@ -145,6 +145,22 @@
                         {{ message }}
                     </div>
                 {% endfor %}
+            {% endif %}
+
+            {% if almacenamiento_bd_gb != None %}
+            <div class="aviso-almacenamiento {% if alerta_almacenamiento_bd %}alerta{% endif %}">
+                <span class="material-symbols-outlined">{% if alerta_almacenamiento_bd %}warning{% else %}storage{% endif %}</span>
+                <div>
+                    {% if alerta_almacenamiento_bd %}
+                        <strong>La base de datos alcanzó el umbral de {{ umbral_almacenamiento_bd_gb }} GB ({{ almacenamiento_bd_gb|floatformat:2 }} GB estimados).</strong>
+                        Antes de borrar datos, verifica respaldos, revisa datos temporales y considera archivar el historial. El borrado manual es el último recurso y requiere confirmar las obligaciones de conservación.
+                    {% else %}
+                        <strong>Almacenamiento estimado de la base: {{ almacenamiento_bd_gb|floatformat:2 }} GB de {{ umbral_almacenamiento_bd_gb }} GB.</strong>
+                        Se recomienda depurar datos solo si el almacenamiento está por encima de los {{ umbral_almacenamiento_bd_gb }} GB, después de revisar respaldos, archivo y obligaciones de conservación.
+                    {% endif %}
+                    <span class="aviso-almacenamiento-nota">Medición estimada de tablas e índices MySQL; no se borran registros automáticamente.</span>
+                </div>
+            </div>
             {% endif %}
 
             {% block content %}

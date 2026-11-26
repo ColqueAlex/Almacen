@@ -3,8 +3,10 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Sum, Q
+from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from django.core.paginator import Paginator
+from django.urls import reverse
 from django.utils import timezone
 from django.http import HttpResponse
 from django.views.decorators.http import require_POST
@@ -22,6 +24,15 @@ from usuarios.utils import (
 )
 
 METODOS_PAGO_VALIDOS = ('efectivo', 'transferencia')
+
+
+def _ventas_elegibles_para_limpieza(fecha_limite):
+    return (
+        Ventas.objects.filter(fecha__lt=fecha_limite)
+        .exclude(estado_de_pago='fiado')
+        .exclude(detalles__devoluciones__isnull=False)
+        .distinct()
+    )
 
 
 def _venta_dentro_del_plazo_de_devolucion(venta, ahora=None):
@@ -44,6 +55,7 @@ def ventas(request):
 
     hoy = timezone.localdate()
     periodo = request.GET.get('filtro', 'todos')
+    fecha_limite = hoy - timedelta(days=365)
 
     detalles_qs = DetallesVentas.objects.select_related('producto', 'lote').prefetch_related('devoluciones')
     ventas_qs = Ventas.objects.select_related('id_caja', 'id_clientes').prefetch_related(
@@ -59,11 +71,19 @@ def ventas(request):
     elif periodo == 'año':
         desde = hoy - timedelta(days=365)
         ventas_qs = ventas_qs.filter(fecha__gte=desde)
+    elif periodo == 'antiguas':
+        ventas_qs = ventas_qs.filter(
+            pk__in=_ventas_elegibles_para_limpieza(fecha_limite).values('pk')
+        )
 
     page_obj = Paginator(ventas_qs, 7).get_page(request.GET.get('page'))
-    fecha_limite = hoy.replace(year=hoy.year - 1)
     caja_activa = Caja.objects.filter(estado='abierta', usuario=request.user).last()
-
+    perfil = getattr(request.user, 'id_perfil', None)
+    puede_eliminar_ventas = (
+        request.user.is_superuser
+        or request.user.is_staff
+        or getattr(perfil, 'nombre', '') == 'Administrador'
+    )
     for venta in page_obj:
         detalles = list(venta.detalles.all())
         venta.total_devuelto = sum(
@@ -93,7 +113,55 @@ def ventas(request):
         'fecha_limite': fecha_limite,
         'periodo': periodo,
         'caja_activa': caja_activa,
+        'cantidad_ventas_antiguas': Ventas.objects.filter(fecha__lt=fecha_limite).count(),
+        'cantidad_ventas_eliminables': _ventas_elegibles_para_limpieza(fecha_limite).count(),
+        'puede_eliminar_ventas': puede_eliminar_ventas,
     })
+
+
+@login_required
+@requiere_perfil('Administrador')
+@require_POST
+def eliminar_ventas_antiguas(request):
+    fecha_limite = timezone.localdate() - timedelta(days=365)
+    ids = {
+        int(item.strip())
+        for item in request.POST.get('selected_ids', '').split(',')
+        if item.strip().isdigit()
+    }
+    if not ids:
+        messages.warning(request, 'No hay ventas marcadas para eliminar.')
+        return redirect(f"{reverse('ventas')}?filtro=antiguas")
+
+    ventas_elegibles = _ventas_elegibles_para_limpieza(fecha_limite)
+    rechazadas = 0
+    eliminadas = 0
+
+    with transaction.atomic():
+        seleccionadas = list(ventas_elegibles.filter(pk__in=ids).select_for_update())
+        rechazadas = len(ids) - len(seleccionadas)
+        for venta in seleccionadas:
+            try:
+                venta.delete()
+                eliminadas += 1
+            except ProtectedError:
+                rechazadas += 1
+
+    if eliminadas:
+        messages.success(
+            request,
+            f'Se eliminaron {eliminadas} venta(s) antigua(s) y sus detalles.',
+        )
+    if rechazadas:
+        messages.warning(
+            request,
+            f'{rechazadas} venta(s) no se eliminaron. Solo se pueden borrar ventas antiguas '
+            'sin deuda fiada ni devoluciones asociadas.',
+        )
+    if not eliminadas and not rechazadas:
+        messages.warning(request, 'No se encontró ninguna venta elegible para eliminar.')
+    return redirect(f"{reverse('ventas')}?filtro=antiguas")
+
 
 @login_required
 @requiere_perfil('Administrador', 'Vendedor')

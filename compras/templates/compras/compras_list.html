@@ -4,7 +4,7 @@
 {% block title %}Historial de Compras{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/historiales.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'css/historiales.css' %}?v=3">
 {% endblock %}
 
 {% block content %}
@@ -15,14 +15,46 @@
 
     <div class="toolbar">
         <div class="search-box"><span class="material-symbols-outlined">search</span><input type="text" id="search-compra" placeholder="Buscar por N° Compra o Proveedor..."></div>
+        <form method="get" action="{% url 'listar_compras' %}">
+            <select name="filtro" class="filter-select" onchange="this.form.submit()">
+                <option value="todos" {% if periodo == 'todos' %}selected{% endif %}>Todas las fechas</option>
+                <option value="antiguas" {% if periodo == 'antiguas' %}selected{% endif %}>
+                    Más de un año{% if cantidad_compras_eliminables %} ({{ cantidad_compras_eliminables }}){% endif %}
+                </option>
+            </select>
+        </form>
     </div>
+
+    {% if periodo == 'antiguas' and cantidad_compras_eliminables %}
+    <form method="post" action="{% url 'eliminar_compras_antiguas' %}" class="barra-limpieza" id="formLimpiezaCompras"
+          onsubmit="return confirm('¿Eliminar las compras seleccionadas y todos sus detalles? Los lotes y el stock no se modificarán. Esta acción no se puede deshacer.');">
+        {% csrf_token %}
+        <input type="hidden" name="selected_ids" id="selectedCompraIds">
+        <div>
+            <strong>Compras antiguas elegibles</strong>
+            <p>Solo se muestran compras de más de 365 días cuyos lotes asociados ya fueron borrados o vencieron hace más de 365 días. Se borran la compra y sus detalles, pero no se modifican los lotes ni el stock. Se recomienda hacerlo solo si el almacenamiento está por encima de los 10 GB, con respaldo verificado.</p>
+        </div>
+        <label class="marcar-todos"><input type="checkbox" id="marcarTodasCompras"> Marcar todas</label>
+        <button type="submit" class="btn-eliminar" id="btnEliminarCompras" disabled>
+            <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+            Eliminar seleccionadas (<span id="cantComprasSeleccionadas">0</span>)
+        </button>
+    </form>
+    {% endif %}
+    {% if periodo == 'antiguas' and cantidad_compras_conservadas %}
+    <div class="aviso-limpieza">
+        <span class="material-symbols-outlined">info</span>
+        <div>Se conservan {{ cantidad_compras_conservadas }} compra{{ cantidad_compras_conservadas|pluralize }} antigua{{ cantidad_compras_conservadas|pluralize }} porque tienen lotes registrados sin fecha de vencimiento o que no vencieron hace más de un año.</div>
+    </div>
+    {% endif %}
 
     <div class="table-card">
         <table>
-            <thead><tr><th>N° Compra</th><th>Proveedor</th><th>Fecha / Hora</th><th>Usuario</th><th>Estado</th><th>Total</th><th style="text-align: right;">Acciones</th></tr></thead>
+            <thead><tr>{% if periodo == 'antiguas' and cantidad_compras_eliminables %}<th></th>{% endif %}<th>N° Compra</th><th>Proveedor</th><th>Fecha / Hora</th><th>Usuario</th><th>Estado</th><th>Total</th><th style="text-align: right;">Acciones</th></tr></thead>
             <tbody>
                 {% for c in compras %}
                 <tr class="main-row fila-compra" data-search="{{ c.id }} {% if c.id_proveedor %}{{ c.id_proveedor.nombre|lower }}{% endif %}">
+                    {% if periodo == 'antiguas' and cantidad_compras_eliminables %}<td><input type="checkbox" class="check-compra-antigua" value="{{ c.id }}" aria-label="Seleccionar compra {{ c.id }}"></td>{% endif %}
                     <td style="font-weight: 700;">#{{ c.id }}</td>
                     <td>{% if c.id_proveedor %}{{ c.id_proveedor.nombre }}{% else %}<span style="color: var(--text-muted); font-style: italic;">Sin proveedor</span>{% endif %}</td>
                     <td>{{ c.fecha|date:"d/m/Y" }} <span style="color: var(--text-muted); font-size: 12px;">{{ c.hora|time:"H:i" }}</span></td>
@@ -39,7 +71,7 @@
                     </td>
                 </tr>
                 <tr class="detail-row hidden">
-                    <td colspan="7">
+                    <td colspan="{% if periodo == 'antiguas' and cantidad_compras_eliminables %}8{% else %}7{% endif %}">
                         <div class="detail-content">
                             <table class="detail-table">
                                 <thead><tr><th>Producto</th><th>Lote</th><th>Vencimiento</th><th>Cant.</th><th>Precio Costo</th><th>Subtotal</th></tr></thead>
@@ -58,28 +90,30 @@
                                     {% endfor %}
                                 </tbody>
                             </table>
-                            <div class="pagination">
-                                <span class="page-info">
-                                    Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                                </span>
-                                <div class="page-buttons">
-                                    {% if page_obj.has_previous %}
-                                        <a href="?page={{ page_obj.previous_page_number }}" class="page-btn">Anterior</a>
-                                    {% endif %}
-                                    <a href="#" class="page-btn active" aria-current="page">{{ page_obj.number }}</a>
-                                    {% if page_obj.has_next %}
-                                        <a href="?page={{ page_obj.next_page_number }}" class="page-btn">Siguiente</a>
-                                    {% endif %}
-                                </div>
-                            </div>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">No hay compras registradas.</td></tr>
+                <tr><td colspan="{% if periodo == 'antiguas' and cantidad_compras_eliminables %}8{% else %}7{% endif %}" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                    {% if periodo == 'antiguas' %}No hay compras antiguas elegibles para mostrar.{% else %}No hay compras registradas.{% endif %}
+                </td></tr>
                 {% endfor %}
             </tbody>
         </table>
+        <div class="pagination">
+            <span class="page-info">
+                Mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+            </span>
+            <div class="page-buttons">
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}{% if periodo == 'antiguas' %}&filtro=antiguas{% endif %}" class="page-btn">Anterior</a>
+                {% endif %}
+                <a href="#" class="page-btn active" aria-current="page">{{ page_obj.number }}</a>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if periodo == 'antiguas' %}&filtro=antiguas{% endif %}" class="page-btn">Siguiente</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <div class="modal-overlay" id="modalAnular">
@@ -137,5 +171,29 @@
             document.getElementById('modalAnular').style.display = 'flex';
         });
     });
+
+    const formLimpieza = document.getElementById('formLimpiezaCompras');
+    if (formLimpieza) {
+        const checks = Array.from(document.querySelectorAll('.check-compra-antigua'));
+        const marcarTodas = document.getElementById('marcarTodasCompras');
+        const idsSeleccionados = document.getElementById('selectedCompraIds');
+        const botonEliminar = document.getElementById('btnEliminarCompras');
+        const cantidadSeleccionada = document.getElementById('cantComprasSeleccionadas');
+
+        function actualizarSeleccionCompras() {
+            const ids = checks.filter(check => check.checked).map(check => check.value);
+            idsSeleccionados.value = ids.join(',');
+            cantidadSeleccionada.textContent = ids.length;
+            botonEliminar.disabled = ids.length === 0;
+            marcarTodas.checked = ids.length > 0 && ids.length === checks.length;
+            marcarTodas.indeterminate = ids.length > 0 && ids.length < checks.length;
+        }
+
+        checks.forEach(check => check.addEventListener('change', actualizarSeleccionCompras));
+        marcarTodas.addEventListener('change', function () {
+            checks.forEach(check => { check.checked = marcarTodas.checked; });
+            actualizarSeleccionCompras();
+        });
+    }
 </script>
 {% endblock %}

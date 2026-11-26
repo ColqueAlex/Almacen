@@ -1,4 +1,6 @@
 import csv
+import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -10,8 +12,10 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.http import HttpResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from .models import Auditoria, Notificacion
@@ -21,6 +25,7 @@ from usuarios.utils import requiere_perfil
 
 # --- Registro de auditoría -------------------------------------------------
 REGISTROS_POR_PAGINA = 25
+DIAS_RETENCION_AUDITORIA = 730
 
 
 def _fecha_param(valor):
@@ -112,6 +117,12 @@ def _detalle_para_modal(reg):
 @requiere_perfil('Administrador')
 def listar_auditoria(request):
     registros, filtros = _filtrar_auditoria(request.GET)
+    depurar_antiguos = request.GET.get('depurar') == 'antiguos'
+    fecha_limite = timezone.now() - timedelta(days=DIAS_RETENCION_AUDITORIA)
+    registros_antiguos = Auditoria.objects.filter(fecha_hora__lt=fecha_limite)
+    cantidad_antigua = registros_antiguos.count()
+    if depurar_antiguos:
+        registros = registros.filter(fecha_hora__lt=fecha_limite)
     page_obj = Paginator(registros, REGISTROS_POR_PAGINA).get_page(request.GET.get('page'))
 
     ahora = timezone.now()
@@ -149,6 +160,8 @@ def listar_auditoria(request):
                    .values_list('modelo', flat=True).distinct(),
         'usuarios': Auditoria.objects.exclude(usuario_nombre='').order_by('usuario_nombre')
                     .values_list('usuario_nombre', flat=True).distinct(),
+        'depurar_antiguos': depurar_antiguos,
+        'cantidad_antigua': cantidad_antigua,
     })
 
 
@@ -186,6 +199,125 @@ def exportar_auditoria(request):
 
     registrar_evento('exportacion', f'Exportó {cantidad} registro(s) de auditoría a CSV', modelo='Auditoría', request=request)
     return respuesta
+
+
+def _ids_seleccionados_auditoria(request):
+    try:
+        ids = {int(valor) for valor in request.POST.getlist('registro_ids')}
+    except (TypeError, ValueError):
+        return None
+    return sorted(ids) if ids and all(id_registro > 0 for id_registro in ids) else None
+
+
+def _hash_ids_auditoria(ids):
+    contenido = ','.join(str(id_registro) for id_registro in ids)
+    return hashlib.sha256(contenido.encode('ascii')).hexdigest()
+
+
+def _volver_auditoria_antigua():
+    return f'{reverse("listar_auditoria")}?depurar=antiguos'
+
+
+@login_required
+@requiere_perfil('Administrador')
+@require_POST
+def exportar_auditoria_antigua(request):
+    """Genera el respaldo CSV de los eventos antiguos seleccionados."""
+    ids = _ids_seleccionados_auditoria(request)
+    if not ids:
+        messages.error(request, 'Selecciona al menos un registro antiguo para exportar.')
+        return redirect(_volver_auditoria_antigua())
+
+    fecha_limite = timezone.now() - timedelta(days=DIAS_RETENCION_AUDITORIA)
+    registros = Auditoria.objects.filter(
+        pk__in=ids, fecha_hora__lt=fecha_limite,
+    ).select_related('usuario').order_by('id')
+    if registros.count() != len(ids):
+        messages.error(request, 'La selección contiene registros que ya no cumplen el plazo de antigüedad.')
+        return redirect(_volver_auditoria_antigua())
+
+    respuesta = HttpResponse(content_type='text/csv; charset=utf-8')
+    respuesta['Content-Disposition'] = (
+        f'attachment; filename="auditoria_mas_de_2_anos_{timezone.localdate():%Y%m%d}.csv"'
+    )
+    respuesta.write('﻿')
+    escritor = csv.writer(respuesta, delimiter=';')
+    escritor.writerow([
+        'ID', 'Fecha y hora', 'Usuario', 'ID usuario', 'Nombre usuario registrado',
+        'Categoría', 'Acción', 'Nivel', 'Módulo', 'ID objeto', 'Objeto', 'Descripción',
+        'Cambios', 'Datos anteriores', 'Datos nuevos', 'IP', 'Navegador', 'Ruta',
+    ])
+    cantidad = 0
+    for reg in registros.iterator(chunk_size=500):
+        escritor.writerow([_celda_csv(valor) for valor in (
+            reg.id, reg.fecha_hora.isoformat(), reg.actor, reg.usuario_id or '',
+            reg.usuario_nombre, reg.categoria, reg.accion, reg.nivel, reg.modelo,
+            reg.objeto_id or '', reg.objeto_repr, reg.descripcion,
+            json.dumps(reg.cambios, ensure_ascii=False, default=str) if reg.cambios is not None else '',
+            json.dumps(reg.datos_anteriores, ensure_ascii=False, default=str)
+            if reg.datos_anteriores is not None else '',
+            json.dumps(reg.datos_nuevos, ensure_ascii=False, default=str)
+            if reg.datos_nuevos is not None else '',
+            reg.ip or '', reg.user_agent, reg.ruta,
+        )])
+        cantidad += 1
+
+    request.session['auditoria_limpieza_exportada'] = {
+        'hash_ids': _hash_ids_auditoria(ids),
+        'emitida_en': timezone.now().timestamp(),
+    }
+    registrar_evento(
+        'exportacion',
+        f'Exportó {cantidad} registro(s) antiguos de auditoría a CSV antes de su posible eliminación',
+        modelo='Auditoría',
+        request=request,
+    )
+    return respuesta
+
+
+@login_required
+@requiere_perfil('Administrador')
+@require_POST
+def eliminar_auditoria_antigua(request):
+    """Elimina únicamente registros antiguos cuya selección ya se exportó a CSV."""
+    ids = _ids_seleccionados_auditoria(request)
+    exportacion = request.session.get('auditoria_limpieza_exportada', {})
+    exportada_en = exportacion.get('emitida_en') if isinstance(exportacion, dict) else None
+    hash_exportado = exportacion.get('hash_ids') if isinstance(exportacion, dict) else None
+    exportacion_vigente = (
+        isinstance(exportada_en, (int, float))
+        and 0 <= timezone.now().timestamp() - exportada_en <= 1800
+    )
+    if (
+        not ids or not exportacion_vigente or not isinstance(hash_exportado, str)
+        or not hmac.compare_digest(hash_exportado, _hash_ids_auditoria(ids))
+    ):
+        request.session.pop('auditoria_limpieza_exportada', None)
+        messages.error(request, 'Primero exporta a CSV la misma selección y vuelve a intentar.')
+        return redirect(_volver_auditoria_antigua())
+
+    fecha_limite = timezone.now() - timedelta(days=DIAS_RETENCION_AUDITORIA)
+    with transaction.atomic():
+        registros = Auditoria.objects.select_for_update().filter(
+            pk__in=ids, fecha_hora__lt=fecha_limite,
+        )
+        if registros.count() != len(ids):
+            request.session.pop('auditoria_limpieza_exportada', None)
+            messages.error(request, 'La selección cambió o ya no cumple el plazo de antigüedad; no se borró nada.')
+            return redirect(_volver_auditoria_antigua())
+
+        cantidad, _ = registros.delete()
+        registrar_evento(
+            'eliminacion',
+            f'Eliminó {cantidad} registro(s) de auditoría con más de '
+            f'{DIAS_RETENCION_AUDITORIA // 365} años, previamente exportados a CSV',
+            modelo='Auditoría',
+            request=request,
+        )
+
+    request.session.pop('auditoria_limpieza_exportada', None)
+    messages.success(request, f'Se eliminaron {cantidad} registro(s) antiguos de auditoría.')
+    return redirect(_volver_auditoria_antigua())
 
 
 @login_required
